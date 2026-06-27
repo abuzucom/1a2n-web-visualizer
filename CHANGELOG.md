@@ -15,6 +15,8 @@ All notable changes to this project are documented here. Format loosely follows
   (`obs-ui.js`, `fullscreen-ui.js`).
 - Docs: OBS setup and audio-routing guides.
 - `package.json` with a `start` script for a local static server.
+- GitHub Actions workflow (`.github/workflows/deploy.yml`) to publish `src/`
+  to GitHub Pages on push to `develop`.
 
 ### Notes
 - Refactored from two standalone single-file HTML prototypes

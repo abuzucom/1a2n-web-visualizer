@@ -22,6 +22,9 @@ butterchurn-visualizer/
 ├── CHANGELOG.md
 ├── .gitignore
 ├── package.json            # optional local dev server
+├── .github/
+│   └── workflows/
+│       └── deploy.yml      # auto-deploy src/ to GitHub Pages
 ├── src/
 │   ├── obs.html            # OBS browser-source entry point
 │   ├── fullscreen.html     # standalone fullscreen entry point
@@ -57,6 +60,22 @@ python3 -m http.server --directory src 8000
 Then open <http://localhost:8000/fullscreen.html> or `/obs.html`.
 
 **OBS:** see [`docs/obs-setup.md`](docs/obs-setup.md).
+
+## Hosted (GitHub Pages)
+
+A workflow at `.github/workflows/deploy.yml` publishes `src/` to GitHub Pages on
+every push to `develop`. One-time setup: in the repo go to **Settings → Pages**
+and set **Source** to **GitHub Actions**. After the first deploy your pages are
+at:
+
+```
+https://<user>.github.io/<repo>/obs.html
+https://<user>.github.io/<repo>/fullscreen.html
+```
+
+Because Pages serves over HTTPS (a secure context), audio capture works directly
+— no `localhost` workaround needed. In OBS, use a Browser Source in **URL** mode
+pointing at the `obs.html` link above.
 
 ## Controls
 

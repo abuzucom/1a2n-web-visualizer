@@ -11,6 +11,11 @@
 > If audio access fails over a local file, run a dev server instead
 > (`npm start`) and use **URL** mode pointing at
 > `http://localhost:3000/obs.html` (port depends on the server).
+>
+> **Hosted option:** if you deployed via GitHub Pages (see the workflow in
+> `.github/workflows/deploy.yml`), use **URL** mode pointing at
+> `https://<user>.github.io/<repo>/obs.html`. HTTPS means audio capture works
+> with no extra setup.
 
 ## Grant audio and start
 
