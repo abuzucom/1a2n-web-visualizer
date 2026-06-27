@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Optional vendored libraries (if you download butterchurn locally)
+src/vendor/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
