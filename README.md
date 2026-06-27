@@ -26,6 +26,7 @@ butterchurn-visualizer/
 │   └── workflows/
 │       └── deploy.yml      # auto-deploy src/ to GitHub Pages
 ├── src/
+│   ├── index.html          # web landing page
 │   ├── obs.html            # OBS browser-source entry point
 │   ├── fullscreen.html     # standalone fullscreen entry point
 │   ├── css/

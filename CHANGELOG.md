@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-06-27
+
+### Added
+- Cleaned up HTML
+- Added `index.html` to avoid 404 when accessing the root folder on web
+
 ## [1.0.0] - 2026-06-26
 
 ### Added

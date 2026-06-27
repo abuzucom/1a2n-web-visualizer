@@ -1,49 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Butterchurn Visualizer — OBS Browser Source</title>
-<link rel="stylesheet" href="css/panel.css">
-</head>
-<body>
-<canvas id="viz"></canvas>
-
-<div id="panel">
-  <h1>🎵 Butterchurn — OBS setup</h1>
-
-  <label for="device">Audio input</label>
-  <select id="device"><option value="">— grant mic access first —</option></select>
-
-  <button id="startBtn">Start visualizer</button>
-
-  <label for="preset" style="margin-top:16px;">Preset</label>
-  <select id="preset"></select>
-
-  <div class="row">
-    <button class="secondary" id="prevBtn">‹ Prev</button>
-    <button class="secondary" id="nextBtn">Next ›</button>
-    <button id="randBtn">Random</button>
-  </div>
-
-  <div class="check">
-    <input type="checkbox" id="cycle" checked>
-    <label for="cycle" style="margin:0; text-transform:none; opacity:1; font-size:13px;">Auto-cycle every</label>
-    <input type="number" id="cycleSecs" value="20" min="3" style="width:64px;"> s
-  </div>
-
-  <div id="status"></div>
-
-  <div class="hint">
-    Press <code>H</code> to hide/show this panel. To visualize music (not your mic),
-    route audio through a virtual cable (VB-Cable / BlackHole / PipeWire loopback)
-    and select that device above.
-  </div>
-</div>
-
-<script src="https://unpkg.com/butterchurn@2.6.7/lib/butterchurn.min.js"></script>
-<script src="https://unpkg.com/butterchurn-presets@2.4.7/lib/butterchurnPresets.min.js"></script>
-<script src="js/visualizer-core.js"></script>
-<script src="js/obs-ui.js"></script>
-</body>
+  <head>
+    <title>Butterchurn Visualizer — OBS Browser Source</title>
+    <meta http-equiv="Content-Type"  content="text/html; charset=UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/panel.css">
+    <script src="https://unpkg.com/butterchurn@2.6.7/lib/butterchurn.min.js"></script>
+    <script src="https://unpkg.com/butterchurn-presets@2.4.7/lib/butterchurnPresets.min.js"></script>
+    <script src="js/visualizer-core.js"></script>
+    <script src="js/obs-ui.js"></script>
+  </head>
+  <body>
+    <canvas id="viz"></canvas>
+    <div id="panel">
+      <h1>🎵 Butterchurn — OBS setup</h1>
+      <label for="device">Audio input</label>
+      <select id="device"><option value="">— grant mic access first —</option></select>
+      <button id="startBtn">Start visualizer</button>
+      <label for="preset" style="margin-top:16px;">Preset</label>
+      <select id="preset"></select>
+      <div class="row">
+        <button class="secondary" id="prevBtn">‹ Prev</button>
+        <button class="secondary" id="nextBtn">Next ›</button>
+        <button id="randBtn">Random</button>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="cycle" checked>
+        <label for="cycle" style="margin:0; text-transform:none; opacity:1; font-size:13px;">Auto-cycle every</label>
+        <input type="number" id="cycleSecs" value="20" min="3" style="width:64px;"> s
+      </div>
+      <div id="status"></div>
+      <div class="hint">
+        Press <code>H</code> to hide/show this panel. To visualize music (not your mic),
+        route audio through a virtual cable (VB-Cable / BlackHole / PipeWire loopback)
+        and select that device above.
+      </div>
+    </div>
+  </body>
 </html>
