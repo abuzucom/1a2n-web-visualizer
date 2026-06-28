@@ -7,7 +7,7 @@ name: Deploy to GitHub Pages
 #
 # One-time setup: in the repo, go to Settings -> Pages and set
 # "Build and deployment" -> Source to "GitHub Actions".
-
+on:
   push:
     branches: [develop]
   workflow_dispatch:
