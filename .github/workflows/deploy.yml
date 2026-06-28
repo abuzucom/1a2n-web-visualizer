@@ -1,7 +1,5 @@
 name: Deploy to GitHub Pages
 
-<<<<<<< Updated upstream
-=======
 # Publishes the contents of src/ to GitHub Pages on every push to develop.
 # The src/ folder becomes the site root, so pages are served at:
 #   https://<user>.github.io/<repo>/obs.html
@@ -10,25 +8,17 @@ name: Deploy to GitHub Pages
 # One-time setup: in the repo, go to Settings -> Pages and set
 # "Build and deployment" -> Source to "GitHub Actions".
 
->>>>>>> Stashed changes
-on:
   push:
     branches: [develop]
   workflow_dispatch:
 
-<<<<<<< Updated upstream
-=======
 # Permissions required by the official Pages deploy actions.
->>>>>>> Stashed changes
 permissions:
   contents: read
   pages: write
   id-token: write
 
-<<<<<<< Updated upstream
-=======
 # Allow one concurrent deployment; cancel older in-progress runs.
->>>>>>> Stashed changes
 concurrency:
   group: pages
   cancel-in-progress: true
