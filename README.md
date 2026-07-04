@@ -88,7 +88,8 @@ pointing at the `obs.html` link above.
 | <kbd>P</kbd> | Previous preset |
 | <kbd>R</kbd> | Random preset |
 | <kbd>C</kbd> | Toggle auto-cycle |
-| <kbd>[</kbd> / <kbd>]</kbd> | Cycle interval − / + |
+| <kbd>S</kbd> | Shuffle / sequential auto-cycle (shuffle is the default) |
+| <kbd>[</kbd> / <kbd>]</kbd> | Cycle interval − / + (1s steps at/below 10s, 5s above) |
 | <kbd>D</kbd> | Switch audio input |
 | <kbd>F</kbd> | Toggle fullscreen |
 | <kbd>?</kbd> | Show/hide help |
