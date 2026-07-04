@@ -28,7 +28,7 @@
       presetEl.appendChild(o);
     });
   } else {
-    setStatus('\u26A0 Preset library failed to load (check internet access).');
+    setStatus('\u26A0 Preset library failed to load.');
   }
 
   function refreshDeviceList() {
@@ -66,9 +66,11 @@
   cycleEl.addEventListener('change', function () {
     if (cycleEl.checked !== viz.isCycling()) viz.toggleCycle();
   });
-  secsEl.addEventListener('change', function () { viz.setCycleSecs(parseInt(secsEl.value, 10)); });
+  secsEl.addEventListener('change', function () { secsEl.value = viz.setCycleSecs(parseInt(secsEl.value, 10)); });
 
   document.addEventListener('keydown', function (e) {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     if (e.key.toLowerCase() === 'h') panel.classList.toggle('hidden');
   });
 
