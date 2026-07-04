@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-07-04
+
+### Changed
+- Vendored `butterchurn` and `butterchurn-presets` into `src/vendor/` instead of
+  loading them from unpkg, removing the runtime CDN dependency.
+- Added a Content-Security-Policy meta tag to all pages.
+- Fixed the malformed charset meta tag (`<meta charset="UTF-8">`).
+- Moved `<script>` tags out of overlay divs to the end of `<body>`.
+- Fullscreen page only hides the cursor once the visualizer is running.
+
+### Fixed
+- Concurrent `start()` calls (e.g. double-click on Start) could create multiple
+  AudioContexts and render loops; starts are now guarded.
+- A failed start (mic permission denied) no longer leaks an AudioContext per
+  attempt.
+- Switching audio devices now disconnects the previous audio source node.
+- Pressing <kbd>H</kbd> while typing in a panel input no longer toggles the panel.
+- Bare modifier keypresses no longer trigger start on the fullscreen page.
+
 ## [1.0.1] - 2026-06-27
 
 ### Added

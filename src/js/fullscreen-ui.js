@@ -17,7 +17,7 @@
 
   const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true });
 
-  if (!viz.keys().length) say('\u26A0 Preset library failed to load (check internet)');
+  if (!viz.keys().length) say('\u26A0 Preset library failed to load');
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -32,6 +32,7 @@
     help.classList.add('hidden');
     try {
       await viz.start();
+      document.body.classList.add('running');
       say('\u25B6 Running \u2014 press ? for controls');
     } catch (e) {
       help.classList.remove('hidden');
@@ -40,7 +41,10 @@
   }
 
   document.addEventListener('keydown', function (e) {
-    if (!viz.isStarted()) { start(); return; }
+    if (!viz.isStarted()) {
+      if (e.key.length === 1 || e.key === 'Enter') start();  // ignore bare modifier presses
+      return;
+    }
     switch (e.key) {
       case ' ': case 'n': case 'N': viz.next(); e.preventDefault(); break;
       case 'p': case 'P': viz.prev(); break;

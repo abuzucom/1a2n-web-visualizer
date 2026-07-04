@@ -106,10 +106,10 @@ instructions per platform are in [`docs/audio-routing.md`](docs/audio-routing.md
 
 ## Dependencies
 
-butterchurn and its presets are loaded from a CDN (unpkg), pinned in the HTML
-files (`butterchurn@2.6.7`, `butterchurn-presets@2.4.7`). The pages therefore
-need internet access on first load. To run fully offline, download those two
-`.min.js` files into `src/vendor/` and update the `<script>` tags.
+butterchurn and its presets (`butterchurn@2.6.7`, `butterchurn-presets@2.4.7`)
+are vendored in `src/vendor/` and served from the site itself — no CDN, no
+internet access needed. To upgrade, replace the two `.min.js` files with the
+corresponding `lib/` builds from the npm packages.
 
 ## License
 
