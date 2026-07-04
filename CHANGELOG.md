@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-04
+
+### Added
+- Vendored three additional preset packs from `butterchurn-presets@2.4.7`
+  (Extra, Extra2, MD1) and the `butterchurnExtraImages` texture pack from
+  `butterchurn@2.6.7`.
+- `visualizer-core.js` now merges all loaded preset packs at startup,
+  skipping presets whose exact name already exists in an earlier pack
+  (base pack wins collisions): 395 unique presets, up from 100.
+- Custom textures are passed to butterchurn via `loadExtraImages` so the
+  handful of texture-using presets render fully.
+
 ## [1.1.0] - 2026-07-04
 
 ### Changed
