@@ -1,0 +1,37 @@
+# Internal-only Caddy config for the visualizer.
+#
+# Serves the static site on both:
+#   :80  — plain HTTP  (mic capture works only via http://localhost)
+#   :443 — HTTPS via Caddy's built-in self-signed internal CA
+#          (mic capture works from other LAN machines; browsers show a
+#          cert warning until Caddy's root CA is trusted — see
+#          docs/local-hosting.md)
+#
+# TLS notes: `on_demand` mints an internal cert for whatever hostname a
+# client connects with (e.g. https://myserver.lan:8443), so name-based
+# access gets a matching certificate. Clients that connect by raw IP
+# send no SNI and are served the default_sni cert instead — that works,
+# but with a name-mismatch warning, so prefer a hostname.
+{
+	local_certs
+	# Keep plain HTTP usable: don't redirect :80 to :443.
+	auto_https disable_redirects
+	default_sni visualizer.internal
+}
+
+(site) {
+	root * /srv
+	encode zstd gzip
+	file_server
+}
+
+:80 {
+	import site
+}
+
+:443 {
+	tls internal {
+		on_demand
+	}
+	import site
+}
