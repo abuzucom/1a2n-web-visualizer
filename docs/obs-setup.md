@@ -12,10 +12,9 @@
 > (`npm start`) and use **URL** mode pointing at
 > `http://localhost:3000/obs.html` (port depends on the server).
 >
-> **Hosted option:** if you deployed via GitHub Pages (see the workflow in
-> `.github/workflows/deploy.yml`), use **URL** mode pointing at
-> `https://<user>.github.io/<repo>/obs.html`. HTTPS means audio capture works
-> with no extra setup.
+> **Hosted option (simplest):** use **URL** mode pointing at the production
+> deployment, `https://visualizer.1a2n.net/obs.html`. HTTPS means audio
+> capture works with no extra setup.
 
 ## Grant audio and start
 
@@ -34,7 +33,8 @@
 
 ## Notes / gotchas
 
-- The CDN scripts require internet on first load. To run offline, vendor the
-  libraries locally (see the README "Dependencies" section).
+- All libraries and preset packs are vendored in `src/vendor/`, so the pages
+  are fully self-contained — no internet access needed when running from a
+  local clone.
 - The butterchurn build is unaffiliated with OBS; no plugin install is needed —
   it is just a web page.

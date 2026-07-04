@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-07-04
+
+### Changed
+- The GitHub Pages deploy workflow now retries the deployment step once
+  (after a 30s pause) when the Pages backend rejects the first attempt with
+  its transient "Deployment failed, try again later." error.
+- Documentation refreshed to reflect the production deployment at
+  `https://visualizer.1a2n.net/`, the vendored (CDN-free) libraries, and the
+  `src/vendor/` layout.
+
 ## [1.3.0] - 2026-07-04
 
 ### Added
