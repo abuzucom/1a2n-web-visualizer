@@ -34,6 +34,7 @@
     let audioCtx, visualizer, micStream, sourceNode;
     let presets = {}, keys = [], idx = 0;
     let cycleOn = opts.cycleOn !== false;
+    let shuffleOn = opts.shuffle === true;
     let cycleSecs = opts.cycleSecs || 20;
     let cycleTimer = null;
     let inputDevices = [], deviceIdx = 0;
@@ -68,9 +69,18 @@
       if (announce !== false) onToast(keys[idx]);
     }
 
+    function loadRandom() {
+      if (keys.length < 2) return loadPreset(0);
+      let r;
+      do { r = Math.floor(Math.random() * keys.length); } while (r === idx);
+      loadPreset(r);
+    }
+
     function restartCycle() {
       if (cycleTimer) clearInterval(cycleTimer);
-      if (cycleOn) cycleTimer = setInterval(function () { loadPreset(idx + 1); }, cycleSecs * 1000);
+      if (cycleOn) cycleTimer = setInterval(function () {
+        if (shuffleOn) loadRandom(); else loadPreset(idx + 1);
+      }, cycleSecs * 1000);
     }
 
     async function getDevices() {
@@ -161,9 +171,11 @@
       start:         start,
       next:          function () { loadPreset(idx + 1); },
       prev:          function () { loadPreset(idx - 1); },
-      random:        function () { loadPreset(Math.floor(Math.random() * keys.length)); },
+      random:        loadRandom,
       goto:          function (i, announce) { loadPreset(i, undefined, announce); },
       toggleCycle:   function () { cycleOn = !cycleOn; restartCycle(); return cycleOn; },
+      toggleShuffle: function () { shuffleOn = !shuffleOn; return shuffleOn; },
+      isShuffling:   function () { return shuffleOn; },
       setCycleSecs:  function (s) { cycleSecs = Math.max(3, s | 0); restartCycle(); return cycleSecs; },
       getCycleSecs:  function () { return cycleSecs; },
       isCycling:     function () { return cycleOn; },

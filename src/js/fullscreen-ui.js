@@ -15,7 +15,7 @@
     toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2400);
   }
 
-  const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true });
+  const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true });
 
   if (!viz.keys().length) say('\u26A0 Preset library failed to load');
 
@@ -50,8 +50,10 @@
       case 'p': case 'P': viz.prev(); break;
       case 'r': case 'R': viz.random(); break;
       case 'c': case 'C': say(viz.toggleCycle() ? '\u21BB Auto-cycle on (' + viz.getCycleSecs() + 's)' : '\u23F8 Auto-cycle off'); break;
-      case '[': say('Cycle: ' + viz.setCycleSecs(viz.getCycleSecs() - 5) + 's'); break;
-      case ']': say('Cycle: ' + viz.setCycleSecs(viz.getCycleSecs() + 5) + 's'); break;
+      case 's': case 'S': say(viz.toggleShuffle() ? '\uD83D\uDD00 Shuffle cycle on' : '\u27A1 Sequential cycle'); break;
+      // finer steps near the bottom of the range: 1s at/below 10s, 5s above
+      case '[': say('Cycle: ' + viz.setCycleSecs(viz.getCycleSecs() - (viz.getCycleSecs() <= 10 ? 1 : 5)) + 's'); break;
+      case ']': say('Cycle: ' + viz.setCycleSecs(viz.getCycleSecs() + (viz.getCycleSecs() < 10 ? 1 : 5)) + 's'); break;
       case 'd': case 'D': viz.nextDevice(); break;
       case 'f': case 'F': toggleFullscreen(); break;
       case '?': help.classList.toggle('hidden'); break;
