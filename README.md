@@ -3,15 +3,20 @@
 Milkdrop-style audio visualizer pages built on
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
 **OBS browser source** or as a **standalone fullscreen visualizer** in any
-modern browser.
+modern browser. Ships 395 deduplicated presets from four preset packs, fully
+self-hosted (no CDN).
+
+**Production deployment: <https://visualizer.1a2n.net/>**
+(`/obs.html` and `/fullscreen.html`), auto-deployed from `develop`.
 
 Two entry points share a single controller module, so visualizer logic lives in
 one place:
 
 - `src/obs.html` — has an on-screen control panel (device picker, preset picker,
   auto-cycle). Press <kbd>H</kbd> to hide the panel for capture.
-- `src/fullscreen.html` — no visible UI; keyboard-only controls, hidden cursor.
-  Cleaner to window-capture or run on a second display.
+- `src/fullscreen.html` — no visible UI; keyboard-only controls, cursor hidden
+  while running. Auto-cycle shuffles by default. Cleaner to window-capture or
+  run on a second display.
 
 ## Repository layout
 
@@ -24,7 +29,7 @@ butterchurn-visualizer/
 ├── package.json            # optional local dev server
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml      # auto-deploy src/ to GitHub Pages
+│       └── deploy.yml      # auto-deploy src/ to GitHub Pages (with retry)
 ├── src/
 │   ├── index.html          # web landing page
 │   ├── obs.html            # OBS browser-source entry point
@@ -32,10 +37,17 @@ butterchurn-visualizer/
 │   ├── css/
 │   │   ├── panel.css
 │   │   └── fullscreen.css
-│   └── js/
-│       ├── visualizer-core.js   # shared BCViz controller (the brains)
-│       ├── obs-ui.js            # panel wiring
-│       └── fullscreen-ui.js     # keyboard wiring
+│   ├── js/
+│   │   ├── visualizer-core.js   # shared BCViz controller (the brains)
+│   │   ├── obs-ui.js            # panel wiring
+│   │   └── fullscreen-ui.js     # keyboard wiring
+│   └── vendor/                  # vendored butterchurn + preset/texture packs
+│       ├── butterchurn.min.js
+│       ├── butterchurnExtraImages.min.js
+│       ├── butterchurnPresets.min.js
+│       ├── butterchurnPresetsExtra.min.js
+│       ├── butterchurnPresetsExtra2.min.js
+│       └── butterchurnPresetsMD1.min.js
 └── docs/
     ├── obs-setup.md
     └── audio-routing.md
@@ -64,15 +76,22 @@ Then open <http://localhost:8000/fullscreen.html> or `/obs.html`.
 
 ## Hosted (GitHub Pages)
 
-A workflow at `.github/workflows/deploy.yml` publishes `src/` to GitHub Pages on
-every push to `develop`. One-time setup: in the repo go to **Settings → Pages**
-and set **Source** to **GitHub Actions**. After the first deploy your pages are
-at:
+The production site is served by GitHub Pages behind the custom domain
+**`visualizer.1a2n.net`**:
 
 ```
-https://<user>.github.io/<repo>/obs.html
-https://<user>.github.io/<repo>/fullscreen.html
+https://visualizer.1a2n.net/obs.html
+https://visualizer.1a2n.net/fullscreen.html
 ```
+
+A workflow at `.github/workflows/deploy.yml` publishes `src/` on every push to
+`develop` — **merging to `develop` is deploying to production**. The workflow
+retries the Pages deployment once automatically, since the Pages backend
+occasionally rejects a first attempt with a transient "try again later" error.
+
+For a fork or fresh clone, the one-time setup is: **Settings → Pages → Source →
+GitHub Actions** (pages then appear at `https://<user>.github.io/<repo>/…`),
+plus a custom domain and DNS record if desired.
 
 Because Pages serves over HTTPS (a secure context), audio capture works directly
 — no `localhost` workaround needed. In OBS, use a Browser Source in **URL** mode
