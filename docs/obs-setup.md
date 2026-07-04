@@ -15,6 +15,10 @@
 > **Hosted option (simplest):** use **URL** mode pointing at the production
 > deployment, `https://visualizer.1a2n.net/obs.html`. HTTPS means audio
 > capture works with no extra setup.
+>
+> **Internal option:** if you run the Docker + Caddy container (see
+> [local-hosting.md](local-hosting.md)), point **URL** mode at
+> `https://<host>:8443/obs.html` instead.
 
 ## Grant audio and start
 

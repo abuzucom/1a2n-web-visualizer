@@ -1,0 +1,4 @@
+# Allowlist: the image only needs the site and the Caddy config.
+*
+!src
+!Caddyfile

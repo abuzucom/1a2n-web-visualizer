@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-07-04
+
+### Added
+- Internal-only self-hosting via Docker + Caddy: `Dockerfile`,
+  `docker-compose.yml`, and `Caddyfile` serving plain HTTP on :80 and HTTPS
+  on :443 through Caddy's internal CA (mic capture needs a secure context,
+  so HTTPS makes audio work from other LAN machines).
+- `docs/local-hosting.md` covering all three local modes: `file://`, dev
+  server, and the Docker container (including how to trust the self-signed
+  CA).
+
 ## [1.3.1] - 2026-07-04
 
 ### Changed

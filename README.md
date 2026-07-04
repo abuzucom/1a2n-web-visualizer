@@ -27,6 +27,10 @@ butterchurn-visualizer/
 ├── CHANGELOG.md
 ├── .gitignore
 ├── package.json            # optional local dev server
+├── Caddyfile               # internal hosting config (HTTP + HTTPS)
+├── Dockerfile              # Caddy-based image for internal hosting
+├── docker-compose.yml      # one-command internal deployment
+├── .dockerignore
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml      # auto-deploy src/ to GitHub Pages (with retry)
@@ -50,7 +54,8 @@ butterchurn-visualizer/
 │       └── butterchurnPresetsMD1.min.js
 └── docs/
     ├── obs-setup.md
-    └── audio-routing.md
+    ├── audio-routing.md
+    └── local-hosting.md
 ```
 
 ## Quick start
@@ -96,6 +101,16 @@ plus a custom domain and DNS record if desired.
 Because Pages serves over HTTPS (a secure context), audio capture works directly
 — no `localhost` workaround needed. In OBS, use a Browser Source in **URL** mode
 pointing at the `obs.html` link above.
+
+## Run locally / self-host
+
+Everything is vendored, so the site also runs fully offline: open
+`src/fullscreen.html` straight from a clone (`file://`), use the dev server
+above, or host it internally with the included Docker + Caddy setup
+(`docker compose up -d --build` → `http://localhost:8080` and
+`https://<host>:8443` for LAN-wide mic access). Details, including the
+self-signed-certificate story, are in
+[`docs/local-hosting.md`](docs/local-hosting.md).
 
 ## Controls
 
