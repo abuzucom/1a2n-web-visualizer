@@ -32,13 +32,13 @@
     const onPreset = opts.onPreset || function () {};
     const defaultBlend = opts.blend != null ? opts.blend : 2.7;
 
-    let audioCtx, visualizer, micStream;
+    let audioCtx, visualizer, micStream, sourceNode;
     let presets = {}, keys = [], idx = 0;
     let cycleOn = opts.cycleOn !== false;
     let cycleSecs = opts.cycleSecs || 20;
     let cycleTimer = null;
     let inputDevices = [], deviceIdx = 0;
-    let started = false;
+    let started = false, starting = false;
 
     if (PresetLib && PresetLib.getPresets) {
       presets = PresetLib.getPresets();
@@ -79,8 +79,10 @@
       if (micStream && micStream !== stream) {
         micStream.getTracks().forEach(function (t) { t.stop(); });
       }
+      if (sourceNode) visualizer.disconnectAudio(sourceNode);
       micStream = stream;
-      visualizer.connectAudio(audioCtx.createMediaStreamSource(stream));
+      sourceNode = audioCtx.createMediaStreamSource(stream);
+      visualizer.connectAudio(sourceNode);
     }
 
     async function openStream(deviceId) {
@@ -107,22 +109,31 @@
     }
 
     async function start(deviceId) {
-      if (started) return;
+      if (started || starting) return;
       if (!Butterchurn) {
-        onToast('\u26A0 butterchurn failed to load (check internet)');
+        onToast('\u26A0 butterchurn failed to load');
         throw new Error('butterchurn library not loaded');
       }
-      audioCtx = new (global.AudioContext || global.webkitAudioContext)();
-      await audioCtx.resume();
+      starting = true;
+      try {
+        audioCtx = new (global.AudioContext || global.webkitAudioContext)();
+        await audioCtx.resume();
 
-      const stream = await openStream(deviceId);   // also triggers the permission prompt
-      await getDevices();                           // labels populate after permission
+        const stream = await openStream(deviceId);   // also triggers the permission prompt
+        await getDevices();                           // labels populate after permission
 
-      visualizer = Butterchurn.createVisualizer(audioCtx, canvas, {
-        width: canvas.width, height: canvas.height, pixelRatio: 1, textureRatio: 1
-      });
-      connectStream(stream);
-      started = true;
+        visualizer = Butterchurn.createVisualizer(audioCtx, canvas, {
+          width: canvas.width, height: canvas.height, pixelRatio: 1, textureRatio: 1
+        });
+        connectStream(stream);
+        started = true;
+      } catch (e) {
+        // Don't leak an AudioContext per failed attempt \u2014 browsers cap them.
+        if (audioCtx) { audioCtx.close(); audioCtx = null; }
+        throw e;
+      } finally {
+        starting = false;
+      }
 
       loadPreset(0, 0, false);
       (function render() { visualizer.render(); requestAnimationFrame(render); })();
