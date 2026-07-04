@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-07-04
+
+### Added
+- Shuffle mode for the auto-cycle: picks a random preset (never the current
+  one) each tick. On by default on the fullscreen page; toggle with
+  <kbd>S</kbd>. The OBS page keeps sequential cycling.
+- <kbd>R</kbd> (and the panel's Random button) now never re-picks the
+  currently showing preset.
+
+### Changed
+- Fullscreen <kbd>[</kbd> / <kbd>]</kbd> adjust the cycle interval in 1s steps
+  at/below 10s and 5s steps above, instead of a fixed 5s step.
+
 ## [1.2.0] - 2026-07-04
 
 ### Added
