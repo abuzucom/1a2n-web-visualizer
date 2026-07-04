@@ -1,6 +1,6 @@
 {
   "name": "butterchurn-visualizer",
-  "version": "1.0.0",
+  "version": "1.3.1",
   "description": "Milkdrop (butterchurn) audio visualizer pages for OBS and standalone browser use.",
   "private": true,
   "scripts": {
