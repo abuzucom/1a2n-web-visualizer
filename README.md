@@ -106,9 +106,12 @@ instructions per platform are in [`docs/audio-routing.md`](docs/audio-routing.md
 
 ## Dependencies
 
-butterchurn and its presets (`butterchurn@2.6.7`, `butterchurn-presets@2.4.7`)
+butterchurn (`butterchurn@2.6.7`) and its presets (`butterchurn-presets@2.4.7`)
 are vendored in `src/vendor/` and served from the site itself — no CDN, no
-internet access needed. To upgrade, replace the two `.min.js` files with the
+internet access needed. Four preset packs are loaded (base, Extra, Extra2,
+MD1) plus the extra-images texture pack; `visualizer-core.js` merges them at
+startup, skipping any preset whose name already exists in an earlier pack
+(395 unique presets total). To upgrade, replace the `.min.js` files with the
 corresponding `lib/` builds from the npm packages.
 
 ## License

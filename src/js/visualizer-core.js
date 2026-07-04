@@ -27,7 +27,6 @@
   function create(canvas, opts) {
     opts = opts || {};
     const Butterchurn = getLib('butterchurn');
-    const PresetLib   = getLib('butterchurnPresets');
     const onToast  = opts.onToast  || function () {};
     const onPreset = opts.onPreset || function () {};
     const defaultBlend = opts.blend != null ? opts.blend : 2.7;
@@ -40,10 +39,19 @@
     let inputDevices = [], deviceIdx = 0;
     let started = false, starting = false;
 
-    if (PresetLib && PresetLib.getPresets) {
-      presets = PresetLib.getPresets();
-      keys = Object.keys(presets).sort();
-    }
+    // Merge every available preset pack. Packs are optional (a missing
+    // script just means fewer presets); on name collisions the earlier
+    // pack wins, so add-on packs never override or duplicate base presets.
+    ['butterchurnPresets', 'butterchurnPresetsExtra',
+     'butterchurnPresetsExtra2', 'butterchurnPresetsMD1'].forEach(function (name) {
+      const pack = getLib(name);
+      if (!pack || !pack.getPresets) return;
+      const packPresets = pack.getPresets();
+      Object.keys(packPresets).forEach(function (k) {
+        if (!(k in presets)) presets[k] = packPresets[k];
+      });
+    });
+    keys = Object.keys(presets).sort();
 
     function sizeCanvas() {
       const dpr = global.devicePixelRatio || 1;
@@ -125,6 +133,12 @@
         visualizer = Butterchurn.createVisualizer(audioCtx, canvas, {
           width: canvas.width, height: canvas.height, pixelRatio: 1, textureRatio: 1
         });
+        const ImagesLib = getLib('butterchurnExtraImages');
+        if (ImagesLib && ImagesLib.getImages) {
+          // Custom textures used by a handful of presets; optional — presets
+          // render without them, just with plainer backgrounds.
+          try { visualizer.loadExtraImages(ImagesLib.getImages()); } catch (e) {}
+        }
         connectStream(stream);
         started = true;
       } catch (e) {
