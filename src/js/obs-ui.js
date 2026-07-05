@@ -62,11 +62,15 @@
   document.getElementById('prevBtn').addEventListener('click', function () { viz.prev(); });
   document.getElementById('randBtn').addEventListener('click', function () { viz.random(); });
   presetEl.addEventListener('change', function () { viz.goto(parseInt(presetEl.value, 10)); });
-  deviceEl.addEventListener('change', function () { if (viz.isStarted() && deviceEl.value) viz.useDeviceById(deviceEl.value); });
+  deviceEl.addEventListener('change', function () {
+    if (viz.isStarted() && deviceEl.value) viz.useDeviceById(deviceEl.value);
+  });
   cycleEl.addEventListener('change', function () {
     if (cycleEl.checked !== viz.isCycling()) viz.toggleCycle();
   });
-  secsEl.addEventListener('change', function () { secsEl.value = viz.setCycleSecs(parseInt(secsEl.value, 10)); });
+  secsEl.addEventListener('change', function () {
+    secsEl.value = viz.setCycleSecs(parseInt(secsEl.value, 10));
+  });
 
   document.addEventListener('keydown', function (e) {
     const tag = e.target.tagName;

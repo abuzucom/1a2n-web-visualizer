@@ -176,7 +176,9 @@
       toggleCycle:   function () { cycleOn = !cycleOn; restartCycle(); return cycleOn; },
       toggleShuffle: function () { shuffleOn = !shuffleOn; return shuffleOn; },
       isShuffling:   function () { return shuffleOn; },
-      setCycleSecs:  function (s) { cycleSecs = Math.max(3, s | 0); restartCycle(); return cycleSecs; },
+      setCycleSecs:  function (s) {
+        cycleSecs = Math.max(3, s | 0); restartCycle(); return cycleSecs;
+      },
       getCycleSecs:  function () { return cycleSecs; },
       isCycling:     function () { return cycleOn; },
       nextDevice:    function () { return useDevice(deviceIdx + 1); },
