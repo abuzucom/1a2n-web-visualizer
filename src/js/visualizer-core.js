@@ -33,6 +33,7 @@
 
     let audioCtx, visualizer, micStream, sourceNode;
     let presets = {}, keys = [], idx = 0;
+    let excluded = new Set(); // preset keys removed from rotation for this session
     let cycleOn = opts.cycleOn !== false;
     let shuffleOn = opts.shuffle === true;
     let cycleSecs = opts.cycleSecs || 20;
@@ -69,18 +70,52 @@
       if (announce !== false) onToast(keys[idx]);
     }
 
+    // Steps from idx in the given direction, skipping excluded presets.
+    // Falls back to a plain step if every other preset is excluded, so
+    // playback never gets stuck.
+    function stepIndex(dir) {
+      if (!keys.length) return idx;
+      let i = idx;
+      for (let n = 0; n < keys.length; n++) {
+        i = (i + dir + keys.length) % keys.length;
+        if (!excluded.has(keys[i])) return i;
+      }
+      return (idx + dir + keys.length) % keys.length;
+    }
+
+    // Indices eligible for a random pick: everything but the current preset
+    // and anything excluded. Falls back to "everything but current" if that
+    // would otherwise be empty.
+    function candidatePool() {
+      let pool = keys.map(function (_, i) { return i; })
+        .filter(function (i) { return i !== idx && !excluded.has(keys[i]); });
+      if (!pool.length) {
+        pool = keys.map(function (_, i) { return i; }).filter(function (i) { return i !== idx; });
+      }
+      return pool;
+    }
+
     function loadRandom() {
       if (keys.length < 2) return loadPreset(0);
-      let r;
-      do { r = Math.floor(Math.random() * keys.length); } while (r === idx);
-      loadPreset(r);
+      const pool = candidatePool();
+      loadPreset(pool[Math.floor(Math.random() * pool.length)]);
     }
 
     function restartCycle() {
       if (cycleTimer) clearInterval(cycleTimer);
       if (cycleOn) cycleTimer = setInterval(function () {
-        if (shuffleOn) loadRandom(); else loadPreset(idx + 1);
+        if (shuffleOn) loadRandom(); else loadPreset(stepIndex(1));
       }, cycleSecs * 1000);
+    }
+
+    // Excludes the currently playing preset from shuffle/cycle rotation for
+    // the rest of this session (in-memory only) and advances off it.
+    function removeCurrentFromShuffle() {
+      if (!keys.length) return null;
+      const removed = keys[idx];
+      excluded.add(removed);
+      loadPreset(stepIndex(1));
+      return removed;
     }
 
     async function getDevices() {
@@ -169,13 +204,15 @@
 
     return {
       start:         start,
-      next:          function () { loadPreset(idx + 1); },
-      prev:          function () { loadPreset(idx - 1); },
+      next:          function () { loadPreset(stepIndex(1)); },
+      prev:          function () { loadPreset(stepIndex(-1)); },
       random:        loadRandom,
       goto:          function (i, announce) { loadPreset(i, undefined, announce); },
       toggleCycle:   function () { cycleOn = !cycleOn; restartCycle(); return cycleOn; },
       toggleShuffle: function () { shuffleOn = !shuffleOn; return shuffleOn; },
       isShuffling:   function () { return shuffleOn; },
+      removeCurrentFromShuffle: removeCurrentFromShuffle,
+      excludedList:  function () { return Array.from(excluded); },
       setCycleSecs:  function (s) {
         cycleSecs = Math.max(3, s | 0); restartCycle(); return cycleSecs;
       },

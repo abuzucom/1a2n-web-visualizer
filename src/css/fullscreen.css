@@ -19,17 +19,36 @@ body.running { cursor: none; }
 }
 #toast.show { opacity: 1; }
 
+/* corner action buttons — remove-from-shuffle / view-excluded-list */
+#removeBtn, #excludedBtn {
+  position: fixed; right: 18px; z-index: 10;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(10, 10, 14, 0.78); color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(6px);
+  font-size: 17px; line-height: 1; cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity .25s ease, filter .15s ease;
+}
+#removeBtn { bottom: 18px; }
+#excludedBtn { bottom: 66px; }
+body.running #removeBtn, body.running #excludedBtn {
+  opacity: .45; pointer-events: auto;
+}
+body.running #removeBtn:hover, body.running #excludedBtn:hover,
+body.running #removeBtn:focus-visible, body.running #excludedBtn:focus-visible {
+  opacity: 1; filter: brightness(1.15);
+}
+
 /* start prompt + help, shown until first interaction */
-#help {
+#help, #excludedPanel {
   position: fixed; inset: 0; z-index: 20;
   display: flex; align-items: center; justify-content: center;
   background: radial-gradient(circle at center, rgba(20, 20, 30, 0.6), rgba(0, 0, 0, 0.92));
   color: #e8e8ee; text-align: center; transition: opacity .4s ease;
 }
-#help.hidden { opacity: 0; pointer-events: none; }
-#help .box { max-width: 460px; padding: 30px; }
-#help h1 { font-size: 22px; margin: 0 0 6px; }
-#help p { opacity: .7; margin: 0 0 22px; font-size: 14px; }
+#help.hidden, #excludedPanel.hidden { opacity: 0; pointer-events: none; }
+#help .box, #excludedPanel .box { max-width: 460px; padding: 30px; }
+#help h1, #excludedPanel h1 { font-size: 22px; margin: 0 0 6px; }
+#help p, #excludedPanel p { opacity: .7; margin: 0 0 22px; font-size: 14px; }
 #help table { margin: 0 auto; border-collapse: collapse; font-size: 13px; }
 #help td { padding: 5px 14px; }
 #help td.k { text-align: right; }
@@ -38,3 +57,18 @@ kbd {
   border-radius: 6px; padding: 2px 8px; font-family: ui-monospace, monospace; font-size: 12px;
 }
 #help .go { margin-top: 24px; font-size: 15px; color: #7aa2ff; }
+
+/* excluded-presets list panel */
+#excludedPanel textarea {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  background: #1c1c24; color: #e8e8ee;
+  border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px;
+  padding: 10px 12px; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.5;
+}
+#excludedPanel .actions { display: flex; gap: 10px; margin-top: 16px; justify-content: center; }
+#excludedPanel .actions button {
+  cursor: pointer; background: #2b6cff; color: #fff;
+  border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600;
+}
+#excludedPanel .actions button:hover { filter: brightness(1.1); }
+#excludedPanel #closeExcludedBtn { background: #2a2a34; }
