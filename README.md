@@ -1,51 +1,42 @@
 # Butterchurn Visualizer
 
-Milkdrop-style audio visualizer pages built on
-[butterchurn](https://github.com/jberg/butterchurn), intended for use as an
-**OBS browser source** or as a **standalone fullscreen visualizer** in any
-modern browser. Ships 395 deduplicated presets from four preset packs, fully
-self-hosted (no CDN).
+Milkdrop-style audio visualizer pages built on [butterchurn](https://github.com/jberg/butterchurn). This project is designed for use as an **OBS browser source** or as a **standalone fullscreen visualizer** in any modern web browser. It includes 395 deduplicated presets from four preset packs and is fully self-hosted without reliance on external Content Delivery Networks (CDNs).
 
-**Production deployment: <https://visualizer.1a2n.net/>**
-(`/obs.html` and `/fullscreen.html`), auto-deployed from `develop`.
+**Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html` and `/fullscreen.html`), automatically deployed from the `develop` branch.
 
-Two entry points share a single controller module, so visualizer logic lives in
-one place:
+Both entry points utilize a shared controller module to maintain consistent visualizer logic:
 
-- `src/obs.html` — has an on-screen control panel (device picker, preset picker,
-  auto-cycle). Press <kbd>H</kbd> to hide the panel for capture.
-- `src/fullscreen.html` — no visible UI; keyboard-only controls, cursor hidden
-  while running. Auto-cycle shuffles by default. Cleaner to window-capture or
-  run on a second display.
+- `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel for capture.
+- `src/fullscreen.html`: A keyboard-controlled interface with no visible UI. The cursor is hidden during operation. Auto-cycle shuffles presets by default. This mode is optimized for window capture or secondary display usage.
 
-## Repository layout
+## Repository Structure
 
-```
+```text
 butterchurn-visualizer/
 ├── README.md
 ├── LICENSE
 ├── CHANGELOG.md
 ├── .gitignore
-├── package.json            # optional local dev server
-├── Caddyfile               # internal hosting config (HTTP + HTTPS)
-├── Dockerfile              # Caddy-based image for internal hosting
-├── docker-compose.yml      # one-command internal deployment
+├── package.json            # Development server configuration
+├── Caddyfile               # Caddy web server configuration
+├── Dockerfile              # Container definition for local hosting
+├── docker-compose.yml      # Docker Compose deployment configuration
 ├── .dockerignore
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml      # auto-deploy src/ to GitHub Pages (with retry)
+│       └── deploy.yml      # GitHub Actions deployment workflow
 ├── src/
-│   ├── index.html          # web landing page
-│   ├── obs.html            # OBS browser-source entry point
-│   ├── fullscreen.html     # standalone fullscreen entry point
+│   ├── index.html          # Landing page
+│   ├── obs.html            # OBS browser source entry point
+│   ├── fullscreen.html     # Standalone fullscreen entry point
 │   ├── css/
 │   │   ├── panel.css
 │   │   └── fullscreen.css
 │   ├── js/
-│   │   ├── visualizer-core.js   # shared BCViz controller (the brains)
-│   │   ├── obs-ui.js            # panel wiring
-│   │   └── fullscreen-ui.js     # keyboard wiring
-│   └── vendor/                  # vendored butterchurn + preset/texture packs
+│   │   ├── visualizer-core.js   # Shared visualizer controller logic
+│   │   ├── obs-ui.js            # OBS interface event bindings
+│   │   └── fullscreen-ui.js     # Fullscreen keyboard event bindings
+│   └── vendor/                  # Vendored dependencies and presets
 │       ├── butterchurn.min.js
 │       ├── butterchurnExtraImages.min.js
 │       ├── butterchurnPresets.min.js
@@ -58,59 +49,48 @@ butterchurn-visualizer/
     └── local-hosting.md
 ```
 
-## Quick start
+## Quick Start
 
-A user gesture (click or keypress) is required before the browser will grant
-audio access, so just open a page and click once.
+Modern browsers require a user interaction (click or keypress) before granting audio capture permissions. Please interact with the page once upon loading.
 
-**Standalone browser:** open `src/fullscreen.html`. If the audio device list
-stays empty (some browsers block audio access over `file://`), serve it over
-localhost instead — see below.
+**Standalone Browser:** Open `src/fullscreen.html`. Note that some browsers restrict audio access over the `file://` protocol. If the audio device list does not populate, use a local development server.
 
-**Local dev server (recommended):**
+**Local Development Server:**
 
 ```bash
-npm start            # serves ./src via `npx serve`
-# or, without Node:
+npm start            # Serves ./src via `npx serve`
+# Alternatively, using Python:
 python3 -m http.server --directory src 8000
 ```
 
-Then open <http://localhost:8000/fullscreen.html> or `/obs.html`.
+Navigate to <http://localhost:8000/fullscreen.html> or <http://localhost:8000/obs.html>.
 
-**OBS:** see [`docs/obs-setup.md`](docs/obs-setup.md).
+**OBS Integration:** Refer to [`docs/obs-setup.md`](docs/obs-setup.md) for configuration instructions.
 
-## Hosted (GitHub Pages)
+## Hosted Deployment (GitHub Pages)
 
-The production site is served by GitHub Pages behind the custom domain
-**`visualizer.1a2n.net`**:
+The production environment is hosted via GitHub Pages at **`visualizer.1a2n.net`**:
 
-```
+```text
 https://visualizer.1a2n.net/obs.html
 https://visualizer.1a2n.net/fullscreen.html
 ```
 
-A workflow at `.github/workflows/deploy.yml` publishes `src/` on every push to
-`develop` — **merging to `develop` is deploying to production**. The workflow
-retries the Pages deployment once automatically, since the Pages backend
-occasionally rejects a first attempt with a transient "try again later" error.
+The GitHub Actions workflow located at `.github/workflows/deploy.yml` automatically publishes the `src/` directory upon any push to the `develop` branch. 
 
-For a fork or fresh clone, the one-time setup is: **Settings → Pages → Source →
-GitHub Actions** (pages then appear at `https://<user>.github.io/<repo>/…`),
-plus a custom domain and DNS record if desired.
+To configure deployment on a fork or new clone, navigate to **Settings → Pages → Source** and select **GitHub Actions**. The site will be available at `https://<user>.github.io/<repo>/`.
 
-Because Pages serves over HTTPS (a secure context), audio capture works directly
-— no `localhost` workaround needed. In OBS, use a Browser Source in **URL** mode
-pointing at the `obs.html` link above.
+Because GitHub Pages serves content over HTTPS (a secure context), browser audio capture is permitted without local workarounds. When configuring OBS, create a Browser Source in URL mode and point it to the `obs.html` URL.
 
-## Run locally / self-host
+## Local Hosting
 
-Everything is vendored, so the site also runs fully offline: open
-`src/fullscreen.html` straight from a clone (`file://`), use the dev server
-above, or host it internally with the included Docker + Caddy setup
-(`docker compose up -d --build` → `http://localhost:8080` and
-`https://<host>:8443` for LAN-wide mic access). Details, including the
-self-signed-certificate story, are in
-[`docs/local-hosting.md`](docs/local-hosting.md).
+The project is fully vendored and can operate offline. You may open `src/fullscreen.html` directly from the filesystem (`file://`), use a local development server, or utilize the included Docker configuration:
+
+```bash
+docker compose up -d --build
+```
+
+The application will be available at `http://localhost:8080`. Further configuration and security details are available in [`docs/local-hosting.md`](docs/local-hosting.md).
 
 ## Controls
 
@@ -122,34 +102,28 @@ self-signed-certificate story, are in
 | <kbd>P</kbd> | Previous preset |
 | <kbd>R</kbd> | Random preset |
 | <kbd>C</kbd> | Toggle auto-cycle |
-| <kbd>S</kbd> | Shuffle / sequential auto-cycle (shuffle is the default) |
-| <kbd>[</kbd> / <kbd>]</kbd> | Cycle interval − / + (1s steps at/below 10s, 5s above) |
-| <kbd>D</kbd> | Switch audio input |
-| <kbd>F</kbd> | Toggle fullscreen |
-| <kbd>?</kbd> | Show/hide help |
+| <kbd>S</kbd> | Toggle between shuffle and sequential auto-cycle (default is shuffle) |
+| <kbd>[</kbd> / <kbd>]</kbd> | Adjust cycle interval (1s increments up to 10s, 5s increments above 10s) |
+| <kbd>D</kbd> | Switch audio input device |
+| <kbd>F</kbd> | Toggle fullscreen mode |
+| <kbd>?</kbd> | Show/hide the help menu |
 
-### OBS panel (`obs.html`)
+### OBS Panel (`obs.html`)
 
-Use the on-screen controls; press <kbd>H</kbd> to hide the panel.
+Utilize the on-screen graphical controls. Press <kbd>H</kbd> to toggle the visibility of the control panel.
 
-## Audio
+## Audio Configuration
 
-The page can only "hear" an **audio input device**. To visualize music rather
-than your microphone, route audio through a virtual cable and select that device
-(press <kbd>D</kbd> in fullscreen, or use the dropdown in the panel). Full
-instructions per platform are in [`docs/audio-routing.md`](docs/audio-routing.md).
+The application visualizes audio from a system input device (e.g., a microphone). To visualize system audio output (e.g., music playback), you must route the audio through a virtual audio cable and select that virtual device as the input. Platform-specific instructions are available in [`docs/audio-routing.md`](docs/audio-routing.md).
 
 ## Dependencies
 
-butterchurn (`butterchurn@2.6.7`) and its presets (`butterchurn-presets@2.4.7`)
-are vendored in `src/vendor/` and served from the site itself — no CDN, no
-internet access needed. Four preset packs are loaded (base, Extra, Extra2,
-MD1) plus the extra-images texture pack; `visualizer-core.js` merges them at
-startup, skipping any preset whose name already exists in an earlier pack
-(395 unique presets total). To upgrade, replace the `.min.js` files with the
-corresponding `lib/` builds from the npm packages.
+The `butterchurn` library (v2.6.7) and associated presets (v2.4.7) are vendored within the `src/vendor/` directory. The application does not require a CDN or internet access to function.
+
+Four preset packs are included (Base, Extra, Extra2, MD1) alongside the `extra-images` texture pack. `visualizer-core.js` merges these packs at initialization and deduplicates them based on preset name, yielding 395 unique presets.
+
+To update these dependencies, replace the `.min.js` files with the corresponding compiled `lib/` artifacts from the upstream npm packages.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE). butterchurn is also MIT-licensed; preset authors
-are credited within the preset names.
+This project is licensed under the MIT License. See [`LICENSE`](LICENSE) for details. The `butterchurn` library is also MIT-licensed. Preset authors are credited within the preset names.

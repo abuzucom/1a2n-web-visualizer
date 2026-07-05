@@ -1,13 +1,37 @@
 # Dependencies
 node_modules/
+package-lock.json
 
-# OS / editor cruft
+# OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Editor state
 *.swp
+*.swo
+*~
 .idea/
 .vscode/
 
 # Logs
 *.log
 npm-debug.log*
+
+# Docker local overrides
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Caddy TLS state (when running outside Docker)
+caddy_data/
+caddy_config/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+build/
+coverage/
