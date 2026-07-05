@@ -14,6 +14,8 @@
   <body>
     <canvas id="viz"></canvas>
     <div id="toast"></div>
+    <button id="removeBtn" title="Remove current preset from shuffle (this session)">🚫</button>
+    <button id="excludedBtn" title="View presets excluded this session">📋</button>
     <div id="help">
       <div class="box">
         <h1>🎵 Butterchurn</h1>
@@ -27,9 +29,22 @@
           <tr><td class="k"><kbd>[</kbd> / <kbd>]</kbd></td><td>Cycle interval −/+ (1s steps ≤10s)</td></tr>
           <tr><td class="k"><kbd>D</kbd></td><td>Switch audio input</td></tr>
           <tr><td class="k"><kbd>F</kbd></td><td>Toggle fullscreen</td></tr>
+          <tr><td class="k"><kbd>X</kbd></td><td>Remove current preset from shuffle</td></tr>
+          <tr><td class="k"><kbd>L</kbd></td><td>View presets excluded this session</td></tr>
           <tr><td class="k"><kbd>?</kbd></td><td>Show this help</td></tr>
         </table>
         <div class="go">Click or press any key to start →</div>
+      </div>
+    </div>
+    <div id="excludedPanel" class="hidden">
+      <div class="box">
+        <h1>Excluded this session</h1>
+        <p>Copy this list to remove these presets from the codebase later.</p>
+        <textarea id="excludedList" readonly rows="10"></textarea>
+        <div class="actions">
+          <button id="copyExcludedBtn">Copy</button>
+          <button id="closeExcludedBtn">Close</button>
+        </div>
       </div>
     </div>
     <script src="vendor/butterchurn.min.js"></script>

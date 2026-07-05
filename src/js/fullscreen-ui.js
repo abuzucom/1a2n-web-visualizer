@@ -2,9 +2,15 @@
 (function () {
   'use strict';
 
-  const canvas = document.getElementById('viz');
-  const toast  = document.getElementById('toast');
-  const help   = document.getElementById('help');
+  const canvas  = document.getElementById('viz');
+  const toast   = document.getElementById('toast');
+  const help    = document.getElementById('help');
+  const removeBtn      = document.getElementById('removeBtn');
+  const excludedBtn    = document.getElementById('excludedBtn');
+  const excludedPanel  = document.getElementById('excludedPanel');
+  const excludedList   = document.getElementById('excludedList');
+  const copyExcludedBtn  = document.getElementById('copyExcludedBtn');
+  const closeExcludedBtn = document.getElementById('closeExcludedBtn');
 
   let toastTimer = null;
   function say(msg) {
@@ -24,6 +30,40 @@
       if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
     } else if (document.exitFullscreen) {
       document.exitFullscreen();
+    }
+  }
+
+  function removeCurrent() {
+    if (!viz.isStarted()) return;
+    const removed = viz.removeCurrentFromShuffle();
+    if (removed) say('🚫 Removed from shuffle: ' + removed);
+  }
+
+  function showExcludedPanel() {
+    if (!viz.isStarted()) return;
+    const list = viz.excludedList();
+    excludedList.value = list.length ? list.join('\n') : '(none excluded yet)';
+    excludedPanel.classList.remove('hidden');
+    excludedList.focus();
+    excludedList.select();
+  }
+
+  function hideExcludedPanel() {
+    excludedPanel.classList.add('hidden');
+  }
+
+  function copyExcludedList() {
+    const list = viz.excludedList();
+    const text = list.join('\n');
+    excludedList.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        say('Copied ' + list.length + ' preset name(s)');
+      }, function () {
+        say('Copy failed — text is selected, use Ctrl/Cmd+C');
+      });
+    } else {
+      say('Text is selected — use Ctrl/Cmd+C to copy');
     }
   }
 
@@ -70,8 +110,16 @@
         break;
       case 'd': case 'D': viz.nextDevice(); break;
       case 'f': case 'F': toggleFullscreen(); break;
+      case 'x': case 'X': removeCurrent(); break;
+      case 'l': case 'L': showExcludedPanel(); break;
+      case 'Escape': hideExcludedPanel(); break;
       case '?': help.classList.toggle('hidden'); break;
     }
   });
   document.addEventListener('click', function () { if (!viz.isStarted()) start(); });
+
+  removeBtn.addEventListener('click', function (e) { e.stopPropagation(); removeCurrent(); });
+  excludedBtn.addEventListener('click', function (e) { e.stopPropagation(); showExcludedPanel(); });
+  copyExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); copyExcludedList(); });
+  closeExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); hideExcludedPanel(); });
 })();
