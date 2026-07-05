@@ -122,4 +122,21 @@
   excludedBtn.addEventListener('click', function (e) { e.stopPropagation(); showExcludedPanel(); });
   copyExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); copyExcludedList(); });
   closeExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); hideExcludedPanel(); });
+
+  /* ── idle-fade: hide corner buttons after 3 s of inactivity ────── */
+  var idleTimer = null;
+  var IDLE_MS = 3000;
+
+  function goIdle() { document.body.classList.add('idle'); }
+  function wakeUp() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(goIdle, IDLE_MS);
+  }
+
+  document.addEventListener('mousemove', wakeUp);
+  document.addEventListener('keydown', wakeUp);
+  document.addEventListener('click', wakeUp);
+  // start the first idle countdown
+  idleTimer = setTimeout(goIdle, IDLE_MS);
 })();
