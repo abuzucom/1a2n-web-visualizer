@@ -190,7 +190,13 @@
 
         if (!(name in presets)) {
           // Extra preset whose chunk isn't resident yet: load it, then re-enter.
+          // Advance the logical cursor now, before the async load: otherwise idx
+          // stays on the old preset until the chunk callback, and a rapid second
+          // request (mashing X/next, or the cycle timer) re-reads the same idx and
+          // supersedes this callback via the seq guard — stranding playback. The
+          // seq guard still governs the actual visualizer.loadPreset application.
           const at = i;
+          idx = at;
           ensureChunk(extraChunkOf[name]).then(function (ok) {
             if (seq !== loadSeq) return; // superseded by a newer request
             if (!ok || !(name in presets)) {
