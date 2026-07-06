@@ -1,4 +1,4 @@
-# Allowlist: the image only needs the site and the Caddy config.
+# Allowlist: only the site and Caddy config enter the build context
 *
 !src
 !Caddyfile

@@ -1,4 +1,4 @@
-/* fullscreen-ui.js — keyboard-only wiring for fullscreen.html */
+/* fullscreen-ui.js - keyboard-only wiring for fullscreen.html */
 (function () {
   'use strict';
 
@@ -36,7 +36,7 @@
   function removeCurrent() {
     if (!viz.isStarted()) return;
     const removed = viz.removeCurrentFromShuffle();
-    if (removed) say('🚫 Removed from shuffle: ' + removed);
+    if (removed) say('\uD83D\uDEAB Removed from shuffle: ' + removed);
   }
 
   function showExcludedPanel() {
@@ -60,10 +60,10 @@
       navigator.clipboard.writeText(text).then(function () {
         say('Copied ' + list.length + ' preset name(s)');
       }, function () {
-        say('Copy failed — text is selected, use Ctrl/Cmd+C');
+        say('Copy failed \u2014 text is selected, use Ctrl/Cmd+C');
       });
     } else {
-      say('Text is selected — use Ctrl/Cmd+C to copy');
+      say('Text is selected \u2014 use Ctrl/Cmd+C to copy');
     }
   }
 
@@ -122,4 +122,21 @@
   excludedBtn.addEventListener('click', function (e) { e.stopPropagation(); showExcludedPanel(); });
   copyExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); copyExcludedList(); });
   closeExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); hideExcludedPanel(); });
+
+  /* -- idle-fade: hide corner buttons after 3 s of inactivity ------ */
+  var idleTimer = null;
+  var IDLE_MS = 3000;
+
+  function goIdle() { document.body.classList.add('idle'); }
+  function wakeUp() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(goIdle, IDLE_MS);
+  }
+
+  document.addEventListener('mousemove', wakeUp);
+  document.addEventListener('keydown', wakeUp);
+  document.addEventListener('click', wakeUp);
+  // start the first idle countdown
+  idleTimer = setTimeout(goIdle, IDLE_MS);
 })();

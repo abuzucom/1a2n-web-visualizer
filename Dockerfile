@@ -7,3 +7,6 @@ COPY Caddyfile /etc/caddy/Caddyfile
 COPY src /srv
 
 EXPOSE 80 443
+
+RUN adduser -D -u 1000 appuser && chown -R 1000:1000 /srv
+USER 1000

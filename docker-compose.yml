@@ -3,15 +3,10 @@ services:
     build: .
     container_name: butterchurn-visualizer
     ports:
-      - "8080:80"   # http://localhost:8080 (mic works on localhost)
-      - "8443:443"  # https://<host>:8443  (mic works LAN-wide; self-signed cert)
-    volumes:
-      # Persist Caddy's internal CA so the certificate survives
-      # container recreation (clients only need to trust it once).
-      - caddy_data:/data
-      - caddy_config:/config
+      - "127.0.0.1:8080:80"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
-
-volumes:
-  caddy_data:
-  caddy_config:

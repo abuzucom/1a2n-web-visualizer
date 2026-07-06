@@ -1,4 +1,4 @@
-/* obs-ui.js — control-panel wiring for obs.html */
+/* obs-ui.js - control-panel wiring for obs.html */
 (function () {
   'use strict';
 
