@@ -9,12 +9,12 @@ All notable changes to this project are documented here. Format loosely follows
 ### Added
 - ~15k extra presets from
   [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn),
-  committed as 118 lazy-loaded chunk files in `src/presets-extra/` (15,381
+  committed as 118 lazy-loaded chunk files in `src/presets-extra/` (15,375
   unique presets total after deduplication against the vendored packs;
   vendored packs win on name collisions). Chunks are injected as classic
   `<script>` tags on demand, so everything still works from `file://`,
   offline, and under the strict CSP; an in-memory LRU keeps at most 16
-  chunks resident. If the folder is removed the app falls back to the 395
+  chunks resident. If the folder is removed the app falls back to the 387
   vendored presets.
 - `tools/fetch-extra-presets.py` — stdlib-only generator that downloads the
   pinned, sha256-verified upstream zip and regenerates `src/presets-extra/`,
