@@ -2,8 +2,9 @@
 
 The primary deployment is GitHub Pages (<https://visualizer.1a2n.net/>), but
 the site is fully self-contained — every library and preset pack is vendored
-in `src/vendor/` — so it also runs entirely offline. Three local modes, from
-simplest to most capable:
+in `src/vendor/`, and the ~15k extra presets are committed as lazy-loaded
+chunk files in `src/presets-extra/` — so it also runs entirely offline, extra
+presets included. Three local modes, from simplest to most capable:
 
 ## 1. Open directly in a browser (`file://`)
 

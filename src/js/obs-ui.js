@@ -19,17 +19,38 @@
     cycleOn: cycleEl.checked
   });
 
-  // Populate preset dropdown
+  // Populate preset dropdown. With the extra collection this is 15k+
+  // entries, so build the options off-DOM and offer a text filter.
   const keys = viz.keys();
-  if (keys.length) {
+  const filterEl = document.getElementById('presetFilter');
+
+  function rebuildPresetList() {
+    const needle = (filterEl.value || '').toLowerCase();
+    const frag = document.createDocumentFragment();
     keys.forEach(function (name, i) {
+      if (needle && name.toLowerCase().indexOf(needle) === -1) return;
       const o = document.createElement('option');
       o.value = i; o.textContent = name;
-      presetEl.appendChild(o);
+      frag.appendChild(o);
     });
+    presetEl.innerHTML = '';
+    presetEl.appendChild(frag);
+    // Re-select the current preset; if it's filtered out the select just
+    // shows no selection, which is fine.
+    presetEl.value = String(viz.currentIndex());
+  }
+
+  if (keys.length) {
+    rebuildPresetList();
   } else {
     setStatus('\u26A0 Preset library failed to load.');
   }
+
+  let filterTimer = null;
+  filterEl.addEventListener('input', function () {
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(rebuildPresetList, 150);
+  });
 
   function refreshDeviceList() {
     const inputs = viz.listDevices();
@@ -80,5 +101,5 @@
 
   // Try to list devices early (labels only appear after permission on Start)
   if (navigator.mediaDevices) viz.getDevices().then(refreshDeviceList);
-  setStatus('Pick an input (or just hit Start for the default), then Start.');
+  setStatus(keys.length + ' presets. Pick an input (or just hit Start for the default).');
 })();

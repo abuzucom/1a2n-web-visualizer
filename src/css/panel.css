@@ -24,12 +24,13 @@ html, body {
 #panel.hidden { opacity: 0; pointer-events: none; }
 #panel h1 { font-size: 14px; margin: 0 0 10px; letter-spacing: .3px; }
 #panel label { display: block; margin: 10px 0 4px; opacity: .75; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-#panel select, #panel input[type=number] {
+#panel select, #panel input[type=number], #panel input[type=search] {
   width: 100%; box-sizing: border-box;
   background: #1c1c24; color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px; padding: 7px 9px; font-size: 13px;
 }
+#presetFilter { margin-bottom: 6px; }
 .row { display: flex; gap: 8px; margin-top: 12px; }
 .row button, #startBtn {
   flex: 1; cursor: pointer;
