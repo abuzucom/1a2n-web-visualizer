@@ -277,6 +277,7 @@
       const removed = keys[idx];
       excluded.add(removed);
       loadPreset(stepIndex(1));
+      restartCycle();  // give the newly chosen preset its full interval
       return removed;
     }
 
@@ -374,10 +375,12 @@
 
     return {
       start:         start,
-      next:          function () { loadPreset(stepIndex(1)); },
-      prev:          function () { loadPreset(stepIndex(-1)); },
-      random:        loadRandom,
-      goto:          function (i, announce) { loadPreset(i, undefined, announce); },
+      // Manual navigation resets the auto-cycle countdown (restartCycle is a
+      // no-op when cycling is off) so a chosen preset gets its full interval.
+      next:          function () { loadPreset(stepIndex(1)); restartCycle(); },
+      prev:          function () { loadPreset(stepIndex(-1)); restartCycle(); },
+      random:        function () { loadRandom(); restartCycle(); },
+      goto:          function (i, announce) { loadPreset(i, undefined, announce); restartCycle(); },
       toggleCycle:   function () { cycleOn = !cycleOn; restartCycle(); return cycleOn; },
       toggleShuffle: function () { shuffleOn = !shuffleOn; return shuffleOn; },
       isShuffling:   function () { return shuffleOn; },
