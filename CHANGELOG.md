@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-07-05
+
+### Added
+- ~15k extra presets from
+  [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn),
+  committed as 118 lazy-loaded chunk files in `src/presets-extra/` (15,375
+  unique presets total after deduplication against the vendored packs;
+  vendored packs win on name collisions). Chunks are injected as classic
+  `<script>` tags on demand, so everything still works from `file://`,
+  offline, and under the strict CSP; an in-memory LRU keeps at most 16
+  chunks resident. If the folder is removed the app falls back to the 387
+  vendored presets.
+- `tools/fetch-extra-presets.py` — stdlib-only generator that downloads the
+  pinned, sha256-verified upstream zip and regenerates `src/presets-extra/`,
+  excluding presets that reference custom textures the app can't supply
+  (`tools/butterchurn-image-names.json` lists the vendored textures).
+- Preset filter box in the OBS panel (the dropdown now holds 15k+ entries),
+  built off-DOM via a DocumentFragment; status line shows the preset count.
+- Broken or unloadable presets are skipped automatically at runtime and
+  removed from rotation for the session.
+
 ## [1.4.0] - 2026-07-04
 
 ### Added

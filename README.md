@@ -1,6 +1,12 @@
 # Butterchurn Visualizer
 
-Milkdrop-style audio visualizer pages built on [butterchurn](https://github.com/jberg/butterchurn). This project is designed for use as an **OBS browser source** or as a **standalone fullscreen visualizer** in any modern web browser. It includes 395 deduplicated presets from four preset packs and is fully self-hosted without reliance on external Content Delivery Networks (CDNs).
+Milkdrop-style audio visualizer pages built on
+[butterchurn](https://github.com/jberg/butterchurn), intended for use as an
+**OBS browser source** or as a **standalone fullscreen visualizer** in any
+modern browser. Ships 15,375 deduplicated presets — 387 from the four
+butterchurn preset packs plus ~15k from the
+[tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
+collection, lazy-loaded in chunks — fully self-hosted (no CDN).
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html` and `/fullscreen.html`), automatically deployed from the `develop` branch.
 
@@ -33,16 +39,22 @@ butterchurn-visualizer/
 │   │   ├── panel.css
 │   │   └── fullscreen.css
 │   ├── js/
-│   │   ├── visualizer-core.js   # Shared visualizer controller logic
-│   │   ├── obs-ui.js            # OBS interface event bindings
-│   │   └── fullscreen-ui.js     # Fullscreen keyboard event bindings
-│   └── vendor/                  # Vendored dependencies and presets
-│       ├── butterchurn.min.js
-│       ├── butterchurnExtraImages.min.js
-│       ├── butterchurnPresets.min.js
-│       ├── butterchurnPresetsExtra.min.js
-│       ├── butterchurnPresetsExtra2.min.js
-│       └── butterchurnPresetsMD1.min.js
+│   │   ├── visualizer-core.js   # shared BCViz controller (the brains)
+│   │   ├── obs-ui.js            # panel wiring
+│   │   └── fullscreen-ui.js     # keyboard wiring
+│   ├── vendor/                  # vendored butterchurn + preset/texture packs
+│   │   ├── butterchurn.min.js
+│   │   ├── butterchurnExtraImages.min.js
+│   │   ├── butterchurnPresets.min.js
+│   │   ├── butterchurnPresetsExtra.min.js
+│   │   ├── butterchurnPresetsExtra2.min.js
+│   │   └── butterchurnPresetsMD1.min.js
+│   └── presets-extra/           # ~15k lazy-loaded presets (generated, committed)
+│       ├── index.js             # preset name → chunk mapping
+│       └── chunk-NNN.js         # 118 chunks of 128 presets each
+├── tools/
+│   ├── fetch-extra-presets.py   # regenerates src/presets-extra/ from upstream
+│   └── butterchurn-image-names.json
 └── docs/
     ├── obs-setup.md
     ├── audio-routing.md
@@ -118,11 +130,39 @@ The application visualizes audio from a system input device (e.g., a microphone)
 
 ## Dependencies
 
-The `butterchurn` library (v2.6.7) and associated presets (v2.4.7) are vendored within the `src/vendor/` directory. The application does not require a CDN or internet access to function.
+butterchurn (`butterchurn@2.6.7`) and its presets (`butterchurn-presets@2.4.7`)
+are vendored in `src/vendor/` and served from the site itself — no CDN, no
+internet access needed. Four preset packs are loaded (base, Extra, Extra2,
+MD1) plus the extra-images texture pack; `visualizer-core.js` merges them at
+startup, skipping any preset whose name already exists in an earlier pack
+(387 unique presets). To upgrade, replace the `.min.js` files with the
+corresponding `lib/` builds from the npm packages.
 
-Four preset packs are included (Base, Extra, Extra2, MD1) alongside the `extra-images` texture pack. `visualizer-core.js` merges these packs at initialization and deduplicates them based on preset name, yielding 395 unique presets.
+## Extra presets (~15k)
 
-To update these dependencies, replace the `.min.js` files with the corresponding compiled `lib/` artifacts from the upstream npm packages.
+`src/presets-extra/` holds 15,056 additional presets from
+[ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn),
+packed into 118 chunk files that are lazy-loaded via injected `<script>` tags
+the first time one of their presets is selected (works from `file://` and
+under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
+The 68 presets that duplicate a vendored pack name are skipped at startup —
+vendored packs win — for 15,375 unique presets total. If the folder is
+missing, the app silently falls back to the 387 vendored presets.
+
+The folder is generated (and committed) output. To refresh it after an
+upstream update:
+
+```bash
+python3 tools/fetch-extra-presets.py           # download + regenerate
+python3 tools/fetch-extra-presets.py --zip P   # use an already-downloaded zip
+```
+
+The script pins the upstream commit and verifies the zip's sha256 (both
+constants are at the top of the script — bump them when upstream grows), and
+excludes any preset referencing custom textures that neither butterchurn nor
+the vendored extra-images pack can supply, so everything shipped renders
+correctly. Note that the upstream collection has **no license file**; the
+presets are community-created MilkDrop content redistributed as-is.
 
 ## License
 
