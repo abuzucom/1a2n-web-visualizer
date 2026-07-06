@@ -2,8 +2,9 @@
 
 The primary deployment is GitHub Pages (<https://visualizer.1a2n.net/>), but
 the site is fully self-contained — every library and preset pack is vendored
-in `src/vendor/` — so it also runs entirely offline. Three local modes, from
-simplest to most capable:
+in `src/vendor/`, and the ~15k extra presets are committed as lazy-loaded
+chunk files in `src/presets-extra/` — so it also runs entirely offline, extra
+presets included. Three local modes, from simplest to most capable:
 
 ## 1. Open directly in a browser (`file://`)
 
@@ -25,59 +26,35 @@ python3 -m http.server --directory src 8000
 Open `http://localhost:8000/fullscreen.html`. `localhost` counts as a secure
 context, so mic capture always works — but only from the same machine.
 
-## 3. Internal hosting with Docker + Caddy
+## 3. Docker + Caddy (localhost only)
 
-For a persistent, LAN-reachable instance (e.g. an OBS machine pointing at a
-small server), the repo ships a Caddy-based container:
+For a persistent local instance, the repo ships a hardened Caddy container:
 
 ```bash
 docker compose up -d --build
 ```
 
-This serves the site two ways:
+Open `http://localhost:8080`. The port is bound to `127.0.0.1` only — it is
+not reachable from other machines on the network. `localhost` is a secure
+context, so microphone capture works without TLS.
 
-| URL | Transport | Mic capture works from |
-| --- | --- | --- |
-| `http://<host>:8080` | plain HTTP | the Docker host only (via `http://localhost:8080`) |
-| `https://<host>:8443` | HTTPS, Caddy internal CA | any machine on the network |
+### Security hardening
 
-The HTTPS listener exists because browsers only allow microphone capture in a
-**secure context** — HTTPS or `localhost`. Plain HTTP from another machine
-loads the page fine but gets no audio.
+The compose file and Caddyfile apply the following measures:
 
-### The self-signed certificate
-
-Caddy generates its own internal certificate authority (`local_certs`) on
-first start; the compose file persists it in the `caddy_data` volume so the
-CA survives container rebuilds.
-
-**Prefer connecting by hostname** (`https://myserver.lan:8443`, mDNS name,
-etc.): the config uses on-demand issuance, so Caddy mints a certificate
-matching whatever name you connect with. Connecting by raw IP works too, but
-serves a fallback certificate whose name won't match, so you'll always get a
-warning even after trusting the CA.
-
-Clients have two options:
-
-- **Click through the browser warning** once per client — fine for casual use.
-- **Trust the CA properly** (no warnings, needed for some locked-down
-  browsers): export the root certificate and import it into the client's
-  trust store:
-
-  ```bash
-  docker compose exec visualizer cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
-  ```
-
-  Then install `caddy-root.crt` as a trusted root CA on each client
-  (Windows: certmgr; macOS: Keychain Access; Linux: `update-ca-certificates`;
-  or import it in the browser's own certificate settings).
+- **Localhost binding** — `127.0.0.1:8080:80`, no network exposure.
+- **Read-only filesystem** — the container cannot write to its own layers.
+- **No new privileges** — blocks `setuid`/`setgid` escalation.
+- **All capabilities dropped** — the container runs with zero Linux
+  capabilities.
+- **OWASP security headers** — `Content-Security-Policy`, `X-Frame-Options`,
+  `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` are
+  set by Caddy on every response (defense in depth with the HTML meta CSP).
+- **Server fingerprint removed** — the `Server` header is stripped.
 
 ### Notes
 
-- The container is intended for **internal use only** — nothing in the config
-  does auth or rate limiting. Don't port-forward it to the internet; the
-  public deployment already exists for that.
 - The image contains only `src/` and the Caddyfile (see `.dockerignore`);
   rebuilding after pulling new commits is just `docker compose up -d --build`.
-- OBS on another machine: use a Browser Source in URL mode pointing at
-  `https://<host>:8443/obs.html` (trust the CA on that machine first).
+- The public deployment is at <https://visualizer.1a2n.net/>. Do not expose
+  this container to the internet — it has no authentication or rate limiting.

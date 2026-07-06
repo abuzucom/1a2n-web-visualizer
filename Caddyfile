@@ -1,37 +1,31 @@
-# Internal-only Caddy config for the visualizer.
-#
-# Serves the static site on both:
-#   :80  — plain HTTP  (mic capture works only via http://localhost)
-#   :443 — HTTPS via Caddy's built-in self-signed internal CA
-#          (mic capture works from other LAN machines; browsers show a
-#          cert warning until Caddy's root CA is trusted — see
-#          docs/local-hosting.md)
-#
-# TLS notes: `on_demand` mints an internal cert for whatever hostname a
-# client connects with (e.g. https://myserver.lan:8443), so name-based
-# access gets a matching certificate. Clients that connect by raw IP
-# send no SNI and are served the default_sni cert instead — that works,
-# but with a name-mismatch warning, so prefer a hostname.
+# Localhost-only static file server for the visualizer.
+# Serves plain HTTP on :80 (mapped to 127.0.0.1:8080 by docker-compose).
+# No TLS: localhost is already a secure context for mic capture.
 {
-	local_certs
-	# Keep plain HTTP usable: don't redirect :80 to :443.
-	auto_https disable_redirects
-	default_sni visualizer.internal
-}
-
-(site) {
-	root * /srv
-	encode zstd gzip
-	file_server
+	auto_https off
 }
 
 :80 {
-	import site
-}
+	root * /srv
+	encode zstd gzip
+	file_server
 
-:443 {
-	tls internal {
-		on_demand
+	header {
+		# OWASP recommended security headers
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "no-referrer"
+		Permissions-Policy        "camera=(), geolocation=(), payment=()"
+		Content-Security-Policy   "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'"
+
+		# Prevent caching of HTML pages (assets are fine to cache)
+		?Cache-Control "no-store"
+
+		# Remove server identity
+		-Server
 	}
-	import site
+
+	# Cache vendored JS aggressively (content-addressed by filename)
+	@vendor path /vendor/*
+	header @vendor Cache-Control "public, max-age=31536000, immutable"
 }
