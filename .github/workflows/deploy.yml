@@ -47,7 +47,7 @@ jobs:
       # First attempt is allowed to fail, then one retry decides the job.
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         continue-on-error: true
 
       - name: Wait before retry
@@ -57,4 +57,4 @@ jobs:
       - name: Deploy to GitHub Pages (retry)
         id: retry
         if: steps.deployment.outcome == 'failure'
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
