@@ -338,7 +338,9 @@
         if (ImagesLib && ImagesLib.getImages) {
           // Custom textures used by a handful of presets; optional — presets
           // render without them, just with plainer backgrounds.
-          try { visualizer.loadExtraImages(ImagesLib.getImages()); } catch (e) {}
+          try { visualizer.loadExtraImages(ImagesLib.getImages()); } catch (e) {
+            console.warn('Failed to load extra images (non-critical):', e);
+          }
         }
         connectStream(stream);
         started = true;
