@@ -21,7 +21,7 @@
     toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2400);
   }
 
-  const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true });
+  const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true, randomFirst: true });
 
   if (!viz.keys().length) say('\u26A0 Preset library failed to load');
 
