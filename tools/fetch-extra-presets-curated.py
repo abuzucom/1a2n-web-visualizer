@@ -46,10 +46,11 @@ def _load_fetch_module():
 
 
 def load_current_names(index_path):
-    """Flat set of preset names in the currently committed index.js, or an
-    empty set if it doesn't exist yet (first-run case)."""
+    """Flat set of preset names in the currently committed index.js, or None
+    if it doesn't exist yet (first-run case: no prior curation state, so
+    nothing should be treated as curated-out)."""
     if not index_path.exists():
-        return set()
+        return None
     text = index_path.read_text(encoding="utf-8").strip()
     payload = text[len(INDEX_PREFIX):].rstrip(";")
     data = json.loads(payload)
@@ -77,11 +78,16 @@ def main():
     zf = ZipFile(io.BytesIO(fetch.get_zip_bytes(args.zip)))
     fresh_kept, excluded_textures, bad_json = fetch.collect_presets(zf, allowed)
 
-    curated_out = set(fresh_kept) - current_names
+    if current_names is None:
+        print("no existing index.js found -- first run, nothing to curate out")
+        curated_out = set()
+    else:
+        curated_out = set(fresh_kept) - current_names
     final_kept = {n: p for n, p in fresh_kept.items() if n not in curated_out}
 
     print(f"fresh upstream (post texture-filter): {len(fresh_kept)}")
-    print(f"currently curated in (index.js):      {len(current_names)}")
+    print(f"currently curated in (index.js):      "
+          f"{0 if current_names is None else len(current_names)}")
     print(f"re-excluding as curated-out:          {len(curated_out)}")
     for name in sorted(curated_out):
         print(f"  - {name}")
