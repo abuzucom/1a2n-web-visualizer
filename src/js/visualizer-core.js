@@ -359,11 +359,17 @@
         starting = false;
       }
 
-      // First paint should never wait on a chunk fetch: start on the first
-      // already-resident (vendored) preset if there is one.
-      let first = 0;
+      // First paint should never wait on a chunk fetch: start on an
+      // already-resident (vendored) preset. Normally the first one, for a
+      // stable default; with randomFirst set, a random resident preset so
+      // each launch opens on something different (still no chunk fetch).
+      const resident = [];
       for (let k = 0; k < keys.length; k++) {
-        if (keys[k] in presets) { first = k; break; }
+        if (keys[k] in presets) resident.push(k);
+      }
+      let first = resident.length ? resident[0] : 0;
+      if (opts.randomFirst && resident.length) {
+        first = resident[Math.floor(Math.random() * resident.length)];
       }
       loadPreset(first, 0, false);
       (function render() { visualizer.render(); requestAnimationFrame(render); })();
