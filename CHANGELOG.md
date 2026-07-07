@@ -6,10 +6,22 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+- `preset-inventory.csv` — a full inventory of every preset name and the pack
+  that provides it (a vendored pack, or the lazy-loaded `presets-extra`
+  collection with its chunk id), generated with the same dedup/precedence
+  rules `visualizer-core.js` applies at runtime.
+
 ### Removed
 - 45 presets deleted from the `src/presets-extra/` collection (removed from
-  `index.js` and their backing chunk files), lowering the deduplicated total
-  from 15,375 to 15,330.
+  `index.js` and their backing chunk files).
+
+### Fixed
+- Corrected the documented preset counts to match the current vendored packs:
+  15,264 deduplicated presets total — 385 vendored (100 + 138 + 120 + 27) plus
+  14,879 lazy-loaded (14,947 index names minus 68 that duplicate a vendored
+  name). Replaces the stale 15,330 total / 387 vendored figures, which no
+  longer matched the regenerated `Extra`/`Extra2`/`MD1` packs.
 
 ## [1.5.0] - 2026-07-05
 
