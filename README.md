@@ -3,7 +3,7 @@
 Milkdrop-style audio visualizer pages built on
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
 **OBS browser source** or as a **standalone fullscreen visualizer** in any
-modern browser. Ships 15,330 deduplicated presets — 387 from the four
+modern browser. Ships 15,264 deduplicated presets — 385 from the four
 butterchurn preset packs plus ~15k from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
 collection, lazy-loaded in chunks — fully self-hosted (no CDN).
@@ -135,7 +135,7 @@ are vendored in `src/vendor/` and served from the site itself — no CDN, no
 internet access needed. Four preset packs are loaded (base, Extra, Extra2,
 MD1) plus the extra-images texture pack; `visualizer-core.js` merges them at
 startup, skipping any preset whose name already exists in an earlier pack
-(387 unique presets). To upgrade, replace the `.min.js` files with the
+(385 unique presets). To upgrade, replace the `.min.js` files with the
 corresponding `lib/` builds from the npm packages.
 
 ## Extra presets (~15k)
@@ -146,8 +146,8 @@ packed into 118 chunk files that are lazy-loaded via injected `<script>` tags
 the first time one of their presets is selected (works from `file://` and
 under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
 The 68 presets that duplicate a vendored pack name are skipped at startup —
-vendored packs win — for 15,330 unique presets total. If the folder is
-missing, the app silently falls back to the 387 vendored presets.
+vendored packs win — for 15,264 unique presets total. If the folder is
+missing, the app silently falls back to the 385 vendored presets.
 
 The folder is generated (and committed) output. To refresh it after an
 upstream update:
