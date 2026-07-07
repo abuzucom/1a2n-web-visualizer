@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Removed
+- 45 presets deleted from the `src/presets-extra/` collection (removed from
+  `index.js` and their backing chunk files), lowering the deduplicated total
+  from 15,375 to 15,330.
+
 ## [1.5.0] - 2026-07-05
 
 ### Added

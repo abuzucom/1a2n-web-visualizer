@@ -3,7 +3,7 @@
 Milkdrop-style audio visualizer pages built on
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
 **OBS browser source** or as a **standalone fullscreen visualizer** in any
-modern browser. Ships 15,375 deduplicated presets — 387 from the four
+modern browser. Ships 15,330 deduplicated presets — 387 from the four
 butterchurn preset packs plus ~15k from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
 collection, lazy-loaded in chunks — fully self-hosted (no CDN).
@@ -146,7 +146,7 @@ packed into 118 chunk files that are lazy-loaded via injected `<script>` tags
 the first time one of their presets is selected (works from `file://` and
 under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
 The 68 presets that duplicate a vendored pack name are skipped at startup —
-vendored packs win — for 15,375 unique presets total. If the folder is
+vendored packs win — for 15,330 unique presets total. If the folder is
 missing, the app silently falls back to the 387 vendored presets.
 
 The folder is generated (and committed) output. To refresh it after an
