@@ -190,7 +190,13 @@
 
         if (!(name in presets)) {
           // Extra preset whose chunk isn't resident yet: load it, then re-enter.
+          // Advance the logical cursor now, before the async load: otherwise idx
+          // stays on the old preset until the chunk callback, and a rapid second
+          // request (mashing X/next, or the cycle timer) re-reads the same idx and
+          // supersedes this callback via the seq guard — stranding playback. The
+          // seq guard still governs the actual visualizer.loadPreset application.
           const at = i;
+          idx = at;
           ensureChunk(extraChunkOf[name]).then(function (ok) {
             if (seq !== loadSeq) return; // superseded by a newer request
             if (!ok || !(name in presets)) {
@@ -270,7 +276,11 @@
       if (!keys.length) return null;
       const removed = keys[idx];
       excluded.add(removed);
-      loadPreset(stepIndex(1));
+      // Advance off the removed preset the same way the cycle does: a random
+      // pick when shuffling, otherwise the next in sequence. candidatePool()
+      // already skips excluded/failed, so the just-removed preset is avoided.
+      if (shuffleOn) loadRandom(); else loadPreset(stepIndex(1));
+      restartCycle();  // give the newly chosen preset its full interval
       return removed;
     }
 
@@ -352,11 +362,17 @@
         starting = false;
       }
 
-      // First paint should never wait on a chunk fetch: start on the first
-      // already-resident (vendored) preset if there is one.
-      let first = 0;
+      // First paint should never wait on a chunk fetch: start on an
+      // already-resident (vendored) preset. Normally the first one, for a
+      // stable default; with randomFirst set, a random resident preset so
+      // each launch opens on something different (still no chunk fetch).
+      const resident = [];
       for (let k = 0; k < keys.length; k++) {
-        if (keys[k] in presets) { first = k; break; }
+        if (keys[k] in presets) resident.push(k);
+      }
+      let first = resident.length ? resident[0] : 0;
+      if (opts.randomFirst && resident.length) {
+        first = resident[Math.floor(Math.random() * resident.length)];
       }
       loadPreset(first, 0, false);
       (function render() { visualizer.render(); requestAnimationFrame(render); })();
@@ -368,10 +384,12 @@
 
     return {
       start:         start,
-      next:          function () { loadPreset(stepIndex(1)); },
-      prev:          function () { loadPreset(stepIndex(-1)); },
-      random:        loadRandom,
-      goto:          function (i, announce) { loadPreset(i, undefined, announce); },
+      // Manual navigation resets the auto-cycle countdown (restartCycle is a
+      // no-op when cycling is off) so a chosen preset gets its full interval.
+      next:          function () { loadPreset(stepIndex(1)); restartCycle(); },
+      prev:          function () { loadPreset(stepIndex(-1)); restartCycle(); },
+      random:        function () { loadRandom(); restartCycle(); },
+      goto:          function (i, announce) { loadPreset(i, undefined, announce); restartCycle(); },
       toggleCycle:   function () { cycleOn = !cycleOn; restartCycle(); return cycleOn; },
       toggleShuffle: function () { shuffleOn = !shuffleOn; return shuffleOn; },
       isShuffling:   function () { return shuffleOn; },
