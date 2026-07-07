@@ -35,3 +35,7 @@ caddy_config/
 dist/
 build/
 coverage/
+
+# Python artifacts
+__pycache__/
+*.pyc

@@ -97,23 +97,23 @@ def get_zip_bytes(zip_arg):
     return data
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    parser.add_argument("--zip", help="path to a local copy of the upstream zip")
-    args = parser.parse_args()
+def collect_presets(zf, allowed):
+    """Parse converted/*.json members from an open ZipFile, filtering out
+    presets that reference textures not in `allowed`.
 
-    allowed = set(BUILTIN_TEXTURES)
-    allowed.update(json.loads(IMAGE_NAMES_FILE.read_text()))
-
-    zf = ZipFile(io.BytesIO(get_zip_bytes(args.zip)))
+    Returns (kept, excluded, bad_json):
+      kept:     dict of preset name -> parsed preset
+      excluded: dict of preset name -> sorted missing texture names
+      bad_json: list of preset names that failed to parse
+    """
     members = sorted(
         m for m in zf.namelist()
         if m.startswith("converted/") and m.endswith(".json")
     )
 
-    kept = {}          # preset name -> parsed preset
+    kept = {}
     bad_json = []
-    excluded = {}      # preset name -> sorted missing texture names
+    excluded = {}
     for member in members:
         name = member[len("converted/"):-len(".json")]
         try:
@@ -128,13 +128,21 @@ def main():
             continue
         kept[name] = preset
 
+    return kept, excluded, bad_json
+
+
+def write_output(kept, out_dir):
+    """Wipe out_dir and write chunk-NNN.js + index.js from `kept` (preset
+    name -> parsed preset). Returns (chunks, total_bytes), where `chunks` is
+    the list of name-lists actually written (chunk id = list index).
+    """
     names = sorted(kept)
     chunks = [names[i:i + PRESETS_PER_CHUNK]
               for i in range(0, len(names), PRESETS_PER_CHUNK)]
 
-    if OUT_DIR.exists():
-        shutil.rmtree(OUT_DIR)
-    OUT_DIR.mkdir(parents=True)
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    out_dir.mkdir(parents=True)
 
     total_bytes = 0
     for cid, chunk_names in enumerate(chunks):
@@ -143,18 +151,33 @@ def main():
             separators=(",", ":"), sort_keys=True,
         )
         text = f"window.__bcPresetChunk({cid},{payload});\n"
-        path = OUT_DIR / f"chunk-{cid:03d}.js"
+        path = out_dir / f"chunk-{cid:03d}.js"
         path.write_text(text, encoding="utf-8")
         total_bytes += path.stat().st_size
 
     index_payload = json.dumps(
         {"v": 1, "chunks": chunks}, separators=(",", ":")
     )
-    index_path = OUT_DIR / "index.js"
+    index_path = out_dir / "index.js"
     index_path.write_text(
         f"window.BCExtraPresetIndex={index_payload};\n", encoding="utf-8"
     )
     total_bytes += index_path.stat().st_size
+
+    return chunks, total_bytes
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    parser.add_argument("--zip", help="path to a local copy of the upstream zip")
+    args = parser.parse_args()
+
+    allowed = set(BUILTIN_TEXTURES)
+    allowed.update(json.loads(IMAGE_NAMES_FILE.read_text()))
+
+    zf = ZipFile(io.BytesIO(get_zip_bytes(args.zip)))
+    kept, excluded, bad_json = collect_presets(zf, allowed)
+    chunks, total_bytes = write_output(kept, OUT_DIR)
 
     missing_counts = {}
     for texs in excluded.values():
@@ -162,10 +185,10 @@ def main():
             missing_counts[t] = missing_counts.get(t, 0) + 1
     top_missing = sorted(missing_counts.items(), key=lambda kv: -kv[1])[:10]
 
-    print(f"presets in zip:        {len(members)}")
+    print(f"presets in zip:        {len(kept) + len(excluded) + len(bad_json)}")
     print(f"unparseable (skipped): {len(bad_json)}")
     print(f"excluded (textures):   {len(excluded)}")
-    print(f"kept:                  {len(names)}")
+    print(f"kept:                  {len(kept)}")
     print(f"chunks:                {len(chunks)} x <= {PRESETS_PER_CHUNK} presets")
     print(f"output size:           {total_bytes/1e6:.1f} MB in {OUT_DIR}")
     if top_missing:
