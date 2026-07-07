@@ -276,7 +276,10 @@
       if (!keys.length) return null;
       const removed = keys[idx];
       excluded.add(removed);
-      loadPreset(stepIndex(1));
+      // Advance off the removed preset the same way the cycle does: a random
+      // pick when shuffling, otherwise the next in sequence. candidatePool()
+      // already skips excluded/failed, so the just-removed preset is avoided.
+      if (shuffleOn) loadRandom(); else loadPreset(stepIndex(1));
       restartCycle();  // give the newly chosen preset its full interval
       return removed;
     }
