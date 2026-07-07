@@ -3,7 +3,7 @@
 Milkdrop-style audio visualizer pages built on
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
 **OBS browser source** or as a **standalone fullscreen visualizer** in any
-modern browser. Ships 15,264 deduplicated presets — 385 from the four
+modern browser. Ships 15,090 deduplicated presets — 382 from the four
 butterchurn preset packs plus ~15k from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
 collection, lazy-loaded in chunks — fully self-hosted (no CDN).
@@ -51,7 +51,7 @@ butterchurn-visualizer/
 │   │   └── butterchurnPresetsMD1.min.js
 │   └── presets-extra/           # ~15k lazy-loaded presets (generated, committed)
 │       ├── index.js             # preset name → chunk mapping
-│       └── chunk-NNN.js         # 118 chunks of 128 presets each
+│       └── chunk-NNN.js         # 118 chunks (~128 presets each)
 ├── tools/
 │   ├── fetch-extra-presets.py   # regenerates src/presets-extra/ from upstream
 │   └── butterchurn-image-names.json
@@ -135,19 +135,22 @@ are vendored in `src/vendor/` and served from the site itself — no CDN, no
 internet access needed. Four preset packs are loaded (base, Extra, Extra2,
 MD1) plus the extra-images texture pack; `visualizer-core.js` merges them at
 startup, skipping any preset whose name already exists in an earlier pack
-(385 unique presets). To upgrade, replace the `.min.js` files with the
-corresponding `lib/` builds from the npm packages.
+(382 unique presets). To upgrade, replace the `.min.js` files with the
+corresponding `lib/` builds from the npm packages. A few presets have been
+intentionally curated out of the vendored packs for this deployment (see
+[Curation](#curation) below), so these bundles differ slightly from the
+stock npm builds.
 
 ## Extra presets (~15k)
 
-`src/presets-extra/` holds 15,056 additional presets from
+`src/presets-extra/` holds 14,775 additional presets from
 [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn),
 packed into 118 chunk files that are lazy-loaded via injected `<script>` tags
 the first time one of their presets is selected (works from `file://` and
 under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
-The 68 presets that duplicate a vendored pack name are skipped at startup —
-vendored packs win — for 15,264 unique presets total. If the folder is
-missing, the app silently falls back to the 385 vendored presets.
+The 67 presets that duplicate a vendored pack name are skipped at startup —
+vendored packs win — for 15,090 unique presets total. If the folder is
+missing, the app silently falls back to the 382 vendored presets.
 
 The folder is generated (and committed) output. To refresh it after an
 upstream update:
@@ -163,6 +166,28 @@ excludes any preset referencing custom textures that neither butterchurn nor
 the vendored extra-images pack can supply, so everything shipped renders
 correctly. Note that the upstream collection has **no license file**; the
 presets are community-created MilkDrop content redistributed as-is.
+
+## Curation
+
+This deployment ships a **deliberately curated** subset of the upstream
+content. Selected presets have been removed from **both** the vendored preset
+packs (`src/vendor/butterchurnPresets*.min.js`) and the lazy-loaded upstream
+collection (`src/presets-extra/`), with the matching rows dropped from
+`preset-inventory.csv`. These deletions are an intentional editorial choice
+for this deployment — they are **not** upstream or library changes, and are
+not bugs to be "fixed" by restoring the presets.
+
+Two consequences to keep in mind:
+
+- **Regeneration re-adds them.** `tools/fetch-extra-presets.py` rebuilds
+  `src/presets-extra/` verbatim from the pinned upstream zip, so it will
+  reintroduce any curated-out `presets-extra` presets. After regenerating,
+  the curation must be re-applied. Likewise, replacing a vendored `.min.js`
+  with a stock npm build restores the presets removed from that pack.
+- **The removal lists come from the app.** The `fullscreen.html` interface can
+  remove the current preset from rotation and export the list of presets
+  excluded during a session (the &#128683; / &#128203; controls), which is the
+  source of the names curated out of the codebase here.
 
 ## License
 

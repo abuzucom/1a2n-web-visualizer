@@ -10,18 +10,30 @@ All notable changes to this project are documented here. Format loosely follows
 - `preset-inventory.csv` — a full inventory of every preset name and the pack
   that provides it (a vendored pack, or the lazy-loaded `presets-extra`
   collection with its chunk id), generated with the same dedup/precedence
-  rules `visualizer-core.js` applies at runtime.
+  rules `visualizer-core.js` applies at runtime. Now reflects the curated set
+  (15,090 rows).
 
 ### Removed
 - 45 presets deleted from the `src/presets-extra/` collection (removed from
   `index.js` and their backing chunk files).
+- 174 further presets curated out of this deployment: 171 from
+  `src/presets-extra/` (`index.js` + backing chunk files) and 3 from the
+  vendored bundles (2 from `butterchurnPresetsExtra2`, 1 from
+  `butterchurnPresetsMD1`), with the matching `preset-inventory.csv` rows
+  removed. These removals are an **intentional content-curation choice for
+  this deployment**, independent of the upstream collection and the butterchurn
+  libraries — not an upstream change. Re-running
+  `tools/fetch-extra-presets.py` rebuilds `src/presets-extra/` from upstream
+  and will reintroduce the `presets-extra` deletions, so the curation must be
+  re-applied after any regeneration (see the *Curation* section in the README).
 
 ### Fixed
-- Corrected the documented preset counts to match the current vendored packs:
-  15,264 deduplicated presets total — 385 vendored (100 + 138 + 120 + 27) plus
-  14,879 lazy-loaded (14,947 index names minus 68 that duplicate a vendored
-  name). Replaces the stale 15,330 total / 387 vendored figures, which no
-  longer matched the regenerated `Extra`/`Extra2`/`MD1` packs.
+- Corrected the documented preset counts to match the current curated packs:
+  15,090 deduplicated presets total — 382 vendored (100 + 139 + 118 + 84,
+  merged) plus 14,708 lazy-loaded (14,775 index names minus 67 that duplicate a
+  vendored name). Replaces the stale 15,330 / 15,264 totals and 387 / 385
+  vendored figures, which no longer matched the regenerated and curated
+  `Extra`/`Extra2`/`MD1` packs.
 
 ## [1.5.0] - 2026-07-05
 
