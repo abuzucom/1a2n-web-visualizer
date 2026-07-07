@@ -4,14 +4,23 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.6.0] - 2026-07-07
 
 ### Added
 - `preset-inventory.csv` — a full inventory of every preset name and the pack
   that provides it (a vendored pack, or the lazy-loaded `presets-extra`
   collection with its chunk id), generated with the same dedup/precedence
-  rules `visualizer-core.js` applies at runtime. Now reflects the curated set
+  rules `visualizer-core.js` applies at runtime. Reflects the curated set
   (15,090 rows).
+- `tools/fetch-extra-presets-curated.py` — regenerates `src/presets-extra/`
+  like `fetch-extra-presets.py`, but diffs a fresh upstream pull against the
+  currently committed `index.js` and re-excludes anything present upstream
+  but missing from the current tree, so running it preserves curation
+  instead of undoing it. Supports `--zip` and `--dry-run`.
+  `fetch-extra-presets.py` was refactored to extract `collect_presets()` and
+  `write_output()` out of `main()` (no behavior change) so both scripts
+  share one source of truth for the texture-filter rule and the chunk/index
+  JSON encoding.
 
 ### Removed
 - 45 presets deleted from the `src/presets-extra/` collection (removed from
@@ -22,18 +31,25 @@ All notable changes to this project are documented here. Format loosely follows
   `butterchurnPresetsMD1`), with the matching `preset-inventory.csv` rows
   removed. These removals are an **intentional content-curation choice for
   this deployment**, independent of the upstream collection and the butterchurn
-  libraries — not an upstream change. Re-running
-  `tools/fetch-extra-presets.py` rebuilds `src/presets-extra/` from upstream
-  and will reintroduce the `presets-extra` deletions, so the curation must be
-  re-applied after any regeneration (see the *Curation* section in the README).
+  libraries — not an upstream change. `tools/fetch-extra-presets-curated.py`
+  (above) now re-applies this curation automatically on regeneration; the
+  plain `fetch-extra-presets.py` still rebuilds `src/presets-extra/` from
+  upstream verbatim and will reintroduce these presets (see the *Curation*
+  section in the README).
 
 ### Fixed
 - Corrected the documented preset counts to match the current curated packs:
-  15,090 deduplicated presets total — 382 vendored (100 + 139 + 118 + 84,
-  merged) plus 14,708 lazy-loaded (14,775 index names minus 67 that duplicate a
+  15,090 deduplicated presets total — 382 vendored (100 base + 138 new from
+  Extra + 118 new from Extra2 + 26 new from MD1, after merge-order dedup)
+  plus 14,708 lazy-loaded (14,775 index names minus 67 that duplicate a
   vendored name). Replaces the stale 15,330 / 15,264 totals and 387 / 385
   vendored figures, which no longer matched the regenerated and curated
   `Extra`/`Extra2`/`MD1` packs.
+- A first-run bug in `fetch-extra-presets-curated.py`: an empty
+  `current_names` set made `set(fresh_kept) - current_names` treat every
+  freshly fetched preset as curated-out, so a first run with no prior
+  `index.js` always produced an empty `src/presets-extra/`. Fixed by
+  distinguishing "no prior curation state" from "current state is empty."
 
 ## [1.5.0] - 2026-07-05
 
@@ -60,12 +76,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 - Internal-only self-hosting via Docker + Caddy: `Dockerfile`,
-  `docker-compose.yml`, and `Caddyfile` serving plain HTTP on :80 and HTTPS
-  on :443 through Caddy's internal CA (mic capture needs a secure context,
-  so HTTPS makes audio work from other LAN machines).
+  `docker-compose.yml`, and `Caddyfile` serving plain HTTP on :80, bound to
+  `127.0.0.1` only. `localhost` already counts as a secure context for mic
+  capture, so no TLS is needed.
 - `docs/local-hosting.md` covering all three local modes: `file://`, dev
-  server, and the Docker container (including how to trust the self-signed
-  CA).
+  server, and the Docker container (including its security hardening).
 
 ## [1.3.1] - 2026-07-04
 
