@@ -11,7 +11,7 @@ All notable changes to this project are documented here. Format loosely follows
   that provides it (a vendored pack, or the lazy-loaded `presets-extra`
   collection with its chunk id), generated with the same dedup/precedence
   rules `visualizer-core.js` applies at runtime. Reflects the curated set
-  (15,014 rows).
+  (14,986 rows).
 - `tools/fetch-extra-presets-curated.py` — regenerates `src/presets-extra/`
   like `fetch-extra-presets.py`, but diffs a fresh upstream pull against the
   currently committed `index.js` and re-excludes anything present upstream
@@ -39,9 +39,9 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Fixed
 - Corrected the documented preset counts to match the current curated packs:
-  15,014 deduplicated presets total — 381 vendored (100 base + 138 new from
+  14,986 deduplicated presets total — 381 vendored (100 base + 138 new from
   Extra + 117 new from Extra2 + 26 new from MD1, after merge-order dedup)
-  plus 14,633 lazy-loaded (14,700 index names minus 67 that duplicate a
+  plus 14,605 lazy-loaded (14,672 index names minus 67 that duplicate a
   vendored name). Replaces the stale 15,330 / 15,264 totals and 387 / 385
   vendored figures, which no longer matched the regenerated and curated
   `Extra`/`Extra2`/`MD1` packs.
