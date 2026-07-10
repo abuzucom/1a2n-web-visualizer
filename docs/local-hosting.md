@@ -47,8 +47,13 @@ The compose file and Caddyfile apply the following measures:
 - **All capabilities dropped** — the container runs with zero Linux
   capabilities.
 - **OWASP security headers** — `Content-Security-Policy`, `X-Frame-Options`,
-  `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` are
-  set by Caddy on every response (defense in depth with the HTML meta CSP).
+  `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, and
+  `Strict-Transport-Security` are set by Caddy on every response (defense
+  in depth with the HTML meta CSP). Note that `Strict-Transport-Security`
+  is only enforced by browsers when a response is served over HTTPS; this
+  container serves plain HTTP on `localhost` by design (see top of file),
+  so the header is inert here but takes effect immediately if this
+  Caddyfile is ever put behind TLS termination.
 - **Server fingerprint removed** — the `Server` header is stripped.
 
 ### Notes

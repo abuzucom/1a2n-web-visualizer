@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.1] - 2026-07-10
+
+### Security
+- The Docker + Caddy self-hosting container now also sends a
+  `Strict-Transport-Security` header (`max-age=31536000; includeSubDomains`)
+  alongside the existing OWASP header set, so the header is already in
+  place if that Caddyfile is ever put behind TLS termination instead of
+  served as plain HTTP on `localhost`.
+
 ## [1.6.0] - 2026-07-07
 
 ### Added
