@@ -4,6 +4,38 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.3] - 2026-07-11
+
+### Added
+- `tools/remove_presets.js` — removes a given list of exact preset names
+  from `src/presets-extra/index.js`, their backing chunk files, any
+  vendored `.min.js` pack that contains them, and the matching
+  `preset-inventory.csv` rows, with a pre-flight existence check (aborts
+  with nothing written if any name isn't found) and a post-edit
+  consistency check. Productionizes the manual curation procedure so it
+  doesn't need to be reconstructed for each batch.
+- `tools/analyze_curation_history.js` — reconstructs the full history of
+  presets curated out of this repo from `git log` and prints neutral word
+  /bigram/contributor-prefix frequency statistics over their names, with
+  no built-in notion of "risky" content, so anyone using this repo can
+  review the same data and make their own curation calls.
+
+### Removed
+- 186 more presets curated out for photosensitivity/seizure-risk content:
+  185 via `tools/remove_presets.js` (21 self-labeled "epileptic", 14
+  "strobe", 3 "flicker", 28 in the `recursion frustum`/"Ananda_Flash_Remix"
+  series, 2 "eyepain", 9 "serpent", 44 "rainbow bubble", 56 in the "escape
+  the worm"/"Worms 2003" series, and 8 individually named) plus 1
+  presets-extra entry that duplicated an already-removed vendored-pack
+  name (dead/shadowed data cleaned up alongside it). Spans
+  `src/presets-extra/` (38 chunk files) and the vendored
+  `butterchurnPresetsExtra`/`butterchurnPresetsExtra2` packs, with the
+  matching `preset-inventory.csv` rows dropped. Same intentional editorial
+  curation as prior batches — see the *Curation* section in the README.
+  Ships 14,770 deduplicated presets now (378 vendored + 14,392
+  lazy-loaded from 14,458 index names minus 66 that duplicate a vendored
+  name).
+
 ## [1.6.2] - 2026-07-11
 
 ### Removed
@@ -36,7 +68,7 @@ All notable changes to this project are documented here. Format loosely follows
   that provides it (a vendored pack, or the lazy-loaded `presets-extra`
   collection with its chunk id), generated with the same dedup/precedence
   rules `visualizer-core.js` applies at runtime. Reflects the curated set
-  (14,954 rows).
+  (14,770 rows).
 - `tools/fetch-extra-presets-curated.py` — regenerates `src/presets-extra/`
   like `fetch-extra-presets.py`, but diffs a fresh upstream pull against the
   currently committed `index.js` and re-excludes anything present upstream
@@ -64,9 +96,9 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Fixed
 - Corrected the documented preset counts to match the current curated packs:
-  14,954 deduplicated presets total — 381 vendored (100 base + 138 new from
-  Extra + 117 new from Extra2 + 26 new from MD1, after merge-order dedup)
-  plus 14,573 lazy-loaded (14,640 index names minus 67 that duplicate a
+  14,770 deduplicated presets total — 378 vendored (100 base + 135 new from
+  Extra + 116 new from Extra2 + 27 new from MD1, after merge-order dedup)
+  plus 14,392 lazy-loaded (14,458 index names minus 66 that duplicate a
   vendored name). Replaces the stale 15,330 / 15,264 totals and 387 / 385
   vendored figures, which no longer matched the regenerated and curated
   `Extra`/`Extra2`/`MD1` packs.

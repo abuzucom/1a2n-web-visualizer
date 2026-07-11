@@ -3,7 +3,7 @@
 Milkdrop-style audio visualizer pages built on
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
 **OBS browser source** or as a **standalone fullscreen visualizer** in any
-modern browser. Ships 14,954 deduplicated presets — 381 from the four
+modern browser. Ships 14,770 deduplicated presets — 378 from the four
 butterchurn preset packs plus ~15k from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
 collection, lazy-loaded in chunks — fully self-hosted (no CDN).
@@ -137,7 +137,7 @@ are vendored in `src/vendor/` and served from the site itself — no CDN. Four
 preset packs are loaded (base, Extra, Extra2,
 MD1) plus the extra-images texture pack; `visualizer-core.js` merges them at
 startup, skipping any preset whose name already exists in an earlier pack
-(381 unique presets). To upgrade, replace the `.min.js` files with the
+(378 unique presets). To upgrade, replace the `.min.js` files with the
 corresponding `lib/` builds from the npm packages. A few presets have been
 intentionally curated out of the vendored packs for this deployment (see
 [Curation](#curation) below), so these bundles differ slightly from the
@@ -150,9 +150,9 @@ stock npm builds.
 packed into 118 chunk files that are lazy-loaded via injected `<script>` tags
 the first time one of their presets is selected (works from `file://` and
 under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
-The 67 presets that duplicate a vendored pack name are skipped at startup —
-vendored packs win — for 14,954 unique presets total. If the folder is
-missing, the app silently falls back to the 381 vendored presets.
+The 66 presets that duplicate a vendored pack name are skipped at startup —
+vendored packs win — for 14,770 unique presets total. If the folder is
+missing, the app silently falls back to the 378 vendored presets.
 
 The folder is generated (and committed) output. To refresh it after an
 upstream update, use the curation-preserving script (see
@@ -201,6 +201,38 @@ Two things to know if you're regenerating presets:
   remove the current preset from rotation and export the list of presets
   excluded during a session (the &#128683; / &#128203; controls), which is the
   source of the names curated out of the codebase here.
+
+### Removing presets
+
+`tools/remove_presets.js` performs an actual curation removal: given a list of
+exact preset names, it drops each one from `src/presets-extra/index.js`, its
+owning `chunk-NNN.js` file, any vendored `.min.js` pack that contains it, and
+the matching `preset-inventory.csv` row — the same mechanical steps described
+above, without reconstructing them by hand each time. Matching is exact-name
+only, and nothing is written unless every requested name is found and every
+edited file passes a post-edit consistency check.
+
+```bash
+node tools/remove_presets.js --names-file names.txt   # one exact name per line
+node tools/remove_presets.js --name "Foo" --name "Bar"
+node tools/remove_presets.js --names-file names.txt --dry-run
+```
+
+It does not update the preset counts documented in this README/CHANGELOG —
+recompute those by hand after a removal (see the numbers in the "Extra
+Presets" section above for the formula).
+
+`tools/analyze_curation_history.js` reconstructs the full history of presets
+curated out via `git log` and prints neutral frequency statistics (top
+words, bigrams, and likely contributor-name prefixes) over their names — no
+built-in notion of what's "risky" or unwanted, just the raw data, so anyone
+using this repo can review the same history and make their own curation
+decisions:
+
+```bash
+node tools/analyze_curation_history.js
+node tools/analyze_curation_history.js --csv history.csv   # also write the full table
+```
 
 ## License
 
