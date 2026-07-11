@@ -1,0 +1,46 @@
+name: Checks
+
+# Keeps AGENTS.md-derived docs and code quality enforced on every change.
+# Separate from deploy.yml (Pages publishing has different
+# triggers/permissions and isn't relevant here).
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  agents-md-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check AGENTS.md copies are in sync
+        run: python3 scripts/sync.py --check
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npx eslint .
+
+      - name: Install ruff
+        uses: astral-sh/ruff-action@v3
+
+      - name: ruff check
+        run: ruff check tools/
