@@ -46,6 +46,7 @@ const CURATION_COMMITS = [
   '8c2b4ee', // Curate and remove 52 additional presets (Batch 2) and update metrics
   'a6f24b3', // Curate and remove 28 additional presets (Batch 3) and update metrics
   '8b6307e', // Curate and remove 32 more presets (seizure/sezure batch)
+  '1e5ffd1', // Curate and remove 186 more presets, add reusable curation tooling
 ];
 
 const VENDOR_FILES = {
