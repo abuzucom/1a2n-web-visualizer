@@ -31,7 +31,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const INDEX_PATH = path.join(ROOT, 'src/presets-extra/index.js');
@@ -70,10 +69,6 @@ function parseCsvLine(line) {
   if (!m) return null;
   const name = m[1] !== undefined ? m[1].replace(/""/g, '"') : m[2];
   return { name, pack: m[3], chunk: m[4] };
-}
-
-function csvEscape(s) {
-  return /[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : s;
 }
 
 // --- src/presets-extra/index.js (JSON) ---
@@ -148,7 +143,12 @@ function findMatchingCloser(s, openIdx) {
 }
 
 function loadVendorPresetNames(source) {
-  const tmp = path.join(os.tmpdir(), `vendor-check-${Date.now()}-${Math.random().toString(36).slice(2)}.js`);
+  // fs.mkdtempSync gives us a securely-generated, unpredictable directory
+  // name (unlike a hand-rolled Date.now()/Math.random() filename), so the
+  // temp file inside it can't be pre-guessed or collide with another
+  // process's file in the shared os.tmpdir().
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-check-'));
+  const tmp = path.join(dir, 'bundle.js');
   fs.writeFileSync(tmp, source);
   try {
     delete require.cache[require.resolve(tmp)];
@@ -158,8 +158,8 @@ function loadVendorPresetNames(source) {
       : (m && typeof m.getPresets === 'function' ? m.getPresets() : m);
     return new Set(Object.keys(presets));
   } finally {
-    fs.unlinkSync(tmp);
     delete require.cache[require.resolve(tmp)];
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 

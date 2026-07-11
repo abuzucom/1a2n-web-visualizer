@@ -85,7 +85,12 @@ function getIndexChunks(ref) {
 
 function getVendorKeys(ref, relPath) {
   const raw = git(`show ${ref}:${relPath}`);
-  const tmp = path.join(os.tmpdir(), `vendor-${Date.now()}-${Math.random().toString(36).slice(2)}.js`);
+  // fs.mkdtempSync gives us a securely-generated, unpredictable directory
+  // name (unlike a hand-rolled Date.now()/Math.random() filename), so the
+  // temp file inside it can't be pre-guessed or collide with another
+  // process's file in the shared os.tmpdir().
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-'));
+  const tmp = path.join(dir, 'bundle.js');
   fs.writeFileSync(tmp, raw);
   try {
     const m = require(tmp);
@@ -94,8 +99,8 @@ function getVendorKeys(ref, relPath) {
       : (m && typeof m.getPresets === 'function' ? m.getPresets() : m);
     return new Set(Object.keys(presets));
   } finally {
-    fs.unlinkSync(tmp);
     delete require.cache[require.resolve(tmp)];
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
