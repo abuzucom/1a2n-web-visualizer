@@ -38,6 +38,11 @@ const CSV_PATH = path.join(ROOT, 'preset-inventory.csv');
 const CHUNK_DIR = path.join(ROOT, 'src/presets-extra');
 const VENDOR_DIR = path.join(ROOT, 'src/vendor');
 
+function readNamesFile(file) {
+  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  return lines.map((line) => line.replace(/\r$/, '')).filter((line) => line.length > 0);
+}
+
 function parseArgs(argv) {
   const names = [];
   let dryRun = false;
@@ -46,12 +51,7 @@ function parseArgs(argv) {
     if (a === '--name') {
       names.push(argv[++i]);
     } else if (a === '--names-file') {
-      const file = argv[++i];
-      const lines = fs.readFileSync(file, 'utf8').split('\n');
-      for (const line of lines) {
-        const trimmedEnd = line.replace(/\r$/, '');
-        if (trimmedEnd.length > 0) names.push(trimmedEnd);
-      }
+      names.push(...readNamesFile(argv[++i]));
     } else if (a === '--dry-run') {
       dryRun = true;
     } else if (a === '--help' || a === '-h') {
@@ -220,7 +220,9 @@ function removeFromVendorPack(source, names) {
   if (a) return a;
   const b = tryPatternB(source, names);
   if (b) return b;
-  throw new Error('no recognized preset-map pattern found in this vendor pack (Pattern A/B both failed) — manual edit required');
+  throw new Error(
+    'no recognized preset-map pattern found in this vendor pack (Pattern A/B both failed) — manual edit required',
+  );
 }
 
 // --- main ---
@@ -231,25 +233,26 @@ function countIndexNames(data) {
   return total;
 }
 
-function main() {
+function parseAndValidateNames() {
   const { names: rawNames, dryRun } = parseArgs(process.argv.slice(2));
   const names = [...new Set(rawNames)];
   if (names.length === 0) {
     console.error('No names given. Use --name "<exact name>" and/or --names-file <path>.');
     process.exit(1);
   }
+  return { names, dryRun };
+}
 
-  const indexCountBefore = countIndexNames(readIndex().data);
-  const csvRowCountBefore = fs.readFileSync(CSV_PATH, 'utf8').split('\n').filter((l) => l.length > 0).length;
-
-  const csvLines = fs.readFileSync(CSV_PATH, 'utf8').split('\n');
-  const csvRows = csvLines
-    .map((line, i) => ({ line, i, parsed: line ? parseCsvLine(line) : null }))
-    .filter((r) => r.parsed);
-
+function loadCsvByName(csvLines) {
   const byName = new Map();
-  for (const r of csvRows) byName.set(r.parsed.name, r.parsed);
+  for (const line of csvLines) {
+    const parsed = line ? parseCsvLine(line) : null;
+    if (parsed) byName.set(parsed.name, parsed);
+  }
+  return byName;
+}
 
+function resolveTargets(names, byName) {
   const notFound = names.filter((n) => !byName.has(n));
   if (notFound.length > 0) {
     console.error(`Aborting — ${notFound.length} name(s) not found in preset-inventory.csv (no changes made):`);
@@ -263,127 +266,167 @@ function main() {
     if (!byPack.has(pack)) byPack.set(pack, []);
     byPack.get(pack).push(n);
   }
+  return byPack;
+}
 
-  const pendingWrites = []; // [{ path, content }]
-  const summary = { presetsExtra: 0, vendor: {}, csv: 0 };
+function chunkChanges(targets, byName) {
+  const byChunk = new Map(); // chunk id -> [name]
+  for (const n of targets) {
+    const { chunk } = byName.get(n);
+    const id = Number(chunk);
+    if (!byChunk.has(id)) byChunk.set(id, []);
+    byChunk.get(id).push(n);
+  }
+  return byChunk;
+}
 
-  // presets-extra: index.js + chunk files
-  if (byPack.has('presets-extra')) {
-    const targets = byPack.get('presets-extra');
-    const { data: indexData, prefix: idxPrefix, suffix: idxSuffix } = readIndex();
-
-    const byChunk = new Map(); // chunk id -> [name]
-    for (const n of targets) {
-      const { chunk } = byName.get(n);
-      const id = Number(chunk);
-      if (!byChunk.has(id)) byChunk.set(id, []);
-      byChunk.get(id).push(n);
-    }
-
-    for (const [id, chunkNames] of byChunk) {
-      const arr = indexData.chunks[id];
-      if (!arr) throw new Error(`index.js has no chunk ${id}`);
-      for (const n of chunkNames) {
-        const pos = arr.indexOf(n);
-        if (pos === -1) throw new Error(`"${n}" not found in index.js chunks[${id}] (CSV says chunk ${id})`);
-        arr.splice(pos, 1);
-      }
-
-      const chunk = readChunk(id);
-      for (const n of chunkNames) {
-        if (!(n in chunk.data)) throw new Error(`"${n}" not found as a key in chunk-${String(id).padStart(3, '0')}.js`);
-        delete chunk.data[n];
-      }
-      pendingWrites.push({ kind: 'chunk', id, chunk });
-      summary.presetsExtra += chunkNames.length;
-    }
-
-    pendingWrites.push({ kind: 'index', data: indexData, prefix: idxPrefix, suffix: idxSuffix });
+function removeFromChunk(id, chunkNames, indexData) {
+  const arr = indexData.chunks[id];
+  if (!arr) throw new Error(`index.js has no chunk ${id}`);
+  for (const n of chunkNames) {
+    const pos = arr.indexOf(n);
+    if (pos === -1) throw new Error(`"${n}" not found in index.js chunks[${id}] (CSV says chunk ${id})`);
+    arr.splice(pos, 1);
   }
 
-  // vendor packs
+  const chunk = readChunk(id);
+  for (const n of chunkNames) {
+    if (!(n in chunk.data)) throw new Error(`"${n}" not found as a key in chunk-${String(id).padStart(3, '0')}.js`);
+    delete chunk.data[n];
+  }
+  return chunk;
+}
+
+function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary) {
+  if (!byPack.has('presets-extra')) return;
+  const targets = byPack.get('presets-extra');
+  const { data: indexData, prefix: idxPrefix, suffix: idxSuffix } = readIndex();
+  const byChunk = chunkChanges(targets, byName);
+
+  for (const [id, chunkNames] of byChunk) {
+    const chunk = removeFromChunk(id, chunkNames, indexData);
+    pendingWrites.push({ kind: 'chunk', id, chunk });
+    summary.presetsExtra += chunkNames.length;
+  }
+
+  pendingWrites.push({ kind: 'index', data: indexData, prefix: idxPrefix, suffix: idxSuffix });
+}
+
+function removeFromVendorPackValidated(pack, targets) {
+  const vendorPath = path.join(VENDOR_DIR, `${pack}.min.js`);
+  if (!fs.existsSync(vendorPath)) throw new Error(`unknown pack "${pack}" — no file at ${vendorPath}`);
+  const before = fs.readFileSync(vendorPath, 'utf8');
+  const beforeNames = loadVendorPresetNames(before);
+
+  const { newSource, removed } = removeFromVendorPack(before, targets);
+  const missing = targets.filter((n) => !removed.includes(n));
+  if (missing.length > 0) {
+    throw new Error(`could not locate these presets in ${pack}: ${missing.map((n) => JSON.stringify(n)).join(', ')}`);
+  }
+
+  // validate the edited bundle still loads and only the intended names changed
+  const afterNames = loadVendorPresetNames(newSource);
+  const actuallyRemoved = [...beforeNames].filter((n) => !afterNames.has(n));
+  const actuallyAdded = [...afterNames].filter((n) => !beforeNames.has(n));
+  if (actuallyAdded.length > 0) {
+    throw new Error(`editing ${pack} unexpectedly added preset(s): ${actuallyAdded.join(', ')}`);
+  }
+  const removedSet = new Set(actuallyRemoved);
+  const expectedSet = new Set(targets);
+  if (actuallyRemoved.length !== targets.length || [...expectedSet].some((n) => !removedSet.has(n))) {
+    throw new Error(
+      `editing ${pack} did not remove exactly the requested names (removed: ${actuallyRemoved.join(', ')})`,
+    );
+  }
+  return { vendorPath, newSource };
+}
+
+function prepareVendorWrites(byPack, pendingWrites, summary) {
   for (const [pack, targets] of byPack) {
     if (pack === 'presets-extra') continue;
-    const vendorPath = path.join(VENDOR_DIR, `${pack}.min.js`);
-    if (!fs.existsSync(vendorPath)) throw new Error(`unknown pack "${pack}" — no file at ${vendorPath}`);
-    const before = fs.readFileSync(vendorPath, 'utf8');
-    const beforeNames = loadVendorPresetNames(before);
-
-    const { newSource, removed } = removeFromVendorPack(before, targets);
-    const missing = targets.filter((n) => !removed.includes(n));
-    if (missing.length > 0) {
-      throw new Error(`could not locate these presets in ${pack}: ${missing.map((n) => JSON.stringify(n)).join(', ')}`);
-    }
-
-    // validate the edited bundle still loads and only the intended names changed
-    const afterNames = loadVendorPresetNames(newSource);
-    const actuallyRemoved = [...beforeNames].filter((n) => !afterNames.has(n));
-    const actuallyAdded = [...afterNames].filter((n) => !beforeNames.has(n));
-    if (actuallyAdded.length > 0) {
-      throw new Error(`editing ${pack} unexpectedly added preset(s): ${actuallyAdded.join(', ')}`);
-    }
-    const removedSet = new Set(actuallyRemoved);
-    const expectedSet = new Set(targets);
-    if (actuallyRemoved.length !== targets.length || [...expectedSet].some((n) => !removedSet.has(n))) {
-      throw new Error(`editing ${pack} did not remove exactly the requested names (removed: ${actuallyRemoved.join(', ')})`);
-    }
-
+    const { vendorPath, newSource } = removeFromVendorPackValidated(pack, targets);
     pendingWrites.push({ kind: 'vendor', path: vendorPath, content: newSource });
     summary.vendor[pack] = targets.length;
   }
+}
 
-  // CSV
+function prepareCsvUpdate(csvLines, names, summary) {
   const removeSet = new Set(names);
-  const keptLines = csvLines.filter((line, i) => {
+  const keptLines = csvLines.filter((line) => {
     if (line === '') return true;
     const parsed = parseCsvLine(line);
     if (!parsed) return true;
-    if (removeSet.has(parsed.name)) {
-      summary.csv += 1;
-      return false;
-    }
-    return true;
+    if (!removeSet.has(parsed.name)) return true;
+    summary.csv += 1;
+    return false;
   });
 
   if (summary.csv !== names.length) {
     throw new Error(`expected to remove ${names.length} CSV rows, actually removed ${summary.csv}`);
   }
+  return keptLines;
+}
 
-  if (dryRun) {
-    console.log('Dry run — no files written.');
-    console.log(`Would remove ${names.length} presets:`);
-    console.log(`  presets-extra: ${summary.presetsExtra}`);
-    for (const [pack, count] of Object.entries(summary.vendor)) console.log(`  ${pack}: ${count}`);
-    console.log(`  preset-inventory.csv rows: ${summary.csv}`);
-    return;
-  }
+function logSummary(prefix, names, summary) {
+  console.log(`${prefix} ${names.length} presets:`);
+  console.log(`  presets-extra: ${summary.presetsExtra}`);
+  for (const [pack, count] of Object.entries(summary.vendor)) console.log(`  ${pack}: ${count}`);
+  console.log(`  preset-inventory.csv rows: ${summary.csv}`);
+}
 
-  // everything validated — write it all out
+function writeAll(pendingWrites, keptLines) {
   for (const w of pendingWrites) {
     if (w.kind === 'index') writeIndex(w);
     else if (w.kind === 'chunk') writeChunk(w.id, w.chunk);
     else if (w.kind === 'vendor') fs.writeFileSync(w.path, w.content);
   }
   fs.writeFileSync(CSV_PATH, keptLines.join('\n'));
+}
 
-  console.log(`Removed ${names.length} presets:`);
-  console.log(`  presets-extra: ${summary.presetsExtra}`);
-  for (const [pack, count] of Object.entries(summary.vendor)) console.log(`  ${pack}: ${count}`);
-  console.log(`  preset-inventory.csv rows: ${summary.csv}`);
-
-  // consistency check: verify each file dropped by exactly the expected amount
-  // relative to its own pre-run count (index.js and preset-inventory.csv report
-  // different populations — the CSV reflects the runtime-deduplicated view, ~67
-  // presets-extra names are shadowed by an identical vendored-pack name and never
-  // appear in it at all — so compare deltas, not the two files' raw counts).
+// Consistency check: verify each file dropped by exactly the expected amount
+// relative to its own pre-run count (index.js and preset-inventory.csv report
+// different populations — the CSV reflects the runtime-deduplicated view, ~67
+// presets-extra names are shadowed by an identical vendored-pack name and
+// never appear in it at all — so compare deltas, not the two files' raw counts).
+function verifyConsistency(indexCountBefore, csvRowCountBefore, summary) {
   const indexCountAfter = countIndexNames(readIndex().data);
   const csvRowCountAfter = fs.readFileSync(CSV_PATH, 'utf8').split('\n').filter((l) => l.length > 0).length;
   const indexDelta = indexCountBefore - indexCountAfter;
   const csvDelta = csvRowCountBefore - csvRowCountAfter;
-  console.log(`\nConsistency check: index.js names -${indexDelta} (expected -${summary.presetsExtra}), preset-inventory.csv rows -${csvDelta} (expected -${summary.csv}).`);
+  console.log(
+    `\nConsistency check: index.js names -${indexDelta} (expected -${summary.presetsExtra}), ` +
+      `preset-inventory.csv rows -${csvDelta} (expected -${summary.csv}).`,
+  );
   if (indexDelta !== summary.presetsExtra || csvDelta !== summary.csv) {
     console.warn('WARNING: deltas do not match expectations — investigate before committing.');
   }
+}
+
+function main() {
+  const { names, dryRun } = parseAndValidateNames();
+
+  const indexCountBefore = countIndexNames(readIndex().data);
+  const csvRowCountBefore = fs.readFileSync(CSV_PATH, 'utf8').split('\n').filter((l) => l.length > 0).length;
+
+  const csvLines = fs.readFileSync(CSV_PATH, 'utf8').split('\n');
+  const byName = loadCsvByName(csvLines);
+  const byPack = resolveTargets(names, byName);
+
+  const pendingWrites = []; // [{ path, content }]
+  const summary = { presetsExtra: 0, vendor: {}, csv: 0 };
+  preparePresetsExtraWrites(byPack, byName, pendingWrites, summary);
+  prepareVendorWrites(byPack, pendingWrites, summary);
+  const keptLines = prepareCsvUpdate(csvLines, names, summary);
+
+  if (dryRun) {
+    console.log('Dry run — no files written.');
+    logSummary('Would remove', names, summary);
+    return;
+  }
+
+  writeAll(pendingWrites, keptLines);
+  logSummary('Removed', names, summary);
+  verifyConsistency(indexCountBefore, csvRowCountBefore, summary);
 }
 
 main();

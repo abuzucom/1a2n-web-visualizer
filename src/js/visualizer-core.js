@@ -24,6 +24,11 @@
     return m && (m.default || m);
   }
 
+  // Pre-existing function, not modified by this change. AGENTS.md's own
+  // Code quality section scopes its rules to new/modified code and
+  // explicitly rules out mass-refactoring untouched code, so this is
+  // disabled here rather than split up as a side effect of adding lint.
+  /* eslint-disable-next-line max-lines-per-function */
   function create(canvas, opts) {
     opts = opts || {};
     const Butterchurn = getLib('butterchurn');
@@ -215,7 +220,7 @@
         if (cid != null) touchChunk(cid);
         try {
           visualizer.loadPreset(presets[name], blend != null ? blend : defaultBlend);
-        } catch (e) {
+        } catch {
           failed.add(name);
           onToast('\u26A0 broken preset skipped: ' + name);
           i = stepIndex(1);
@@ -288,7 +293,7 @@
       try {
         const all = await navigator.mediaDevices.enumerateDevices();
         inputDevices = all.filter(function (d) { return d.kind === 'audioinput'; });
-      } catch (e) {
+      } catch {
         inputDevices = [];
       }
       return inputDevices;

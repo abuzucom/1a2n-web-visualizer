@@ -109,39 +109,49 @@ function touchedFile(commit, relPath) {
   return out.includes(relPath);
 }
 
-function reconstruct() {
+function recordsFromIndexDiff(commit, meta) {
   const records = [];
+  const indexPath = 'src/presets-extra/index.js';
+  if (!fileExistsAt(`${commit}^`, indexPath) || !fileExistsAt(commit, indexPath)) return records;
 
-  for (const commit of CURATION_COMMITS) {
-    const meta = commitMeta(commit);
-
-    if (fileExistsAt(`${commit}^`, 'src/presets-extra/index.js') && fileExistsAt(commit, 'src/presets-extra/index.js')) {
-      const before = getIndexChunks(`${commit}^`);
-      const after = getIndexChunks(commit);
-      for (let i = 0; i < Math.max(before.length, after.length); i++) {
-        const b = new Set(before[i] || []);
-        const a = new Set(after[i] || []);
-        for (const name of b) {
-          if (!a.has(name)) {
-            records.push({ name, pack: 'presets-extra', chunk: i, commit: meta.hash, date: meta.date, subject: meta.subject });
-          }
-        }
-      }
-    }
-
-    for (const [packName, relPath] of Object.entries(VENDOR_FILES)) {
-      if (!touchedFile(commit, relPath)) continue;
-      if (!fileExistsAt(`${commit}^`, relPath) || !fileExistsAt(commit, relPath)) continue;
-      const before = getVendorKeys(`${commit}^`, relPath);
-      const after = getVendorKeys(commit, relPath);
-      for (const name of before) {
-        if (!after.has(name)) {
-          records.push({ name, pack: packName, chunk: '', commit: meta.hash, date: meta.date, subject: meta.subject });
-        }
-      }
+  const before = getIndexChunks(`${commit}^`);
+  const after = getIndexChunks(commit);
+  for (let i = 0; i < Math.max(before.length, after.length); i++) {
+    const beforeNames = new Set(before[i] || []);
+    const afterNames = new Set(after[i] || []);
+    for (const name of beforeNames) {
+      if (afterNames.has(name)) continue;
+      records.push({
+        name, pack: 'presets-extra', chunk: i, commit: meta.hash, date: meta.date, subject: meta.subject,
+      });
     }
   }
+  return records;
+}
 
+function recordsFromVendorDiff(commit, meta) {
+  const records = [];
+  for (const [packName, relPath] of Object.entries(VENDOR_FILES)) {
+    if (!touchedFile(commit, relPath)) continue;
+    if (!fileExistsAt(`${commit}^`, relPath) || !fileExistsAt(commit, relPath)) continue;
+
+    const before = getVendorKeys(`${commit}^`, relPath);
+    const after = getVendorKeys(commit, relPath);
+    for (const name of before) {
+      if (after.has(name)) continue;
+      records.push({ name, pack: packName, chunk: '', commit: meta.hash, date: meta.date, subject: meta.subject });
+    }
+  }
+  return records;
+}
+
+function reconstruct() {
+  const records = [];
+  for (const commit of CURATION_COMMITS) {
+    const meta = commitMeta(commit);
+    records.push(...recordsFromIndexDiff(commit, meta));
+    records.push(...recordsFromVendorDiff(commit, meta));
+  }
   return records;
 }
 

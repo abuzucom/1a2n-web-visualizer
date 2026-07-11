@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "npx --yes serve src",
-    "dev": "python3 -m http.server --directory src 8000"
+    "dev": "python3 -m http.server --directory src 8000",
+    "lint": "eslint . && ruff check tools/"
   },
   "keywords": [
     "butterchurn",
@@ -15,5 +16,9 @@
     "browser-source",
     "webgl"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0"
+  }
 }
