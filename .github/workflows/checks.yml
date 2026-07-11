@@ -40,7 +40,9 @@ jobs:
         run: npx eslint .
 
       - name: Install ruff
-        uses: astral-sh/ruff-action@v3
+        # Pinned to a commit (not the mutable v3 tag) per CodeQL's
+        # unpinned-third-party-action finding; resolved from tag v3.
+        uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3
 
       - name: ruff check
         run: ruff check tools/
