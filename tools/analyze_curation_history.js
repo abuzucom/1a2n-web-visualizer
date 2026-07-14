@@ -13,14 +13,13 @@
  * statistics; deciding what those statistics mean, and what (if anything)
  * to curate next, is left entirely to whoever runs it.
  *
- * How CURATION_COMMITS was built: `git log --oneline` was reviewed by hand
- * for commits that remove named presets from src/presets-extra/ and/or the
- * src/vendor/*.min.js packs (subjects like "Remove N presets from..." or
- * "Curate and remove N presets..."). Not every curation commit's subject
- * follows the same wording (e.g. one is titled "Remove some bad presets,
- * make exclude and copy buttons fade out automatically"), so this list is
- * a manually maintained, append-only record rather than an auto-detected
- * one. When you make a new curation commit, add its short hash below.
+ * The commit list is discovered automatically (every commit that ever
+ * touched src/presets-extra/ or src/vendor/*.min.js, oldest first) rather
+ * than hand-maintained — a hardcoded list drifts out of sync with history
+ * rewrites (rebases/squashes change hashes) and is easy to forget to
+ * update. recordsFromIndexDiff/recordsFromVendorDiff only produce records
+ * for names that actually disappeared, so "add" commits are naturally a
+ * no-op here.
  *
  * Usage:
  *   node tools/analyze_curation_history.js
@@ -34,20 +33,10 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
-// Append new curation commit hashes here as they're made.
-const CURATION_COMMITS = [
-  '62b8b23', // Remove some bad presets, make exclude and copy buttons fade out automatically
-  'e4dcf44', // Remove 13 presets from extra preset collection
-  '711d8eb', // Remove 53 presets from the preset collection
-  '0e7a1ac', // Remove 45 presets from the extra collection
-  'bf1e4e6', // Remove 44 presets from all preset sources
-  'bde927b', // Remove 130 more presets from all preset sources
-  'b6476ac', // Curate and remove 24 presets from visualizer packs and documentation
-  '8c2b4ee', // Curate and remove 52 additional presets (Batch 2) and update metrics
-  'a6f24b3', // Curate and remove 28 additional presets (Batch 3) and update metrics
-  '8b6307e', // Curate and remove 32 more presets (seizure/sezure batch)
-  '1e5ffd1', // Curate and remove 186 more presets, add reusable curation tooling
-];
+function discoverCurationCommits() {
+  const out = git('log --reverse --format=%H -- src/presets-extra src/vendor');
+  return out.trim().split('\n').filter(Boolean);
+}
 
 const VENDOR_FILES = {
   butterchurnPresets: 'src/vendor/butterchurnPresets.min.js',
@@ -145,9 +134,9 @@ function recordsFromVendorDiff(commit, meta) {
   return records;
 }
 
-function reconstruct() {
+function reconstruct(commits) {
   const records = [];
-  for (const commit of CURATION_COMMITS) {
+  for (const commit of commits) {
     const meta = commitMeta(commit);
     records.push(...recordsFromIndexDiff(commit, meta));
     records.push(...recordsFromVendorDiff(commit, meta));
@@ -224,10 +213,11 @@ function main() {
   const csvIdx = args.indexOf('--csv');
   const csvPath = csvIdx !== -1 ? args[csvIdx + 1] : null;
 
-  const records = reconstruct();
+  const commits = discoverCurationCommits();
+  const records = reconstruct(commits);
   const { uniqueNames, words, bigrams: bg, prefixes } = analyze(records);
 
-  console.log(`Curation commits analyzed: ${CURATION_COMMITS.length}`);
+  console.log(`Curation commits analyzed: ${commits.length}`);
   console.log(`Total removal records: ${records.length}`);
   console.log(`Unique preset names removed: ${uniqueNames.length}`);
 
