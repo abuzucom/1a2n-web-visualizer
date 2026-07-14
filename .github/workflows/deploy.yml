@@ -1,60 +1,41 @@
-name: Deploy to GitHub Pages
+name: Deploy to Cloudflare Pages
 
-# Publishes the contents of src/ to GitHub Pages on every push to develop.
-# The src/ folder becomes the site root, so pages are served at:
-#   https://<user>.github.io/<repo>/obs.html
-#   https://<user>.github.io/<repo>/fullscreen.html
+# Publishes the contents of src/ to Cloudflare Pages on every push to develop.
+# One-time setup in GitHub:
+#   - Secrets:
+#       CLOUDFLARE_API_TOKEN
+#       CLOUDFLARE_ACCOUNT_ID
+#   - Variables (optional):
+#       CLOUDFLARE_PAGES_PROJECT (defaults to this repository name)
 #
-# One-time setup: in the repo, go to Settings -> Pages and set
-# "Build and deployment" -> Source to "GitHub Actions".
+# One-time setup in Cloudflare:
+#   - Create a Pages project
+#   - Set its production branch to develop
 on:
   push:
     branches: [develop]
   workflow_dispatch:
 
-# Permissions required by the official Pages deploy actions.
+# Permissions required to read repository contents during deployment.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Allow one concurrent deployment; cancel older in-progress runs.
 concurrency:
-  group: pages
+  group: cloudflare-pages
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - name: Configure Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
-
-      - name: Upload site artifact (src/)
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
-          path: src
-
-      # The Pages backend intermittently rejects fresh deployments with a
-      # generic "Deployment failed, try again later." even though the site
-      # and artifact are fine; an immediate second attempt reliably succeeds.
-      # First attempt is allowed to fail, then one retry decides the job.
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
-        continue-on-error: true
-
-      - name: Wait before retry
-        if: steps.deployment.outcome == 'failure'
-        run: sleep 30
-
-      - name: Deploy to GitHub Pages (retry)
-        id: retry
-        if: steps.deployment.outcome == 'failure'
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy src --project-name ${{ vars.CLOUDFLARE_PAGES_PROJECT || github.event.repository.name }} --branch develop

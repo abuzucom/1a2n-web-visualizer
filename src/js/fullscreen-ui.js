@@ -108,7 +108,11 @@
         say('Cycle: ' + viz.setCycleSecs(
           viz.getCycleSecs() + (viz.getCycleSecs() < 10 ? 1 : 5)) + 's');
         break;
-      case 'd': case 'D': viz.nextDevice(); break;
+      case 'd': case 'D': viz.nextTrack(); break;
+      case 'a': case 'A': viz.prevTrack(); break;
+      case 'k': case 'K':
+        say(viz.togglePlayback() ? '\u25B6 Playing' : '\u23F8 Paused');
+        break;
       case 'f': case 'F': toggleFullscreen(); break;
       case 'x': case 'X': removeCurrent(); break;
       case 'l': case 'L': showExcludedPanel(); break;
