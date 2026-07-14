@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Deployment target switched from GitHub Pages to Cloudflare Pages
+  (`.github/workflows/deploy.yml` now uses `cloudflare/wrangler-action`).
+- Fullscreen (`src/fullscreen.html`) is now the sole entry point. Removed
+  the OBS browser-source build (`src/obs.html`, `src/js/obs-ui.js`,
+  `src/css/panel.css`).
+- Audio source is now a DJ set playlist streamed from a Cloudflare CDN
+  (`src/tracks.js`, `window.BCTracks`), visualized via
+  `AudioContext.createMediaElementSource`, instead of a live input device
+  (microphone / virtual-cable routing). `docs/audio-routing.md` documents
+  the new playlist format and the CORS requirements on the CDN origin.
+  New keyboard controls: <kbd>A</kbd>/<kbd>D</kbd> to switch tracks,
+  <kbd>K</kbd> to play/pause.
+
+### Removed
+- Docker/Caddy local-hosting option (`Dockerfile`, `docker-compose.yml`,
+  `Caddyfile`, `.dockerignore`). This fork is deployed via Cloudflare Pages
+  or run locally with `npm start`/`python3 -m http.server`.
+
 ## [1.6.3] - 2026-07-11
 
 ### Added

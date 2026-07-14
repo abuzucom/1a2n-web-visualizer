@@ -1,45 +1,63 @@
 # Audio routing
 
-The visualizer reads from an **audio input device**. To make it react to music
-(or any system/app audio) rather than your microphone, route that audio into a
-virtual input device and select it in the visualizer.
+This fork intentionally diverges from upstream `1a2n-web-visualizer`: instead
+of visualizing a **live input device** (microphone, or music routed through a
+virtual cable like VB-Cable/VoiceMeeter/BlackHole), it plays a **DJ set
+playlist streamed directly from a Cloudflare CDN** and visualizes that stream.
+No virtual audio cable, mixer routing, or OS-level loopback is needed or used
+— that entire workflow has been removed from this fork.
 
-Select the device by pressing <kbd>D</kbd> in the fullscreen build, or via the
-dropdown in the OBS panel build.
+## Configuring the playlist
 
-## Windows
+Tracks are listed in `src/tracks.js`, a small JS file that assigns
+`window.BCTracks` (a `.js` file rather than plain JSON so it also works from
+`file://` — see AGENTS.md's "Gotchas"). Each entry is:
 
-- **VB-Cable** (free): set your music player's / system output to "CABLE Input",
-  then select **CABLE Output** in the visualizer.
-- **VoiceMeeter** (free): more flexible routing if you also want to keep hearing
-  the audio yourself; route a bus to a virtual input and select it.
+```js
+{ "title": "Human-readable set name", "url": "https://media.1a2n.net/sets/example.mp3" }
+```
 
-To keep hearing the audio while it is routed to the cable, use VoiceMeeter, or
-set the cable as default playback and monitor it back to your speakers.
+Upload your DJ sets to your Cloudflare-backed origin (e.g. an R2 bucket
+fronted by Cloudflare, or Cloudflare Stream), then add one entry per track
+here with its public URL.
 
-## macOS
+## Required: CORS headers on the CDN origin
 
-- **BlackHole** (free, 2ch): create a **Multi-Output Device** in Audio MIDI
-  Setup that includes both your speakers/headphones and BlackHole, set it as the
-  system output, then select **BlackHole** in the visualizer. This lets you hear
-  the audio and visualize it at the same time.
+The `<audio>` element loads tracks with `crossOrigin="anonymous"` so the
+visualizer's analyser node can read audio samples from a cross-origin URL.
+Per the Web Audio API spec, if the response is missing a matching
+`Access-Control-Allow-Origin` header, the audio graph is marked **tainted**:
+playback still works and is audible, but the visualizer receives silent
+(zero) sample data and never reacts to the music.
 
-## Linux (PipeWire / PulseAudio)
+Configure your Cloudflare origin (R2 custom domain, Cloudflare Stream, Pages,
+Worker, etc.) to send:
 
-- Most desktops expose a **monitor** source for each output sink
-  (e.g. "Monitor of Built-in Audio"). Select that monitor source in the
-  visualizer to capture whatever is playing.
-- With `pavucontrol`, open the **Recording** tab while the page is running and
-  set its input to the monitor of the relevant sink.
-- For finer control, create a loopback:
-  `pactl load-module module-loopback`.
+```
+Access-Control-Allow-Origin: https://visualizer.1a2n.net
+```
+
+(or `*` if the audio files are not sensitive) on responses for the audio
+files referenced in `src/tracks.js`.
+
+## Controls
+
+Playback is controlled entirely from the fullscreen keyboard UI:
+
+| Key | Action |
+| --- | --- |
+| <kbd>A</kbd> | Previous track |
+| <kbd>D</kbd> | Next track |
+| <kbd>K</kbd> | Play / pause the current track |
+
+Tracks advance automatically to the next playlist entry when one finishes.
 
 ## Troubleshooting
 
-- **Empty device list / permission error:** serve the page over `http://localhost`
-  instead of opening the file directly (`npm start`), since some browsers only
-  allow audio capture in a secure context.
-- **Device labels are blank:** labels only appear after you grant audio
-  permission for the first time; start once, then re-open the picker.
-- **No reaction:** confirm audio is actually playing to the selected device
-  (check your OS mixer / `pavucontrol` recording tab).
+- **Visualizer stays flat/reactionless even though audio plays:** the CDN
+  origin is missing the CORS header above — the audio graph is tainted.
+- **"playback blocked" toast:** browsers require a user gesture (a click or
+  keypress) before audio can play; this fires automatically from the
+  fullscreen build's start-on-first-interaction behavior.
+- **"no tracks configured" toast:** `src/tracks.js` has an empty
+  `window.BCTracks` array — add at least one track entry.

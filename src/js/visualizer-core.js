@@ -1,11 +1,14 @@
 /*
  * visualizer-core.js
- * Shared butterchurn controller used by both obs.html and fullscreen.html.
+ * Shared butterchurn controller used by fullscreen.html.
  *
  * Loaded as a classic script (NOT an ES module) so it works from file://
  * without CORS issues. Exposes a single global: window.BCViz.
  *
  * Requires butterchurn + butterchurn-presets to be loaded first.
+ *
+ * Audio source is a CDN-hosted DJ set playlist (window.BCTracks, populated
+ * by src/tracks.js — see docs/audio-routing.md), not a live input device.
  *
  * Usage:
  *   const viz = BCViz.create(canvasEl, {
@@ -36,7 +39,7 @@
     const onPreset = opts.onPreset || function () {};
     const defaultBlend = opts.blend != null ? opts.blend : 2.7;
 
-    let audioCtx, visualizer, micStream, sourceNode;
+    let audioCtx, visualizer, sourceNode;
     let presets = {}, keys = [], idx = 0;
     let excluded = new Set(); // preset keys removed from rotation for this session
     let failed = new Set();   // preset keys that failed to load/apply (auto-skipped)
@@ -44,7 +47,11 @@
     let shuffleOn = opts.shuffle === true;
     let cycleSecs = opts.cycleSecs || 20;
     let cycleTimer = null;
-    let inputDevices = [], deviceIdx = 0;
+    // DJ set playback: audio comes from a CDN-hosted playlist (src/tracks.js,
+    // see AGENTS.md/docs/audio-routing.md), not a live input device.
+    let tracks = (global.BCTracks || []).slice();
+    let trackIdx = 0;
+    let audioEl = null;
     let started = false, starting = false;
 
     // Merge every available preset pack. Packs are optional (a missing
@@ -289,50 +296,47 @@
       return removed;
     }
 
-    async function getDevices() {
-      try {
-        const all = await navigator.mediaDevices.enumerateDevices();
-        inputDevices = all.filter(function (d) { return d.kind === 'audioinput'; });
-      } catch {
-        inputDevices = [];
-      }
-      return inputDevices;
+    // Loads (but does not play) the given playlist index, wrapping around.
+    // Returns the track descriptor, or null if the playlist is empty.
+    function loadTrack(i) {
+      if (!tracks.length || !audioEl) return null;
+      trackIdx = (i + tracks.length) % tracks.length;
+      const track = tracks[trackIdx];
+      audioEl.src = track.url;
+      onToast('\uD83C\uDFA7 ' + (track.title || track.url));
+      return track;
     }
 
-    function connectStream(stream) {
-      if (micStream && micStream !== stream) {
-        micStream.getTracks().forEach(function (t) { t.stop(); });
-      }
-      if (sourceNode) visualizer.disconnectAudio(sourceNode);
-      micStream = stream;
-      sourceNode = audioCtx.createMediaStreamSource(stream);
-      visualizer.connectAudio(sourceNode);
+    function playTrack() {
+      if (!audioEl || !audioEl.src) return Promise.resolve();
+      // play() returns a rejected promise if blocked by autoplay policy;
+      // callers already run this from a user gesture, but never throw here.
+      return audioEl.play().catch(function (e) {
+        onToast('\u26A0 playback blocked: ' + e.message);
+      });
     }
 
-    async function openStream(deviceId) {
-      const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
-      if (deviceId) audio.deviceId = { exact: deviceId };
-      return navigator.mediaDevices.getUserMedia({ audio: audio });
+    function pauseTrack() {
+      if (audioEl) audioEl.pause();
     }
 
-    async function useDevice(i) {
-      if (!inputDevices.length) await getDevices();
-      if (!inputDevices.length) return null;
-      deviceIdx = (i + inputDevices.length) % inputDevices.length;
-      const dev = inputDevices[deviceIdx];
-      connectStream(await openStream(dev.deviceId));
-      onToast('\uD83C\uDF99 ' + (dev.label || ('Input ' + (deviceIdx + 1))));
-      return dev;
+    function nextTrack() {
+      loadTrack(trackIdx + 1);
+      return playTrack();
     }
 
-    async function useDeviceById(id) {
-      if (!inputDevices.length) await getDevices();
-      const i = inputDevices.findIndex(function (d) { return d.deviceId === id; });
-      if (i >= 0) return useDevice(i);
-      return null;
+    function prevTrack() {
+      loadTrack(trackIdx - 1);
+      return playTrack();
     }
 
-    async function start(deviceId) {
+    function togglePlayback() {
+      if (!audioEl) return false;
+      if (audioEl.paused) playTrack(); else pauseTrack();
+      return !audioEl.paused;
+    }
+
+    async function start() {
       if (started || starting) return;
       if (!Butterchurn) {
         onToast('\u26A0 butterchurn failed to load');
@@ -343,8 +347,12 @@
         audioCtx = new (global.AudioContext || global.webkitAudioContext)();
         await audioCtx.resume();
 
-        const stream = await openStream(deviceId);   // also triggers the permission prompt
-        await getDevices();                           // labels populate after permission
+        // crossOrigin is required so the analyser can read samples from the
+        // CDN-hosted stream; the CDN origin must send matching CORS headers
+        // (see docs/audio-routing.md) or the graph renders silent/blank.
+        audioEl = new Audio();
+        audioEl.crossOrigin = 'anonymous';
+        audioEl.addEventListener('ended', function () { nextTrack(); });
 
         visualizer = Butterchurn.createVisualizer(audioCtx, canvas, {
           width: canvas.width, height: canvas.height, pixelRatio: 1, textureRatio: 1
@@ -357,7 +365,19 @@
             console.warn('Failed to load extra images (non-critical):', e);
           }
         }
-        connectStream(stream);
+
+        sourceNode = audioCtx.createMediaElementSource(audioEl);
+        visualizer.connectAudio(sourceNode);
+        // connectAudio only taps the analyser; route to speakers too so the
+        // set is actually audible (and capturable) while it's visualized.
+        sourceNode.connect(audioCtx.destination);
+
+        if (tracks.length) {
+          loadTrack(0);
+          await playTrack();
+        } else {
+          onToast('\u26A0 no tracks configured \u2014 see src/tracks.js');
+        }
         started = true;
       } catch (e) {
         // Don't leak an AudioContext per failed attempt \u2014 browsers cap them.
@@ -405,11 +425,13 @@
       },
       getCycleSecs:  function () { return cycleSecs; },
       isCycling:     function () { return cycleOn; },
-      nextDevice:    function () { return useDevice(deviceIdx + 1); },
-      useDevice:     useDevice,
-      useDeviceById: useDeviceById,
-      getDevices:    getDevices,
-      listDevices:   function () { return inputDevices.slice(); },
+      nextTrack:     nextTrack,
+      prevTrack:     prevTrack,
+      togglePlayback: togglePlayback,
+      isTrackPlaying: function () { return !!audioEl && !audioEl.paused; },
+      listTracks:    function () { return tracks.slice(); },
+      currentTrackIndex: function () { return trackIdx; },
+      currentTrack:  function () { return tracks[trackIdx] || null; },
       keys:          function () { return keys.slice(); },
       currentIndex:  function () { return idx; },
       currentName:   function () { return keys[idx] || ''; },

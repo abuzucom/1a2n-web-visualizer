@@ -1,7 +1,7 @@
 {
   "name": "butterchurn-visualizer",
   "version": "1.6.3",
-  "description": "Milkdrop (butterchurn) audio visualizer pages for OBS and standalone browser use.",
+  "description": "Milkdrop (butterchurn) audio visualizer for browser-based DJ set playback.",
   "private": true,
   "scripts": {
     "start": "serve src",
@@ -13,8 +13,7 @@
     "butterchurn",
     "milkdrop",
     "audio-visualizer",
-    "obs",
-    "browser-source",
+    "dj",
     "webgl"
   ],
   "license": "MIT",

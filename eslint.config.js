@@ -28,7 +28,7 @@ module.exports = [
         navigator: 'readonly',
         console: 'readonly',
         // Provided by visualizer-core.js, loaded via its own <script> tag
-        // before obs-ui.js/fullscreen-ui.js (classic scripts, not modules).
+        // before fullscreen-ui.js (classic script, not a module).
         BCViz: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
@@ -36,6 +36,7 @@ module.exports = [
         clearInterval: 'readonly',
         requestAnimationFrame: 'readonly',
         AudioContext: 'readonly',
+        Audio: 'readonly',
         localStorage: 'readonly',
         fetch: 'readonly',
       },
