@@ -37,7 +37,12 @@ jobs:
           cache: npm
 
       - name: Install JS dependencies
-        run: npm ci
+        # --ignore-scripts: milkdrop-shader-converter's own "install" script
+        # (a native C++ compile) would otherwise run before our postinstall
+        # patches it, and fail against Node 22 -- lint doesn't need that
+        # addon built, only the JS/Python source to exist. See
+        # tools/convert-milk-presets.js's header for the real build steps.
+        run: npm ci --ignore-scripts
 
       - name: ESLint
         run: npx eslint .
