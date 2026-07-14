@@ -31,14 +31,27 @@ playback still works and is audible, but the visualizer receives silent
 (zero) sample data and never reacts to the music.
 
 Configure your Cloudflare origin (R2 custom domain, Cloudflare Stream, Pages,
-Worker, etc.) to send:
+Worker, etc.) to send an `Access-Control-Allow-Origin` value that matches the
+page actually loading `fullscreen.html`:
 
-```
-Access-Control-Allow-Origin: https://visualizer.1a2n.net
-```
+- **Simplest for testing:** if the audio files are public and not sensitive,
+  send:
 
-(or `*` if the audio files are not sensitive) on responses for the audio
-files referenced in `src/tracks.js`.
+  ```
+  Access-Control-Allow-Origin: *
+  ```
+
+  That covers the production site, any `http://localhost:*` dev server, and
+  `file://` usage (which browsers typically send as `Origin: null`).
+- **Origin-restricted setup:** if you need a non-wildcard allow-list, include
+  every origin that needs analyser access. For example, your CORS layer should
+  allow both `https://visualizer.1a2n.net` and `http://localhost:8000` if you
+  want production plus local dev-server testing to work. That still does
+  **not** cover `file://`: browsers treat `file://` as `Origin: null`, and
+  `Access-Control-Allow-Origin: null` is not a practical or recommended value
+  to rely on. If you need direct `file://` testing with CDN-hosted audio, use
+  `*` instead, or run the local dev server (`npm start` or `python3 -m
+  http.server --directory src 8000`) and allow-list that origin.
 
 ## Controls
 
@@ -55,7 +68,8 @@ Tracks advance automatically to the next playlist entry when one finishes.
 ## Troubleshooting
 
 - **Visualizer stays flat/reactionless even though audio plays:** the CDN
-  origin is missing the CORS header above — the audio graph is tainted.
+  origin is missing a matching CORS header for the page's current origin, so
+  the audio graph is tainted.
 - **"playback blocked" toast:** browsers require a user gesture (a click or
   keypress) before audio can play; this fires automatically from the
   fullscreen build's start-on-first-interaction behavior.
