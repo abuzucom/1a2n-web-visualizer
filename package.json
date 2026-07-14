@@ -4,7 +4,7 @@
   "description": "Milkdrop (butterchurn) audio visualizer pages for OBS and standalone browser use.",
   "private": true,
   "scripts": {
-    "start": "npx --yes serve src",
+    "start": "serve src",
     "dev": "python3 -m http.server --directory src 8000",
     "lint": "eslint . && ruff check tools/",
     "postinstall": "patch-package"
@@ -24,6 +24,7 @@
     "milkdrop-eel-parser": "^0.0.4",
     "milkdrop-preset-utils": "^0.2.1",
     "milkdrop-shader-converter": "^0.0.8",
-    "patch-package": "^8.0.1"
+    "patch-package": "^8.0.1",
+    "serve": "14.2.6"
   }
 }

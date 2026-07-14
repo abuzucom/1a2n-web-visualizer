@@ -16,19 +16,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
+
+      - name: Check GitHub Actions are pinned
+        run: python3 scripts/check_action_pins.py
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: npm
@@ -40,9 +43,8 @@ jobs:
         run: npx eslint .
 
       - name: Install ruff
-        # Pinned to a commit (not the mutable v3 tag) per CodeQL's
-        # unpinned-third-party-action finding; resolved from tag v3.
-        uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3
+        # Pinned to a commit rather than a mutable release tag.
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
 
       - name: ruff check
         run: ruff check tools/

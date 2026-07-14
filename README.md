@@ -72,7 +72,8 @@ Browsers require a click or keypress before they'll grant audio capture permissi
 **Local Development Server:**
 
 ```bash
-npm start            # Serves ./src via `npx serve`
+npm ci                # Install the pinned development dependencies
+npm start             # Serves ./src via the pinned `serve` package
 # Alternatively, using Python:
 python3 -m http.server --directory src 8000
 ```
@@ -105,6 +106,18 @@ docker compose up -d --build
 ```
 
 The application will be available at `http://localhost:8080`. Further configuration and security details are available in [`docs/local-hosting.md`](docs/local-hosting.md).
+
+## Security Model
+
+ButterChurn dynamically compiles its audited MilkDrop preset equations, so the
+Content Security Policy intentionally permits `'unsafe-eval'`. Removing this
+directive breaks core visualizer functionality. Presets are vendored or
+generated from a pinned, hash-verified upstream archive, reviewed as executable
+content, and are not fetched from users or remote sources at runtime.
+
+The Docker/Caddy configuration is an internal deployment option only. Docker
+binds it to `127.0.0.1:8080`; it is not intended to be exposed to a network or
+the public internet.
 
 ## Controls
 
