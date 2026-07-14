@@ -316,7 +316,7 @@
       // play() returns a rejected promise if blocked by autoplay policy;
       // callers already run this from a user gesture, but never throw here.
       return audioEl.play().catch(function (e) {
-        onToast('\u26A0 playback blocked: ' + e.message);
+        onToast('\u26A0 playback blocked; still paused: ' + e.message);
       });
     }
 
