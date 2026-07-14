@@ -5,10 +5,13 @@
  * Removes named presets from this repo's preset library: drops each name
  * from src/presets-extra/index.js and its owning chunk-NNN.js file, from
  * any vendored src/vendor/*.min.js pack that contains it, and from the
- * matching row(s) in preset-inventory.csv. This is the same mechanical
- * procedure the "Curation" section in README.md documents; this tool
- * exists so that procedure doesn't have to be reconstructed by hand (or
- * via an AI session) every time someone wants to curate the library.
+ * matching row(s) in preset-inventory.csv — and appends a row to
+ * removed-presets.csv, the durable "never re-add this" ledger that fetch
+ * scripts consult so a future preset pull can't resurrect it. This is the
+ * same mechanical procedure the "Curation" section in README.md documents;
+ * this tool exists so that procedure doesn't have to be reconstructed by
+ * hand (or via an AI session) every time someone wants to curate the
+ * library.
  *
  * Matching is exact-name only (no fuzzy/substring matching), and nothing
  * is written to disk unless every requested name was found and every
@@ -35,6 +38,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const INDEX_PATH = path.join(ROOT, 'src/presets-extra/index.js');
 const CSV_PATH = path.join(ROOT, 'preset-inventory.csv');
+const REMOVED_CSV_PATH = path.join(ROOT, 'removed-presets.csv');
 const CHUNK_DIR = path.join(ROOT, 'src/presets-extra');
 const VENDOR_DIR = path.join(ROOT, 'src/vendor');
 
@@ -383,6 +387,30 @@ function writeAll(pendingWrites, keptLines) {
   fs.writeFileSync(CSV_PATH, keptLines.join('\n'));
 }
 
+// --- removed-presets.csv (durable ledger of everything ever curated out) ---
+
+function escCsv(s) {
+  return /[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : s;
+}
+
+function appendRemovedPresetsCsv(names, byName) {
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = names.map((n) => {
+    const { pack, chunk } = byName.get(n);
+    return [escCsv(n), pack, chunk, '', today, ''].join(',');
+  });
+
+  try {
+    // 'wx' creates the file only if it doesn't already exist, atomically --
+    // avoids a TOCTOU race against a concurrent run between an existsSync
+    // check and a separate writeFileSync.
+    fs.writeFileSync(REMOVED_CSV_PATH, 'name,pack,chunk,commit,date,subject\n', { flag: 'wx' });
+  } catch (err) {
+    if (err.code !== 'EEXIST') throw err;
+  }
+  fs.appendFileSync(REMOVED_CSV_PATH, rows.join('\n') + '\n');
+}
+
 // Consistency check: verify each file dropped by exactly the expected amount
 // relative to its own pre-run count (index.js and preset-inventory.csv report
 // different populations — the CSV reflects the runtime-deduplicated view, ~67
@@ -424,6 +452,13 @@ function main() {
     return;
   }
 
+  // Record the ledger entry before the (larger, multi-file) destructive
+  // writes below, not after: if those fail partway through, the ledger
+  // having already recorded these names is the fail-safe direction (a
+  // future fetch won't resurrect them) versus the reverse order, where a
+  // failure after removal but before the ledger write could let a name
+  // slip back in.
+  appendRemovedPresetsCsv(names, byName);
   writeAll(pendingWrites, keptLines);
   logSummary('Removed', names, summary);
   verifyConsistency(indexCountBefore, csvRowCountBefore, summary);

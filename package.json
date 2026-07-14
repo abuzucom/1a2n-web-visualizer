@@ -6,7 +6,8 @@
   "scripts": {
     "start": "serve src",
     "dev": "python3 -m http.server --directory src 8000",
-    "lint": "eslint . && ruff check tools/"
+    "lint": "eslint . && ruff check tools/",
+    "postinstall": "patch-package"
   },
   "keywords": [
     "butterchurn",
@@ -20,6 +21,10 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.7.0",
+    "milkdrop-eel-parser": "^0.0.4",
+    "milkdrop-preset-utils": "^0.2.1",
+    "milkdrop-shader-converter": "^0.0.8",
+    "patch-package": "^8.0.1",
     "serve": "14.2.6"
   }
 }

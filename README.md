@@ -193,16 +193,23 @@ This deployment ships a **deliberately curated** subset of the upstream
 content. Selected presets have been removed from **both** the vendored preset
 packs (`src/vendor/butterchurnPresets*.min.js`) and the lazy-loaded upstream
 collection (`src/presets-extra/`), with the matching rows dropped from
-`preset-inventory.csv`. These deletions are an intentional editorial choice
-for this deployment — they are **not** upstream or library changes, and are
-not bugs to be "fixed" by restoring the presets.
+`preset-inventory.csv` and recorded in `removed-presets.csv`. These deletions
+are an intentional editorial choice for this deployment — they are **not**
+upstream or library changes, and are not bugs to be "fixed" by restoring the
+presets.
 
-Two things to know if you're regenerating presets:
+`removed-presets.csv` is the durable "never re-add this" ledger: every name
+ever curated out of this repo, with its pack, chunk, and (when known) the
+commit/date/subject that removed it. Like `preset-inventory.csv`, it's a
+generated bookkeeping record, not the source of truth the app reads from —
+only `tools/remove_presets.js` should ever write to it.
+
+Three things to know if you're regenerating presets:
 
 - **`presets-extra` regeneration is curation-safe by default.**
   `tools/fetch-extra-presets-curated.py` diffs a fresh upstream pull against
-  the currently committed `index.js` and re-excludes anything that's present
-  upstream but missing from the current tree — so running it preserves this
+  the currently committed `index.js` *and* against `removed-presets.csv`,
+  excluding anything caught by either check — so running it preserves this
   curation instead of undoing it. Its plain counterpart,
   `tools/fetch-extra-presets.py`, has no such memory: it rebuilds
   `src/presets-extra/` verbatim from the pinned upstream zip and will
@@ -214,16 +221,23 @@ Two things to know if you're regenerating presets:
   remove the current preset from rotation and export the list of presets
   excluded during a session (the &#128683; / &#128203; controls), which is the
   source of the names curated out of the codebase here.
+- **New upstream sources should consult `removed-presets.csv` too.** A fetch
+  script pulling presets from a different collection should exclude names
+  present in the ledger, the same way `fetch-extra-presets-curated.py` does —
+  not just names absent from the current `index.js` snapshot, since a
+  different source could coincidentally share a name with something removed
+  from an entirely different collection.
 
 ### Removing presets
 
 `tools/remove_presets.js` performs an actual curation removal: given a list of
 exact preset names, it drops each one from `src/presets-extra/index.js`, its
 owning `chunk-NNN.js` file, any vendored `.min.js` pack that contains it, and
-the matching `preset-inventory.csv` row — the same mechanical steps described
-above, without reconstructing them by hand each time. Matching is exact-name
-only, and nothing is written unless every requested name is found and every
-edited file passes a post-edit consistency check.
+the matching `preset-inventory.csv` row, and appends a row for each to
+`removed-presets.csv` — the same mechanical steps described above, without
+reconstructing them by hand each time. Matching is exact-name only, and
+nothing is written unless every requested name is found and every edited file
+passes a post-edit consistency check.
 
 ```bash
 node tools/remove_presets.js --names-file names.txt   # one exact name per line
@@ -236,11 +250,16 @@ recompute those by hand after a removal (see the numbers in the "Extra
 Presets" section above for the formula).
 
 `tools/analyze_curation_history.js` reconstructs the full history of presets
-curated out via `git log` and prints neutral frequency statistics (top
-words, bigrams, and likely contributor-name prefixes) over their names — no
-built-in notion of what's "risky" or unwanted, just the raw data, so anyone
-using this repo can review the same history and make their own curation
-decisions:
+curated out via `git log` — auto-discovering every commit that ever touched
+`src/presets-extra/` or `src/vendor/*.min.js`, so it stays correct across
+history rewrites instead of relying on a hand-maintained commit list — and
+prints neutral frequency statistics (top words, bigrams, and likely
+contributor-name prefixes) over their names. It has no built-in notion of
+what's "risky" or unwanted, just the raw data, so anyone using this repo can
+review the same history and make their own curation decisions. This is also
+the tool that originally generated `removed-presets.csv`'s `--csv` output;
+`tools/remove_presets.js` keeps it current from here on, so you shouldn't
+normally need to regenerate it:
 
 ```bash
 node tools/analyze_curation_history.js

@@ -3,10 +3,14 @@
 fetch-extra-presets-curated.py
 
 Regenerates src/presets-extra/ the same way fetch-extra-presets.py does, but
-preserves this deployment's preset curation: any preset present in a fresh
-upstream pull that is missing from the *currently committed* index.js is
-treated as intentionally curated out (see the "Curation" section in
-README.md) and is excluded again from the regenerated output.
+preserves this deployment's preset curation two ways: any preset present in
+a fresh upstream pull that is missing from the *currently committed*
+index.js is treated as intentionally curated out (see the "Curation"
+section in README.md), and any preset whose name appears in
+removed-presets.csv -- the durable ledger of everything ever curated out,
+maintained by tools/remove_presets.js -- is excluded too, even if it isn't
+(or was never) present in the current index.js snapshot. Either signal is
+enough to exclude a name from the regenerated output.
 
 This only covers src/presets-extra/. Presets curated out of the vendored
 .min.js packs (src/vendor/) are npm-packaged and out of scope here -- if one
@@ -22,6 +26,7 @@ Requires only the python3 standard library.
 """
 
 import argparse
+import csv
 import importlib.util
 import io
 import json
@@ -32,6 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "presets-extra"
 INDEX_PATH = OUT_DIR / "index.js"
 INDEX_PREFIX = "window.BCExtraPresetIndex="
+REMOVED_CSV_PATH = ROOT / "removed-presets.csv"
 
 
 def _load_fetch_module():
@@ -60,6 +66,15 @@ def load_current_names(index_path):
     return names
 
 
+def load_removed_names(csv_path):
+    """Flat set of every preset name ever curated out of this repo, per
+    removed-presets.csv. Empty set if the ledger doesn't exist yet."""
+    if not csv_path.exists():
+        return set()
+    with csv_path.open(newline="", encoding="utf-8") as f:
+        return {row["name"] for row in csv.DictReader(f)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")
@@ -74,21 +89,22 @@ def main():
 
     # Must read the current tree before write_output() wipes OUT_DIR.
     current_names = load_current_names(INDEX_PATH)
+    removed_names = load_removed_names(REMOVED_CSV_PATH)
 
     zf = ZipFile(io.BytesIO(fetch.get_zip_bytes(args.zip)))
     fresh_kept, excluded_textures, bad_json = fetch.collect_presets(zf, allowed)
 
-    if current_names is None:
-        print("no existing index.js found -- first run, nothing to curate out")
-        curated_out = set()
-    else:
-        curated_out = set(fresh_kept) - current_names
+    snapshot_diff = set(fresh_kept) - current_names if current_names is not None else set()
+    ledger_hits = set(fresh_kept) & removed_names
+    curated_out = snapshot_diff | ledger_hits
     final_kept = {n: p for n, p in fresh_kept.items() if n not in curated_out}
 
     print(f"fresh upstream (post texture-filter): {len(fresh_kept)}")
     print(f"currently curated in (index.js):      "
           f"{0 if current_names is None else len(current_names)}")
-    print(f"re-excluding as curated-out:          {len(curated_out)}")
+    print(f"removed-presets.csv ledger entries:   {len(removed_names)}")
+    print(f"re-excluding as curated-out:          {len(curated_out)}"
+          f" ({len(snapshot_diff)} by snapshot diff, {len(ledger_hits)} by ledger)")
     for name in sorted(curated_out):
         print(f"  - {name}")
     print(f"final kept:                           {len(final_kept)}")

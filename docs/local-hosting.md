@@ -17,11 +17,18 @@ No server, no internet.
 ## 2. Local dev server
 
 ```bash
-npm ci               # install the pinned development dependencies
-npm start            # serves ./src via the pinned `serve` package
+npm ci --ignore-scripts   # install the pinned development dependencies
+npm start                 # serves ./src via the pinned `serve` package
 # or, without Node:
 python3 -m http.server --directory src 8000
 ```
+
+`--ignore-scripts` is required here, not optional: one devDependency
+(`milkdrop-shader-converter`, used only by the preset-curation tools in
+`tools/`) ships a native addon whose own install script would otherwise try
+to compile against this repo's pinned Node version and fail before serving
+the app needs anything from it. See `tools/convert-milk-presets.js`'s header
+comment if you actually need that addon built.
 
 Open `http://localhost:8000/fullscreen.html`. `localhost` counts as a secure
 context, so mic capture always works — but only from the same machine.
