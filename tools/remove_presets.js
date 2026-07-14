@@ -400,8 +400,13 @@ function appendRemovedPresetsCsv(names, byName) {
     return [escCsv(n), pack, chunk, '', today, ''].join(',');
   });
 
-  if (!fs.existsSync(REMOVED_CSV_PATH)) {
-    fs.writeFileSync(REMOVED_CSV_PATH, 'name,pack,chunk,commit,date,subject\n');
+  try {
+    // 'wx' creates the file only if it doesn't already exist, atomically --
+    // avoids a TOCTOU race against a concurrent run between an existsSync
+    // check and a separate writeFileSync.
+    fs.writeFileSync(REMOVED_CSV_PATH, 'name,pack,chunk,commit,date,subject\n', { flag: 'wx' });
+  } catch (err) {
+    if (err.code !== 'EEXIST') throw err;
   }
   fs.appendFileSync(REMOVED_CSV_PATH, rows.join('\n') + '\n');
 }
