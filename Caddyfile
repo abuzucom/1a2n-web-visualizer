@@ -1,0 +1,32 @@
+# Localhost-only static file server for the visualizer.
+# Serves plain HTTP on :80 (mapped to 127.0.0.1:8080 by docker-compose).
+# No TLS: localhost is already a secure context for mic capture.
+{
+	auto_https off
+}
+
+:80 {
+	root * /srv
+	encode zstd gzip
+	file_server
+
+	header {
+		# OWASP recommended security headers
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "no-referrer"
+		Permissions-Policy        "camera=(), geolocation=(), payment=()"
+		Content-Security-Policy   "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# Prevent caching of HTML pages (assets are fine to cache)
+		?Cache-Control "no-store"
+
+		# Remove server identity
+		-Server
+	}
+
+	# Cache vendored JS aggressively (content-addressed by filename)
+	@vendor path /vendor/*
+	header @vendor Cache-Control "public, max-age=31536000, immutable"
+}

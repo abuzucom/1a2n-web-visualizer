@@ -1,32 +1,19 @@
 # Butterchurn Visualizer
 
-Milkdrop-style audio visualizer built on
-[butterchurn](https://github.com/jberg/butterchurn), for **DJ set playback**:
-a fullscreen, keyboard-controlled page that streams a DJ set from a
-Cloudflare CDN playlist and visualizes it live. Ships 14,770 deduplicated
-presets — 378 from the four butterchurn preset packs plus ~15k from the
+Milkdrop-style audio visualizer pages built on
+[butterchurn](https://github.com/jberg/butterchurn), intended for use as an
+**OBS browser source** or as a **standalone fullscreen visualizer** in any
+modern browser. Ships 14,770 deduplicated presets — 378 from the four
+butterchurn preset packs plus ~15k from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
-collection, lazy-loaded in chunks — fully self-hosted (no CDN for presets).
+collection, lazy-loaded in chunks — fully self-hosted (no CDN).
 
-> **Fork direction:** this repository is a functional fork of
-> `1a2n-web-visualizer`. Changes that materially alter behavior and UX to make
-> the app better for DJ set playback are intentional in this codebase.
-> Contributors and coding agents should not "correct" those differences back to
-> upstream behavior unless maintainers explicitly request it. Notably: the
-> OBS browser-source entry point and live-input-device routing have been
-> removed entirely in favor of CDN-streamed track playback (see
-> [`docs/audio-routing.md`](docs/audio-routing.md)), and Docker/local
-> container hosting has been dropped in favor of Cloudflare Pages.
->
-> **Syncing from upstream:** future changes pulled from `1a2n-web-visualizer`
-> are expected to be **preset additions/removals only**. Conform to those,
-> but do not reintroduce the OBS build, live-input-device audio, or Docker
-> hosting if a sync/merge brings them back — see AGENTS.md's "Syncing from
-> upstream" section for the full policy.
+**Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html` and `/fullscreen.html`), automatically deployed from the `develop` branch.
 
-**Production Deployment:** <https://visualizer.1a2n.net/>, automatically deployed to Cloudflare Pages from the `develop` branch.
+Both entry points share a single controller module so visualizer logic stays consistent between them:
 
-`src/fullscreen.html` is the sole entry point: a keyboard-controlled interface with no visible UI. The cursor is hidden during operation, and it plays a CDN-hosted DJ set playlist automatically on start. Auto-cycle shuffles presets by default. `src/js/visualizer-core.js` holds the shared `BCViz` controller (preset rotation, playlist playback) that `src/js/fullscreen-ui.js` wires up to the keyboard.
+- `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel for capture.
+- `src/fullscreen.html`: A keyboard-controlled interface with no visible UI. The cursor is hidden during operation. Auto-cycle shuffles presets by default. This mode is optimized for window capture or secondary display usage.
 
 ## Repository Structure
 
@@ -38,17 +25,23 @@ butterchurn-visualizer/
 ├── .gitignore
 ├── package.json            # Development server configuration
 ├── preset-inventory.csv    # Every preset name, its pack, and chunk id
+├── Caddyfile               # Caddy web server configuration
+├── Dockerfile              # Container definition for local hosting
+├── docker-compose.yml      # Docker Compose deployment configuration
+├── .dockerignore
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml      # GitHub Actions deployment workflow (Cloudflare Pages)
+│       └── deploy.yml      # GitHub Actions deployment workflow
 ├── src/
 │   ├── index.html          # Landing page
-│   ├── fullscreen.html     # Sole entry point: fullscreen visualizer
-│   ├── tracks.js           # DJ set playlist (window.BCTracks, CDN URLs)
+│   ├── obs.html            # OBS browser source entry point
+│   ├── fullscreen.html     # Standalone fullscreen entry point
 │   ├── css/
+│   │   ├── panel.css
 │   │   └── fullscreen.css
 │   ├── js/
 │   │   ├── visualizer-core.js   # shared BCViz controller (the brains)
+│   │   ├── obs-ui.js            # panel wiring
 │   │   └── fullscreen-ui.js     # keyboard wiring
 │   ├── vendor/                  # vendored butterchurn + preset/texture packs
 │   │   ├── butterchurn.min.js
@@ -65,15 +58,16 @@ butterchurn-visualizer/
 │   ├── fetch-extra-presets-curated.py   # same, but re-applies prior curation
 │   └── butterchurn-image-names.json
 └── docs/
+    ├── obs-setup.md
     ├── audio-routing.md
     └── local-hosting.md
 ```
 
 ## Quick Start
 
-Browsers require a click or keypress before audio can play, so click or press any key once the page loads.
+Browsers require a click or keypress before they'll grant audio capture permission, so click or press any key once the page loads.
 
-**Standalone Browser:** Open `src/fullscreen.html`. It plays the playlist configured in `src/tracks.js`.
+**Standalone Browser:** Open `src/fullscreen.html`. Some browsers restrict audio access over the `file://` protocol — if the audio device list stays empty, use a local development server instead.
 
 **Local Development Server:**
 
@@ -84,35 +78,34 @@ npm start             # Serves ./src via the pinned `serve` package
 python3 -m http.server --directory src 8000
 ```
 
-Open <http://localhost:8000/fullscreen.html>.
+Open <http://localhost:8000/fullscreen.html> or <http://localhost:8000/obs.html>.
 
-**Configuring tracks:** See [`docs/audio-routing.md`](docs/audio-routing.md) for the `src/tracks.js` playlist format and the CORS setup required on your Cloudflare CDN origin.
+**OBS Integration:** See [`docs/obs-setup.md`](docs/obs-setup.md) for setup instructions.
 
-## Hosted Deployment (Cloudflare Pages)
+## Hosted Deployment (GitHub Pages)
 
-The production environment is hosted via Cloudflare Pages at **`visualizer.1a2n.net`**:
+The production environment is hosted via GitHub Pages at **`visualizer.1a2n.net`**:
 
 ```text
+https://visualizer.1a2n.net/obs.html
 https://visualizer.1a2n.net/fullscreen.html
 ```
 
-The GitHub Actions workflow located at `.github/workflows/deploy.yml` automatically publishes the `src/` directory to Cloudflare Pages upon any push to the `develop` branch.
+The GitHub Actions workflow located at `.github/workflows/deploy.yml` automatically publishes the `src/` directory upon any push to the `develop` branch. 
 
-One-time setup in GitHub:
+To deploy from a fork or new clone, go to **Settings → Pages → Source** and select **GitHub Actions**. The site will be available at `https://<user>.github.io/<repo>/`.
 
-1. Add repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-2. Optionally add repository variable `CLOUDFLARE_PAGES_PROJECT` (if omitted, the workflow uses the repository name).
-
-One-time setup in Cloudflare Pages:
-
-1. Create a Pages project.
-2. Set its production branch to `develop`.
-
-Cloudflare Pages serves content over HTTPS (a secure context), which is required for audio playback and the analyser graph to work reliably.
+Because GitHub Pages serves content over HTTPS (a secure context), browser audio capture is permitted without local workarounds. When configuring OBS, create a Browser Source in URL mode and point it to the `obs.html` URL.
 
 ## Local Hosting
 
-Two ways to run this locally: open `src/fullscreen.html` directly from the filesystem (`file://`), or use a local development server. See [`docs/local-hosting.md`](docs/local-hosting.md) for details. This fork does not ship a Docker/container hosting option.
+Three ways to run this without GitHub Pages: open `src/fullscreen.html` directly from the filesystem (`file://`), use a local development server, or run the included Docker configuration:
+
+```bash
+docker compose up -d --build
+```
+
+The application will be available at `http://localhost:8080`. Further configuration and security details are available in [`docs/local-hosting.md`](docs/local-hosting.md).
 
 ## Security Model
 
@@ -122,10 +115,9 @@ directive breaks core visualizer functionality. Presets are vendored or
 generated from a pinned, hash-verified upstream archive, reviewed as executable
 content, and are not fetched from users or remote sources at runtime.
 
-The CSP also allows `media-src` from the configured Cloudflare CDN origin
-(`media.1a2n.net`) so `src/tracks.js` can stream DJ sets from it; see
-[`docs/audio-routing.md`](docs/audio-routing.md) for the required CORS setup
-on that origin.
+The Docker/Caddy configuration is an internal deployment option only. Docker
+binds it to `127.0.0.1:8080`; it is not intended to be exposed to a network or
+the public internet.
 
 ## Controls
 
@@ -139,15 +131,17 @@ on that origin.
 | <kbd>C</kbd> | Toggle auto-cycle |
 | <kbd>S</kbd> | Toggle between shuffle and sequential auto-cycle (default is shuffle) |
 | <kbd>[</kbd> / <kbd>]</kbd> | Adjust cycle interval (1s increments up to 10s, 5s increments above 10s) |
-| <kbd>A</kbd> | Previous track |
-| <kbd>D</kbd> | Next track |
-| <kbd>K</kbd> | Play / pause the current track |
+| <kbd>D</kbd> | Switch audio input device |
 | <kbd>F</kbd> | Toggle fullscreen mode |
 | <kbd>?</kbd> | Show/hide the help menu |
 
+### OBS Panel (`obs.html`)
+
+Use the on-screen graphical controls. Press <kbd>H</kbd> to toggle the control panel's visibility.
+
 ## Audio Configuration
 
-The application plays a DJ set playlist streamed from a Cloudflare CDN and visualizes that stream — no microphone or live input device, and no virtual audio cable routing, is used. Configure the playlist in `src/tracks.js` and the CDN's CORS headers as described in [`docs/audio-routing.md`](docs/audio-routing.md).
+The application visualizes audio from a system input device (e.g., a microphone). To visualize system audio output (e.g., music playback), you must route the audio through a virtual audio cable and select that virtual device as the input. Platform-specific instructions are available in [`docs/audio-routing.md`](docs/audio-routing.md).
 
 ## Dependencies
 

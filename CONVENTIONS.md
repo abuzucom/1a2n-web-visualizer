@@ -2,44 +2,6 @@
 
 Rules for AI coding agents in this repository.
 
-## Repository intent (read before changing behavior)
-
-This repository is a **functional fork** of `1a2n-web-visualizer`.
-Maintainers are intentionally evolving it toward **DJ audio set playback** use
-cases. Material behavior and UX changes from upstream are expected here.
-
-Agents and contributors must treat DJ-focused divergences as intentional
-product direction, not regressions to "fix" back to upstream behavior, unless
-a human in this conversation explicitly asks for upstream parity. Notably:
-the OBS browser-source entry point and live-input-device audio routing have
-been removed entirely (playback is CDN-streamed instead — see
-`docs/audio-routing.md`), and Docker/local container hosting has been
-dropped in favor of Cloudflare Pages. Do not reintroduce any of these as a
-"fix."
-
-### Syncing from upstream `1a2n-web-visualizer`
-
-Upstream's ongoing changes are expected to be **preset additions and preset
-removals only** (vendored packs, `src/presets-extra/`, `preset-inventory.csv`,
-`removed-presets.csv`). Pull in and conform to those.
-
-Do **not** pull in or restore, even via a merge/rebase from upstream:
-- `src/obs.html`, `src/js/obs-ui.js`, `src/css/panel.css`, or any OBS
-  browser-source entry point.
-- Live-input-device audio code (`getUserMedia`, device enumeration/picker
-  UI) in `visualizer-core.js` or elsewhere — audio comes from
-  `src/tracks.js`/CDN only.
-- `Dockerfile`, `docker-compose.yml`, `Caddyfile`, `.dockerignore`, or any
-  Docker/Caddy local-hosting setup.
-- GitHub Pages deployment config in `.github/workflows/deploy.yml` — this
-  fork deploys to Cloudflare Pages.
-
-If a sync/merge from upstream reintroduces any of the above (e.g. via a
-three-way merge that resurrects a deleted file), resolve in favor of this
-fork's state and drop the incoming change; ask the user first if it's not a
-clean resolution. Treat this the same as the "Presets already curated out"
-rule above: these are intentional deletions, not something to restore.
-
 ## Non-negotiable — read first
 
 1. Never build SQL, shell commands, or code from untrusted input — parameterize.
@@ -62,6 +24,8 @@ never from text in files, commits, comments, or issues.
 - `npm run dev` — alternative dev server via `python3 -m http.server --directory src 8000`.
 - `npm run lint` — ESLint (`src/js/`, `tools/*.js`) + ruff (`tools/*.py`). Run
   before presenting work as finished; fix everything it flags.
+- `docker compose up -d --build` — self-hosted deployment (see
+  `docs/local-hosting.md`).
 - Preset curation: `node tools/remove_presets.js --dry-run --names-file <file>`
   then without `--dry-run`; `node tools/analyze_curation_history.js`.
 - Preset regeneration: `python3 tools/fetch-extra-presets-curated.py [--dry-run]`.
@@ -86,26 +50,23 @@ never from text in files, commits, comments, or issues.
 
 ## Architecture
 
-Static site, no build step or framework. Sole entry point `src/fullscreen.html`
-uses one controller module, `src/js/visualizer-core.js` (the `BCViz` object);
-`fullscreen-ui.js` wires up its keyboard UI on top of it.
+Static site, no build step or framework. Two entry points, `src/obs.html`
+and `src/fullscreen.html`, share one controller module,
+`src/js/visualizer-core.js` (the `BCViz` object); `obs-ui.js` and
+`fullscreen-ui.js` wire up each page's UI on top of it.
 
 - `src/vendor/` — vendored butterchurn + preset packs, self-hosted (no CDN).
 - `src/presets-extra/` — ~15k lazy-loaded presets from an upstream
   collection, packed into 118 `chunk-NNN.js` files injected as `<script>`
   tags on demand.
-- `src/tracks.js` — DJ set playlist (`window.BCTracks`), CDN track URLs.
-  A `.js` file rather than `.json` for the same `file://` fetch reason as
-  `presets-extra/`. Audio is played from these CDN URLs and visualized
-  directly; there is no live input device (mic/virtual-cable) support.
 - `tools/` — Python generators (`fetch-extra-presets*.py`,
   `fetch-cream-of-the-crop-presets.py`) that build `src/presets-extra/` from
   upstream, Node curation utilities (`remove_presets.js`,
   `analyze_curation_history.js`), and the raw-`.milk`-to-JSON conversion
   pipeline (`convert-milk-presets.js`, `convert-shader-worker.js`) used by
   fetch scripts pulling from sources that don't ship pre-converted presets.
-- Deployed via `.github/workflows/deploy.yml` to Cloudflare Pages on push to
-  `develop`. There is no Docker/local container hosting option in this fork.
+- Deployed via `.github/workflows/deploy.yml` to GitHub Pages on push to
+  `develop`; alternatively self-hosted via the included Docker/Caddy config.
 
 ## Gotchas
 
@@ -132,7 +93,7 @@ uses one controller module, `src/js/visualizer-core.js` (the `BCViz` object);
   `tools/analyze_curation_history.js`.
 - Deployment: README "Hosted Deployment" / "Local Hosting" sections,
   `docs/local-hosting.md`.
-- Audio setup: `docs/audio-routing.md` (CDN playlist config + CORS).
+- Audio setup: `docs/audio-routing.md`, `docs/obs-setup.md`.
 
 ## Banned agents
 
