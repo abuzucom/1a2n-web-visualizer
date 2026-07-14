@@ -39,6 +39,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -92,20 +93,43 @@ def referenced_textures(preset):
     return names
 
 
+DOWNLOAD_TIMEOUT_S = 60
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024  # 200 MB -- generous headroom over the
+# ~1-2 MB/1k-preset scale this collection actually is; a response anywhere
+# near this is a sign something's wrong (redirect to the wrong resource,
+# compromised upstream, etc.), not real preset data.
+
+
+def _read_capped(resp, max_bytes):
+    data = resp.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        sys.exit(f"download exceeded the {max_bytes/1e6:.0f} MB safety cap -- aborting")
+    return data
+
+
 def get_zip_bytes(zip_arg):
     if zip_arg:
         data = Path(zip_arg).read_bytes()
         print(f"using local zip: {zip_arg} ({len(data)/1e6:.1f} MB)")
     else:
+        if ZIP_SHA256 is None:
+            sys.exit(
+                "ZIP_SHA256 is not pinned -- refusing to download unverified upstream "
+                "content. Run once with --zip against a manually-downloaded and "
+                "reviewed copy of the archive to learn its digest (printed below), "
+                "then hardcode that value as ZIP_SHA256 in this script before running "
+                "a real network fetch."
+            )
         print(f"downloading {ZIP_URL} ...")
-        with urllib.request.urlopen(ZIP_URL) as resp:
-            data = resp.read()
+        with urllib.request.urlopen(ZIP_URL, timeout=DOWNLOAD_TIMEOUT_S) as resp:
+            data = _read_capped(resp, MAX_DOWNLOAD_BYTES)
         print(f"downloaded {len(data)/1e6:.1f} MB")
     digest = hashlib.sha256(data).hexdigest()
     if ZIP_SHA256 is None:
-        print(f"NOTE: ZIP_SHA256 not yet pinned. This download's sha256 is:\n  {digest}\n"
+        print(f"NOTE: ZIP_SHA256 not yet pinned. This zip's sha256 is:\n  {digest}\n"
               "Verify the zip contents are what you expect, then hardcode this value "
-              "as ZIP_SHA256 in this script before relying on this check for integrity.",
+              "as ZIP_SHA256 in this script -- required before this script will "
+              "perform a real (non---zip) download; see the check above.",
               file=sys.stderr)
     elif digest != ZIP_SHA256:
         sys.exit(
@@ -123,6 +147,27 @@ def load_existing_names(csv_path):
         return {row["name"] for row in csv.DictReader(f)}
 
 
+MAX_ZIP_ENTRIES = 50_000
+MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
+
+
+def safe_extract(zf, dest):
+    """extractall() with zip-bomb guards: caps total entry count and total
+    uncompressed size before extracting anything. (Path traversal / zip-slip
+    is handled by zipfile itself on modern Python -- extractall normalizes
+    and rejects unsafe member paths.)"""
+    infos = zf.infolist()
+    if len(infos) > MAX_ZIP_ENTRIES:
+        sys.exit(f"zip has {len(infos)} entries, over the {MAX_ZIP_ENTRIES} safety cap -- aborting")
+    total_size = sum(info.file_size for info in infos)
+    if total_size > MAX_ZIP_UNCOMPRESSED_BYTES:
+        sys.exit(
+            f"zip would extract to {total_size/1e6:.0f} MB, over the "
+            f"{MAX_ZIP_UNCOMPRESSED_BYTES/1e6:.0f} MB safety cap -- aborting"
+        )
+    zf.extractall(dest)
+
+
 def load_next_chunk_id(index_path):
     if not index_path.exists():
         return 0
@@ -132,21 +177,43 @@ def load_next_chunk_id(index_path):
     return len(data["chunks"])
 
 
-def convert_presets(milk_dir):
+def convert_presets(milk_dir, tmp_dir):
     """Runs tools/convert-milk-presets.js --dir over milk_dir, returns the
-    {name: preset} dict it prints to stdout (progress/warnings go to
-    stderr, passed through to this process's stderr)."""
-    result = subprocess.run(
-        ["node", str(CONVERTER_SCRIPT), "--dir", str(milk_dir)],
-        cwd=ROOT, stdout=subprocess.PIPE, check=True,
-    )
-    return json.loads(result.stdout.decode("utf-8"))
+    {name: preset} dict it printed to stdout (progress/warnings go to
+    stderr, passed through to this process's stderr). Redirects the child's
+    stdout straight to a file rather than buffering it in a subprocess.PIPE,
+    since the full output can run to tens of MB for a large collection --
+    avoids holding two in-memory copies (the pipe buffer and the decoded
+    string) before json.loads even starts."""
+    out_path = tmp_dir / "converted.json"
+    with out_path.open("wb") as out_file:
+        subprocess.run(
+            ["node", str(CONVERTER_SCRIPT), "--dir", str(milk_dir)],
+            cwd=ROOT, stdout=out_file, check=True,
+        )
+    with out_path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def atomic_write_text(path, text):
+    """Writes text to path via a same-directory temp file + os.replace, so a
+    reader (or a crash) never observes a partially-written file -- the path
+    either has the old content or the new content, never a half-written
+    mix."""
+    tmp = path.with_name(f".{path.name}.tmp{os.getpid()}")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def append_chunks(kept, start_chunk_id):
     """Appends `kept` (name -> preset) as new chunk-NNN.js files starting at
     start_chunk_id, and extends index.js's chunks array to match. Returns
-    (new_chunk_id_to_names, total_bytes_written)."""
+    (new_chunk_id_to_names, total_bytes_written).
+
+    Chunk files are written (atomically) before index.js is updated to
+    reference them, so a crash mid-way leaves at worst harmless orphaned
+    chunk files that nothing points to yet -- never an index.js that
+    references a chunk that doesn't fully exist."""
     names = sorted(kept)
     new_chunks = [names[i:i + PRESETS_PER_CHUNK] for i in range(0, len(names), PRESETS_PER_CHUNK)]
 
@@ -158,16 +225,14 @@ def append_chunks(kept, start_chunk_id):
         )
         text = f"window.__bcPresetChunk({cid},{payload});\n"
         path = OUT_DIR / f"chunk-{cid:03d}.js"
-        path.write_text(text, encoding="utf-8")
+        atomic_write_text(path, text)
         total_bytes += path.stat().st_size
 
     text = INDEX_PATH.read_text(encoding="utf-8").strip()
     payload = text[len(INDEX_PREFIX):].rstrip(";")
     data = json.loads(payload)
     data["chunks"].extend(new_chunks)
-    INDEX_PATH.write_text(
-        f"{INDEX_PREFIX}{json.dumps(data, separators=(',', ':'))};\n", encoding="utf-8",
-    )
+    atomic_write_text(INDEX_PATH, f"{INDEX_PREFIX}{json.dumps(data, separators=(',', ':'))};\n")
 
     return new_chunks, total_bytes
 
@@ -183,7 +248,11 @@ def append_inventory_rows(kept, start_chunk_id):
         for name in names[offset:offset + PRESETS_PER_CHUNK]:
             rows.append(f"{esc(name)},presets-extra,{cid}")
 
+    existing = CSV_PATH.read_bytes()
+    needs_leading_newline = existing and not existing.endswith(b"\n")
     with CSV_PATH.open("a", encoding="utf-8") as f:
+        if needs_leading_newline:
+            f.write("\n")
         f.write("\n".join(rows) + "\n")
 
 
@@ -204,13 +273,13 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         with ZipFile(io.BytesIO(zip_bytes)) as zf:
-            zf.extractall(tmp_path)
+            safe_extract(zf, tmp_path)
         # The archive unpacks into a single "<repo>-<sha>" root folder.
         roots = list(tmp_path.iterdir())
         milk_root = roots[0] if len(roots) == 1 else tmp_path
 
         print("converting .milk files (this can take a while)...")
-        converted = convert_presets(milk_root)
+        converted = convert_presets(milk_root, tmp_path)
 
     print(f"converted: {len(converted)}")
 

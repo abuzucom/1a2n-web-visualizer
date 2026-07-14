@@ -20,14 +20,30 @@
  * pure JS -- see patches/milkdrop-shader-converter+*.patch for the fixes
  * this required against Node 22 / a modern bison):
  *   1. apt-get install -y flex bison cmake   (or your platform's equivalent)
- *   2. npm install                            (applies the patch via
- *                                               postinstall: patch-package)
- *   3. cd node_modules/milkdrop-shader-converter && \
+ *   2. npm install --ignore-scripts   (recommended -- see warning below)
+ *   3. npx patch-package               (applies patches/*.patch manually,
+ *                                        since --ignore-scripts also skips
+ *                                        the root postinstall that would
+ *                                        otherwise do this automatically)
+ *   4. cd node_modules/milkdrop-shader-converter && \
  *        npx cmake-js compile --std=c++17 -G "Unix Makefiles"
- * `npm install` deliberately runs with scripts disabled elsewhere in this
- * repo's workflow, so this native build step is manual, not automatic --
- * re-run step 3 whenever node_modules/milkdrop-shader-converter is
- * reinstalled.
+ * Step 4 (the actual native compile) is always manual regardless of which
+ * install mode you used -- package-level "install" scripts like this
+ * one's `cmake-js compile` are exactly the kind of arbitrary code
+ * execution --ignore-scripts is meant to prevent, so it's never run
+ * automatically.
+ *
+ * WARNING: a plain `npm install` (scripts enabled, no --ignore-scripts) is
+ * NOT equivalent to steps 2-3 above and can fail outright: npm runs each
+ * dependency's own "install" script -- including milkdrop-shader-converter's
+ * `cmake-js compile` -- before the root project's own postinstall runs, so
+ * the native addon would attempt to build from unpatched source (against
+ * Node 22 headers it doesn't support) and fail before patch-package ever
+ * gets a chance to apply the fix. Use --ignore-scripts and the manual
+ * sequence above.
+ *
+ * Re-run step 4 whenever
+ * node_modules/milkdrop-shader-converter is reinstalled.
  *
  * Usage (library):
  *   const { convertMilkText } = require('./convert-milk-presets');
@@ -174,9 +190,20 @@ function runBatch(rootDir) {
   const results = {};
   let failCount = 0;
 
+  let collisionCount = 0;
+
   files.forEach((filePath, i) => {
     const name = path.basename(filePath, path.extname(filePath));
     if (i % 200 === 0) console.error(`converting ${i}/${files.length}...`);
+    if (Object.prototype.hasOwnProperty.call(results, name)) {
+      // The name is the sole identity key everywhere downstream (index.js,
+      // chunk files, preset-inventory.csv) -- keep the first occurrence
+      // (stable directory-walk order) rather than silently letting a later
+      // file win with no signal.
+      collisionCount += 1;
+      console.error(`warning: duplicate basename ${JSON.stringify(name)} at ${filePath} -- keeping first occurrence`);
+      return;
+    }
     try {
       const text = fs.readFileSync(filePath, 'utf8');
       const { preset, warnings } = convertMilkText(text);
@@ -187,6 +214,8 @@ function runBatch(rootDir) {
       console.error(`failed: ${JSON.stringify(name)}: ${err.message}`);
     }
   });
+
+  if (collisionCount) console.error(`duplicate basenames skipped: ${collisionCount}`);
 
   console.error(`converted ${Object.keys(results).length}/${files.length} (${failCount} failed)`);
   console.log(JSON.stringify(results));

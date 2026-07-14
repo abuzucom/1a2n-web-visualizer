@@ -452,8 +452,14 @@ function main() {
     return;
   }
 
-  writeAll(pendingWrites, keptLines);
+  // Record the ledger entry before the (larger, multi-file) destructive
+  // writes below, not after: if those fail partway through, the ledger
+  // having already recorded these names is the fail-safe direction (a
+  // future fetch won't resurrect them) versus the reverse order, where a
+  // failure after removal but before the ledger write could let a name
+  // slip back in.
   appendRemovedPresetsCsv(names, byName);
+  writeAll(pendingWrites, keptLines);
   logSummary('Removed', names, summary);
   verifyConsistency(indexCountBefore, csvRowCountBefore, summary);
 }
