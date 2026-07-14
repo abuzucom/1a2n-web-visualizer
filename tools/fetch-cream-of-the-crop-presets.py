@@ -15,8 +15,9 @@ milkdrop-eel-parser + milkdrop-shader-converter -- see that file's header
 for details and the native-build prerequisite).
 
 This is additive, not a full regenerate-from-scratch like
-fetch-extra-presets.py: it downloads the upstream zip (pinned to a commit,
-sha256-verified), converts every .milk file, filters out anything whose
+fetch-extra-presets.py: it downloads the upstream zip (pinned to a commit;
+sha256-checked once ZIP_SHA256 below is pinned to a known-good value --
+see get_zip_bytes()), converts every .milk file, filters out anything whose
 name already exists in preset-inventory.csv or has ever been curated out
 per removed-presets.csv, applies the same texture-availability filter as
 the ansorre pipeline, and APPENDS the survivors as new chunk-NNN.js files

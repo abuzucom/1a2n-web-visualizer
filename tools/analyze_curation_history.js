@@ -14,7 +14,7 @@
  * to curate next, is left entirely to whoever runs it.
  *
  * The commit list is discovered automatically (every commit that ever
- * touched src/presets-extra/ or src/vendor/*.min.js, oldest first) rather
+ * touched src/presets-extra/ or src/vendor/, oldest first) rather
  * than hand-maintained — a hardcoded list drifts out of sync with history
  * rewrites (rebases/squashes change hashes) and is easy to forget to
  * update. recordsFromIndexDiff/recordsFromVendorDiff only produce records
