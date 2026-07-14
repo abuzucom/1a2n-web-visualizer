@@ -297,11 +297,15 @@
     }
 
     // Loads (but does not play) the given playlist index, wrapping around.
-    // Returns the track descriptor, or null if the playlist is empty.
+    // Returns the track descriptor, or null if the playlist is empty/invalid.
     function loadTrack(i) {
       if (!tracks.length || !audioEl) return null;
       trackIdx = (i + tracks.length) % tracks.length;
       const track = tracks[trackIdx];
+      if (!track || typeof track.url !== 'string' || !track.url) {
+        onToast('\u26A0 invalid track config at index ' + trackIdx + ' in src/tracks.js');
+        return null;
+      }
       audioEl.src = track.url;
       onToast('\uD83C\uDFA7 ' + (track.title || track.url));
       return track;
@@ -321,12 +325,12 @@
     }
 
     function nextTrack() {
-      loadTrack(trackIdx + 1);
+      if (!loadTrack(trackIdx + 1)) return Promise.resolve();
       return playTrack();
     }
 
     function prevTrack() {
-      loadTrack(trackIdx - 1);
+      if (!loadTrack(trackIdx - 1)) return Promise.resolve();
       return playTrack();
     }
 
