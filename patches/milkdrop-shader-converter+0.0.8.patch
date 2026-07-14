@@ -1,0 +1,35 @@
+diff --git a/node_modules/milkdrop-shader-converter/hlsl2glslfork/CMakeLists.txt b/node_modules/milkdrop-shader-converter/hlsl2glslfork/CMakeLists.txt
+index f44ddfb..a131e42 100644
+--- a/node_modules/milkdrop-shader-converter/hlsl2glslfork/CMakeLists.txt
++++ b/node_modules/milkdrop-shader-converter/hlsl2glslfork/CMakeLists.txt
+@@ -148,7 +148,7 @@ elseif (APPLE)
+                          COMMAND set ARGS "BISON_SIMPLE=../../tools/bison.simple"
+                          COMMAND set ARGS "BISON_HAIRY=../../tools/bison.simple"
+                          COMMAND bison ARGS -o hlslang_tab.cpp -d -t -v hlslang.y
+-                         COMMAND mv hlslang_tab.hpp hlslang_tab.h
++                         COMMAND cp hlslang_tab.hpp hlslang_tab.h
+                          MAIN_DEPENDENCY hlslang/MachineIndependent/hlslang.y
+                          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/hlslang/MachineIndependent
+                          COMMENT "Executing Bison on hlslang.y"
+@@ -176,7 +176,7 @@ elseif (UNIX)
+                          COMMAND set ARGS "BISON_SIMPLE=../../tools/bison.simple"
+                          COMMAND set ARGS "BISON_HAIRY=../../tools/bison.simple"
+                          COMMAND bison ARGS -o hlslang_tab.cpp -d -t -v hlslang.y
+-                         COMMAND mv hlslang_tab.hpp hlslang_tab.h
++                         COMMAND cp hlslang_tab.hpp hlslang_tab.h
+                          MAIN_DEPENDENCY hlslang/MachineIndependent/hlslang.y
+                          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/hlslang/MachineIndependent
+                          COMMENT "Executing Bison on hlslang.y"
+diff --git a/node_modules/milkdrop-shader-converter/src/main.cpp b/node_modules/milkdrop-shader-converter/src/main.cpp
+index 9e53511..3000ed9 100644
+--- a/node_modules/milkdrop-shader-converter/src/main.cpp
++++ b/node_modules/milkdrop-shader-converter/src/main.cpp
+@@ -123,7 +123,7 @@ NAN_METHOD(ConvertHLSLString) {
+ 
+   bool optimize = true;
+   if (info.Length() > 1 && info[1]->IsBoolean()) {
+-    optimize = info[1]->BooleanValue();
++    optimize = info[1]->BooleanValue(info.GetIsolate());
+   }
+ 
+   try {
