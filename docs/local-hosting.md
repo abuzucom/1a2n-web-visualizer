@@ -17,7 +17,8 @@ No server, no internet.
 ## 2. Local dev server
 
 ```bash
-npm start            # serves ./src via `npx serve`
+npm ci               # install the pinned development dependencies
+npm start            # serves ./src via the pinned `serve` package
 # or, without Node:
 python3 -m http.server --directory src 8000
 ```
@@ -55,6 +56,19 @@ The compose file and Caddyfile apply the following measures:
   so the header is inert here but takes effect immediately if this
   Caddyfile is ever put behind TLS termination.
 - **Server fingerprint removed** — the `Server` header is stripped.
+
+### Accepted CSP exception
+
+The application CSP includes `'unsafe-eval'` because ButterChurn dynamically
+compiles the MilkDrop equations used by its presets. This is required for the
+visualizer to function and is an intentional exception, not a disabled CSP.
+Presets are vendored or generated from a pinned, SHA-256-verified upstream
+archive and reviewed as executable content; they are not fetched from users or
+remote sources at runtime.
+
+This Docker/Caddy configuration is explicitly for local hosting. Docker binds
+the service to `127.0.0.1:8080`, so it must not be exposed to a network or the
+public internet.
 
 ### Notes
 
