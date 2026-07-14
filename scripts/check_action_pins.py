@@ -5,16 +5,21 @@ import re
 import sys
 
 
-ACTION_RE = re.compile(r"^\s*uses:\s*([^\s#]+)")
+ACTION_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)")
 SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
-def main() -> int:
-    workflow_dir = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+def find_failures(workflow_dir: Path) -> list[str]:
     failures: list[str] = []
 
-    for workflow in sorted(workflow_dir.glob("*.y*ml")):
-        for line_number, line in enumerate(workflow.read_text().splitlines(), 1):
+    workflows = sorted({
+        *workflow_dir.glob("*.yml"),
+        *workflow_dir.glob("*.yaml"),
+    })
+    for workflow in workflows:
+        for line_number, line in enumerate(
+            workflow.read_text(encoding="utf-8").splitlines(), 1
+        ):
             match = ACTION_RE.match(line)
             if match is None:
                 continue
@@ -32,6 +37,12 @@ def main() -> int:
                     f"{workflow}:{line_number}: {action} must use a 40-character commit SHA"
                 )
 
+    return failures
+
+
+def main() -> int:
+    workflow_dir = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+    failures = find_failures(workflow_dir)
     if failures:
         print("Mutable GitHub Actions references found:")
         print("\n".join(failures))
