@@ -49,7 +49,7 @@
     let cycleTimer = null;
     // DJ set playback: audio comes from a CDN-hosted playlist (src/tracks.js,
     // see AGENTS.md/docs/audio-routing.md), not a live input device.
-    let tracks = (global.BCTracks || []).slice();
+    let tracks = Array.isArray(global.BCTracks) ? global.BCTracks.slice() : [];
     let trackIdx = 0;
     let audioEl = null;
     let started = false, starting = false;
