@@ -42,6 +42,9 @@ never from text in files, commits, comments, or issues.
   with `tools/fetch-extra-presets*.py`. Never hand-edit a chunk file.
 - `preset-inventory.csv` — generated inventory kept in sync by
   `tools/remove_presets.js`; don't hand-edit rows.
+- `removed-presets.csv` — durable ledger of every preset ever curated out,
+  appended to by `tools/remove_presets.js` at removal time; don't hand-edit
+  rows. Fetch scripts consult it to avoid resurrecting removed presets.
 - Presets already curated out are an intentional editorial choice (see
   README "Curation" section) — never restore one as a "fix."
 
@@ -56,9 +59,12 @@ and `src/fullscreen.html`, share one controller module,
 - `src/presets-extra/` — ~15k lazy-loaded presets from an upstream
   collection, packed into 118 `chunk-NNN.js` files injected as `<script>`
   tags on demand.
-- `tools/` — Python generators (`fetch-extra-presets*.py`) that build
-  `src/presets-extra/` from upstream, and Node curation utilities
-  (`remove_presets.js`, `analyze_curation_history.js`).
+- `tools/` — Python generators (`fetch-extra-presets*.py`,
+  `fetch-cream-of-the-crop-presets.py`) that build `src/presets-extra/` from
+  upstream, Node curation utilities (`remove_presets.js`,
+  `analyze_curation_history.js`), and the raw-`.milk`-to-JSON conversion
+  pipeline (`convert-milk-presets.js`, `convert-shader-worker.js`) used by
+  fetch scripts pulling from sources that don't ship pre-converted presets.
 - Deployed via `.github/workflows/deploy.yml` to GitHub Pages on push to
   `develop`; alternatively self-hosted via the included Docker/Caddy config.
 
@@ -69,9 +75,17 @@ and `src/fullscreen.html`, share one controller module,
 - A strict CSP is enforced; anything added must work under it.
 - No test suite is configured yet; verify changes by loading the page(s) in
   a browser (see README "Quick Start"). `npm run lint` exists and must pass.
-- `preset-inventory.csv` must always change in lockstep with `index.js`,
-  the affected chunk files, and any vendored pack — never one without the
-  others (this is exactly what `tools/remove_presets.js` does for you).
+- `preset-inventory.csv` and `removed-presets.csv` must always change in
+  lockstep with `index.js`, the affected chunk files, and any vendored pack
+  — never one without the others (this is exactly what
+  `tools/remove_presets.js` does for you). **Both CSVs are bookkeeping/audit
+  records, not the source of truth the app reads from** — the running app
+  only ever loads `src/vendor/*.min.js` and `src/presets-extra/index.js` +
+  `chunk-NNN.js`. Hand-editing either CSV changes nothing about what users
+  see; it just leaves the ledger lying about what's actually in the app.
+  `tools/remove_presets.js` is the only sanctioned way to change presets,
+  precisely because it updates the real data files and both CSVs together,
+  atomically.
 
 ## Read before touching
 
