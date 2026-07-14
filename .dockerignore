@@ -1,0 +1,4 @@
+# Allowlist: only the site and Caddy config enter the build context
+*
+!src
+!Caddyfile
