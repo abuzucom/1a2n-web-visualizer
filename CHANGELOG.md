@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.6] - 2026-07-15
+
+### Changed
+- Audited and simplified the README and local-hosting guide. Corrected current
+  preset counts, commands, controls, tooling, security notes, and provenance.
+
 ## [1.6.5] - 2026-07-15
 
 ### Fixed
