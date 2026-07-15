@@ -12,6 +12,10 @@
 
   function setStatus(msg) { statusEl.textContent = msg; }
 
+  function reportDeviceError(error) {
+    setStatus('Audio device error: ' + error.message);
+  }
+
   const viz = BCViz.create(canvas, {
     onToast: setStatus,
     onPreset: function (i) { presetEl.value = i; },
@@ -84,7 +88,9 @@
   document.getElementById('randBtn').addEventListener('click', function () { viz.random(); });
   presetEl.addEventListener('change', function () { viz.goto(parseInt(presetEl.value, 10)); });
   deviceEl.addEventListener('change', function () {
-    if (viz.isStarted() && deviceEl.value) viz.useDeviceById(deviceEl.value);
+    if (viz.isStarted() && deviceEl.value) {
+      viz.useDeviceById(deviceEl.value).catch(reportDeviceError);
+    }
   });
   cycleEl.addEventListener('change', function () {
     if (cycleEl.checked !== viz.isCycling()) viz.toggleCycle();
@@ -100,6 +106,8 @@
   });
 
   // Try to list devices early (labels only appear after permission on Start)
-  if (navigator.mediaDevices) viz.getDevices().then(refreshDeviceList);
+  if (navigator.mediaDevices) {
+    viz.getDevices().then(refreshDeviceList).catch(reportDeviceError);
+  }
   setStatus(keys.length + ' presets. Pick an input (or just hit Start for the default).');
 })();

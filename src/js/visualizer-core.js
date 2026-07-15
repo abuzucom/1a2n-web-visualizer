@@ -24,6 +24,8 @@
     return m && (m.default || m);
   }
 
+  const MAX_PIXEL_RATIO = 2;
+
   // Pre-existing function, not modified by this change. AGENTS.md's own
   // Code quality section scopes its rules to new/modified code and
   // explicitly rules out mass-refactoring untouched code, so this is
@@ -173,9 +175,9 @@
     }
 
     function sizeCanvas() {
-      const dpr = global.devicePixelRatio || 1;
-      canvas.width  = global.innerWidth  * dpr;
-      canvas.height = global.innerHeight * dpr;
+      const dpr = Math.min(global.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+      canvas.width  = Math.round(global.innerWidth * dpr);
+      canvas.height = Math.round(global.innerHeight * dpr);
       if (visualizer) visualizer.setRendererSize(canvas.width, canvas.height);
     }
 
@@ -303,8 +305,9 @@
       try {
         const all = await navigator.mediaDevices.enumerateDevices();
         inputDevices = all.filter(function (d) { return d.kind === 'audioinput'; });
-      } catch {
+      } catch (error) {
         inputDevices = [];
+        console.warn('Unable to enumerate audio devices:', error);
       }
       return inputDevices;
     }
@@ -325,12 +328,20 @@
       return navigator.mediaDevices.getUserMedia({ audio: audio });
     }
 
+    let deviceRequestSeq = 0;
+
     async function useDevice(i) {
+      const requestSeq = ++deviceRequestSeq;
       if (!inputDevices.length) await getDevices();
       if (!inputDevices.length) return null;
       deviceIdx = (i + inputDevices.length) % inputDevices.length;
       const dev = inputDevices[deviceIdx];
-      connectStream(await openStream(dev.deviceId));
+      const stream = await openStream(dev.deviceId);
+      if (requestSeq !== deviceRequestSeq) {
+        stream.getTracks().forEach(function (track) { track.stop(); });
+        return null;
+      }
+      connectStream(stream);
       onToast('\uD83C\uDF99 ' + (dev.label || ('Input ' + (deviceIdx + 1))));
       return dev;
     }
