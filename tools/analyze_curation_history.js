@@ -26,15 +26,13 @@
  *   node tools/analyze_curation_history.js --csv out.csv
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = require('path').join(__dirname, '..');
 
 function discoverCurationCommits() {
-  const out = git('log --reverse --format=%H -- src/presets-extra src/vendor');
+  const out = git('log', '--reverse', '--format=%H', '--', 'src/presets-extra', 'src/vendor');
   return out.trim().split('\n').filter(Boolean);
 }
 
@@ -45,19 +43,33 @@ const VENDOR_FILES = {
   butterchurnPresetsMD1: 'src/vendor/butterchurnPresetsMD1.min.js',
 };
 
-function git(cmd) {
-  return execSync(`git ${cmd}`, { cwd: ROOT, maxBuffer: 1024 * 1024 * 200 }).toString();
+function git(...args) {
+  return execFileSync('git', args, {
+    cwd: ROOT,
+    maxBuffer: 1024 * 1024 * 200,
+    encoding: 'utf8',
+  });
+}
+
+function validateCommit(commit) {
+  if (!/^[0-9a-f]{4,64}\^?$/i.test(commit)) {
+    throw new Error(`unexpected Git commit reference: ${commit}`);
+  }
+  return commit;
 }
 
 function commitMeta(commit) {
-  const out = git(`show -s --format='%H%x09%ci%x09%s' ${commit}`).trim();
+  const out = git('show', '-s', '--format=%H%x09%ci%x09%s', validateCommit(commit)).trim();
   const [hash, date, ...rest] = out.split('\t');
   return { hash: hash.slice(0, 8), date: date.slice(0, 10), subject: rest.join('\t') };
 }
 
 function fileExistsAt(ref, relPath) {
   try {
-    execSync(`git cat-file -e ${ref}:${relPath}`, { cwd: ROOT, stdio: 'ignore' });
+    execFileSync('git', ['cat-file', '-e', `${validateCommit(ref)}:${relPath}`], {
+      cwd: ROOT,
+      stdio: 'ignore',
+    });
     return true;
   } catch {
     return false;
@@ -65,7 +77,7 @@ function fileExistsAt(ref, relPath) {
 }
 
 function getIndexChunks(ref) {
-  const raw = git(`show ${ref}:src/presets-extra/index.js`);
+  const raw = git('show', `${validateCommit(ref)}:src/presets-extra/index.js`);
   const prefix = 'window.BCExtraPresetIndex=';
   const trimmed = raw.trimEnd();
   const json = trimmed.slice(prefix.length, trimmed.length - 1);
@@ -73,28 +85,51 @@ function getIndexChunks(ref) {
 }
 
 function getVendorKeys(ref, relPath) {
-  const raw = git(`show ${ref}:${relPath}`);
-  // fs.mkdtempSync gives us a securely-generated, unpredictable directory
-  // name (unlike a hand-rolled Date.now()/Math.random() filename), so the
-  // temp file inside it can't be pre-guessed or collide with another
-  // process's file in the shared os.tmpdir().
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-'));
-  const tmp = path.join(dir, 'bundle.js');
-  fs.writeFileSync(tmp, raw);
-  try {
-    const m = require(tmp);
-    const presets = m && m.default && typeof m.default.getPresets === 'function'
-      ? m.default.getPresets()
-      : (m && typeof m.getPresets === 'function' ? m.getPresets() : m);
-    return new Set(Object.keys(presets));
-  } finally {
-    delete require.cache[require.resolve(tmp)];
-    fs.rmSync(dir, { recursive: true, force: true });
+  const raw = git('show', `${validateCommit(ref)}:${relPath}`);
+  const returnMatch = raw.match(/getPresets\s*:\s*function\s*\(\)\s*\{\s*return\s+([A-Za-z_$][\w$]*)/);
+  const presetVariable = returnMatch ? returnMatch[1] : 'presets';
+  const marker = new RegExp(`var\\s+${presetVariable}\\s*=\\s*\\{`);
+  const markerMatch = marker.exec(raw);
+  const markerIdx = markerMatch ? markerMatch.index : -1;
+  if (markerIdx !== -1) {
+    const openIdx = markerIdx + markerMatch[0].lastIndexOf('{');
+    const closeIdx = findMatchingCloser(raw, openIdx);
+    if (closeIdx === -1) throw new Error(`could not parse vendor map in ${relPath}`);
+    return new Set(Object.keys(JSON.parse(raw.slice(openIdx, closeIdx + 1))));
   }
+
+  const names = new Set();
+  const assignment = /\["([^"]+)"\]\s*=\s*[A-Za-z_$][\w$]*\(/g;
+  for (const match of raw.matchAll(assignment)) names.add(match[1]);
+  if (!names.size) throw new Error(`unrecognized vendor map in ${relPath}`);
+  return names;
+}
+
+function findMatchingCloser(source, openIdx) {
+  let depth = 0;
+  let inString = null;
+  let escaped = false;
+  for (let i = openIdx; i < source.length; i++) {
+    const character = source[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === inString) inString = null;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      inString = character;
+    } else if (character === '{') {
+      depth++;
+    } else if (character === '}' && --depth === 0) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function touchedFile(commit, relPath) {
-  const out = git(`show --stat ${commit} -- ${JSON.stringify(relPath)}`);
+  const out = git('show', '--stat', validateCommit(commit), '--', relPath);
   return out.includes(relPath);
 }
 

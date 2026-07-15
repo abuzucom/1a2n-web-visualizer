@@ -24,6 +24,7 @@ import base64
 import csv
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -52,6 +53,9 @@ BUILTIN_TEXTURES = {
 SAMPLER_RE = re.compile(r"\bsampler_([A-Za-z0-9_]+)")
 FILTER_PREFIX_RE = re.compile(r"^(?:fw|fc|pw|pc)_")
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".dds"}
+MAX_ZIP_ENTRIES = 50_000
+MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
+MAX_MEMBER_BYTES = 10 * 1024 * 1024
 EXISTING_TEXTURE_NAMES = {
     "cells", "cloudsImage", "lichen", "prayerwheel", "seaweed",
     "smalltiled_lizard_scales",
@@ -158,8 +162,10 @@ def build_mainline_hashes(data, files):
 
 
 def safe_member_path(root, member_name):
-    parts = PurePosixPath(member_name.replace("\\", "/")).parts
-    if not parts or parts[0] in ("", ".") or ".." in parts:
+    normalized = member_name.replace("\\", "/")
+    member_path = PurePosixPath(normalized)
+    parts = member_path.parts
+    if not parts or member_path.is_absolute() or parts[0] in ("", ".") or ".." in parts:
         raise ValueError(f"unsafe ZIP member path: {member_name}")
     destination = root.joinpath(*parts)
     if root not in destination.parents:
@@ -175,6 +181,11 @@ def extract_source(zip_path, destination, offset=0, max_milk=None):  # noqa: C90
     collision_records = []
     source_entries = []
     with ZipFile(zip_path) as archive:
+        infos = archive.infolist()
+        if len(infos) > MAX_ZIP_ENTRIES:
+            raise ValueError(f"ZIP contains more than {MAX_ZIP_ENTRIES} entries")
+        if sum(info.file_size for info in infos) > MAX_ZIP_UNCOMPRESSED_BYTES:
+            raise ValueError("ZIP exceeds the uncompressed-size limit")
         milk_members = [
             info for info in archive.infolist()
             if not info.is_dir() and info.filename.lower().endswith(".milk")
@@ -186,6 +197,11 @@ def extract_source(zip_path, destination, offset=0, max_milk=None):  # noqa: C90
         for info in archive.infolist():
             if info.is_dir():
                 continue
+            if info.file_size > MAX_MEMBER_BYTES:
+                raise ValueError(f"ZIP member exceeds {MAX_MEMBER_BYTES} byte limit: {info.filename}")
+            mode = (info.external_attr >> 16) & 0o170000
+            if mode == 0o120000:
+                raise ValueError(f"ZIP symlink is not allowed: {info.filename}")
             lower = info.filename.replace("\\", "/").lower()
             is_milk = lower.endswith(".milk")
             is_texture = (
@@ -313,19 +329,31 @@ def build_texture_bundle(texture_files):
 
 
 def write_texture_bundle(images, records):
-    TEXTURE_BUNDLE_PATH.write_text(
+    atomic_write_text(TEXTURE_BUNDLE_PATH,
         "window.butterchurnExtraImagesExp="
         + "{getImages:function(){return "
         + json.dumps(images, separators=(",", ":"))
-        + "}};\n",
-        encoding="utf-8",
+        + "}};\n"
     )
-    TEXTURE_MANIFEST_PATH.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(TEXTURE_MANIFEST_PATH, json.dumps(records, indent=2) + "\n")
 
 
 def csv_escape(value):
     text = str(value)
     return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(c in text for c in '",\n') else text
+
+
+def atomic_write_text(path, text):
+    """Write one generated file without exposing a partial file."""
+    temporary = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, delete=False,
+    )
+    try:
+        with temporary:
+            temporary.write(text)
+        os.replace(temporary.name, path)
+    finally:
+        Path(temporary.name).unlink(missing_ok=True)
 
 
 def main():  # noqa: C901
@@ -509,9 +537,8 @@ def main():  # noqa: C901
         physical = next_physical + offset
         filename = f"chunk-{physical}.js"
         payload = {name: kept[name]["preset"] for name in chunk_names}
-        (OUT_DIR / filename).write_text(
+        atomic_write_text(OUT_DIR / filename,
             f"window.__bcPresetChunk({logical},{json.dumps(payload, separators=(',', ':'), sort_keys=True)});\n",
-            encoding="utf-8",
         )
         data["chunks"].append(chunk_names)
         files.append(filename)
@@ -522,20 +549,19 @@ def main():  # noqa: C901
             manifest["presets"].append(record)
 
     for cid, (path, chunk) in normalized_chunks.items():
-        path.write_text(
+        atomic_write_text(path,
             f"window.__bcPresetChunk({cid},{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n",
-            encoding="utf-8",
         )
 
     data["v"] = max(2, data.get("v", 1))
     data["files"] = files
-    INDEX_PATH.write_text(INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n", encoding="utf-8")
-    with CSV_PATH.open("a", encoding="utf-8") as handle:
-        for offset, chunk_names in enumerate(new_chunks):
-            logical = start_logical + offset
-            for name in chunk_names:
-                handle.write(f"{csv_escape(name)},presets-extra,{logical}\n")
-    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
+    csv_rows = []
+    for offset, chunk_names in enumerate(new_chunks):
+        logical = start_logical + offset
+        csv_rows.extend(f"{csv_escape(name)},presets-extra,{logical}\n" for name in chunk_names)
+    atomic_write_text(CSV_PATH, CSV_PATH.read_text(encoding="utf-8") + "".join(csv_rows))
+    atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
     if zip_paths:
         write_texture_bundle(texture_images, texture_records)
 

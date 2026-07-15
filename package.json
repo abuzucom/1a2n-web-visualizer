@@ -6,7 +6,7 @@
   "scripts": {
     "start": "serve src",
     "dev": "python3 -m http.server --directory src 8000",
-    "lint": "eslint . && ruff check tools/",
+    "lint": "eslint . && python -m ruff check tools/",
     "postinstall": "patch-package"
   },
   "keywords": [

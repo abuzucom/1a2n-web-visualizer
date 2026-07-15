@@ -45,6 +45,10 @@ ZIP_URL = (
 ZIP_SHA256 = "6d907cf1a47af50332301ddd171164c9b593eed2b02659fe183b72319274fa86"
 
 PRESETS_PER_CHUNK = 128
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
+MAX_ZIP_ENTRIES = 50_000
+MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
+MAX_MEMBER_BYTES = 10 * 1024 * 1024
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "presets-extra"
@@ -80,12 +84,17 @@ def referenced_textures(preset):
 
 def get_zip_bytes(zip_arg):
     if zip_arg:
+        size = Path(zip_arg).stat().st_size
+        if size > MAX_DOWNLOAD_BYTES:
+            raise ValueError(f"local ZIP exceeds {MAX_DOWNLOAD_BYTES} byte limit")
         data = Path(zip_arg).read_bytes()
         print(f"using local zip: {zip_arg} ({len(data)/1e6:.1f} MB)")
     else:
         print(f"downloading {ZIP_URL} ...")
         with urllib.request.urlopen(ZIP_URL) as resp:
-            data = resp.read()
+            data = resp.read(MAX_DOWNLOAD_BYTES + 1)
+        if len(data) > MAX_DOWNLOAD_BYTES:
+            raise ValueError(f"download exceeds {MAX_DOWNLOAD_BYTES} byte limit")
         print(f"downloaded {len(data)/1e6:.1f} MB")
     digest = hashlib.sha256(data).hexdigest()
     if digest != ZIP_SHA256:
@@ -106,6 +115,12 @@ def collect_presets(zf, allowed):
       excluded: dict of preset name -> sorted missing texture names
       bad_json: list of preset names that failed to parse
     """
+    infos = zf.infolist()
+    if len(infos) > MAX_ZIP_ENTRIES:
+        raise ValueError(f"ZIP contains more than {MAX_ZIP_ENTRIES} entries")
+    total_size = sum(info.file_size for info in infos)
+    if total_size > MAX_ZIP_UNCOMPRESSED_BYTES:
+        raise ValueError("ZIP exceeds the uncompressed-size limit")
     members = sorted(
         m for m in zf.namelist()
         if m.startswith("converted/") and m.endswith(".json")
@@ -117,6 +132,9 @@ def collect_presets(zf, allowed):
     for member in members:
         name = member[len("converted/"):-len(".json")]
         try:
+            info = zf.getinfo(member)
+            if info.file_size > MAX_MEMBER_BYTES:
+                raise ValueError(f"member exceeds {MAX_MEMBER_BYTES} byte limit")
             preset = json.loads(zf.read(member).decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
             bad_json.append(name)
