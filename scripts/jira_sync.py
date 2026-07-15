@@ -49,8 +49,7 @@ def jira_request(method: str, path: str, payload: dict[str, Any] | None = None) 
             content = response.read()
             return json.loads(content) if content else None
     except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Jira API {method} {path} failed ({error.code}): {detail}") from error
+        raise RuntimeError(f"Jira API request failed ({error.code})") from error
 
 
 def github_request(path: str) -> Any:
@@ -107,19 +106,19 @@ def add_comment(issue_key: str, marker: str, text: str) -> None:
     jira_request("POST", f"/rest/api/3/issue/{issue_key}/comment", {"body": adf_text(f"{marker}\n{text}")})
 
 
-def escape_jql(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
 def find_existing_pr_issue(pr_url: str) -> str | None:
-    jql = (
-        f'project = {PROJECT_KEY} AND labels = github-pr '
-        f'AND description ~ "{escape_jql(pr_url)}"'
-    )
-    query = urllib.parse.urlencode({"jql": jql, "maxResults": 1, "fields": "key"})
+    # Keep event data out of JQL. Search the fixed integration label, then
+    # match the GitHub URL in returned descriptions locally.
+    jql = "labels = github-pr"
+    query = urllib.parse.urlencode({"jql": jql, "maxResults": 100, "fields": "key,description"})
     result = jira_request("GET", f"/rest/api/3/search/jql?{query}") or {}
-    issues = result.get("issues", [])
-    return issues[0]["key"] if issues else None
+    for issue in result.get("issues", []):
+        if not issue.get("key", "").upper().startswith(f"{PROJECT_KEY}-"):
+            continue
+        description = plain_text(issue.get("fields", {}).get("description"))
+        if pr_url in description:
+            return issue["key"]
+    return None
 
 
 def create_issue(pr_url: str, title: str, branch: str) -> str:
@@ -210,8 +209,11 @@ def main() -> int:
             deployment_sync(event)
         else:
             pr_sync(event)
-    except (KeyError, RuntimeError, urllib.error.URLError) as error:
+    except RuntimeError as error:
         print(f"Jira sync failed: {error}", file=sys.stderr)
+        return 1
+    except (KeyError, urllib.error.URLError):
+        print("Jira sync failed: request could not be completed", file=sys.stderr)
         return 1
     return 0
 
