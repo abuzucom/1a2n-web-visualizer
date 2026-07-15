@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.4] - 2026-07-15
+
+### Fixed
+- Corrected the logical IDs passed by all 377 experimental NestDrop preset
+  chunks. Mainline chunk insertion had shifted the generated `index.js`
+  mapping without updating the chunks' registration callbacks, causing valid
+  `[EXP]` presets to be reported as unavailable at runtime.
+
 ## [1.6.3] - 2026-07-11
 
 ### Added
