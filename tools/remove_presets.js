@@ -41,6 +41,7 @@ const CSV_PATH = path.join(ROOT, 'preset-inventory.csv');
 const REMOVED_CSV_PATH = path.join(ROOT, 'removed-presets.csv');
 const CHUNK_DIR = path.join(ROOT, 'src/presets-extra');
 const VENDOR_DIR = path.join(ROOT, 'src/vendor');
+let chunkFiles = null;
 
 function readNamesFile(file) {
   const lines = fs.readFileSync(file, 'utf8').split('\n');
@@ -86,7 +87,11 @@ function readIndex() {
     throw new Error('unexpected index.js wrapper format');
   }
   const json = trimmed.slice(prefix.length, trimmed.length - suffix.length);
-  return { data: JSON.parse(json), prefix, suffix };
+  const data = JSON.parse(json);
+  if (data.files && data.files.length !== data.chunks.length) {
+    throw new Error('index.js chunks/files mapping has different lengths');
+  }
+  return { data, prefix, suffix };
 }
 
 function writeIndex({ data, prefix, suffix }) {
@@ -96,7 +101,9 @@ function writeIndex({ data, prefix, suffix }) {
 // --- src/presets-extra/chunk-NNN.js (JSON) ---
 
 function chunkPath(id) {
-  return path.join(CHUNK_DIR, `chunk-${String(id).padStart(3, '0')}.js`);
+  const filename = chunkFiles && chunkFiles[id]
+    ? chunkFiles[id] : `chunk-${String(id).padStart(3, '0')}.js`;
+  return path.join(CHUNK_DIR, filename);
 }
 
 function readChunk(id) {
@@ -433,7 +440,9 @@ function verifyConsistency(indexCountBefore, csvRowCountBefore, summary) {
 function main() {
   const { names, dryRun } = parseAndValidateNames();
 
-  const indexCountBefore = countIndexNames(readIndex().data);
+  const initialIndex = readIndex().data;
+  chunkFiles = initialIndex.files || null;
+  const indexCountBefore = countIndexNames(initialIndex);
   const csvRowCountBefore = fs.readFileSync(CSV_PATH, 'utf8').split('\n').filter((l) => l.length > 0).length;
 
   const csvLines = fs.readFileSync(CSV_PATH, 'utf8').split('\n');

@@ -161,7 +161,10 @@
 
         const timer = setTimeout(fail, 10000);
         const s = document.createElement('script');
-        s.src = 'presets-extra/chunk-' + String(cid).padStart(3, '0') + '.js';
+        const filename = extraIndex.files && extraIndex.files[cid]
+          ? extraIndex.files[cid]
+          : 'chunk-' + String(cid).padStart(3, '0') + '.js';
+        s.src = 'presets-extra/' + filename;
         s.onerror = function () { clearTimeout(timer); fail(); };
         s.onload = function () { clearTimeout(timer); fail(); }; // no-op if the chunk registered
         chunkScripts[cid] = s;
@@ -349,11 +352,20 @@
         visualizer = Butterchurn.createVisualizer(audioCtx, canvas, {
           width: canvas.width, height: canvas.height, pixelRatio: 1, textureRatio: 1
         });
-        const ImagesLib = getLib('butterchurnExtraImages');
-        if (ImagesLib && ImagesLib.getImages) {
+        const imageLibs = [
+          getLib('butterchurnExtraImages'),
+          getLib('butterchurnExtraImagesExp'),
+        ].filter(function (lib) { return lib && lib.getImages; });
+        if (imageLibs.length) {
           // Custom textures used by a handful of presets; optional — presets
           // render without them, just with plainer backgrounds.
-          try { visualizer.loadExtraImages(ImagesLib.getImages()); } catch (e) {
+          try {
+            const images = {};
+            imageLibs.forEach(function (lib) {
+              Object.assign(images, lib.getImages());
+            });
+            visualizer.loadExtraImages(images);
+          } catch (e) {
             console.warn('Failed to load extra images (non-critical):', e);
           }
         }
