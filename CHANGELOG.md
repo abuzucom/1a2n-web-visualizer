@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.6] - 2026-07-15
+
+### Changed
+- Audited and simplified the README and local-hosting guide. Corrected current
+  preset counts, commands, controls, tooling, security notes, and provenance.
+
 ## [1.6.5] - 2026-07-15
 
 ### Fixed
@@ -30,14 +36,14 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.6.3] - 2026-07-11
 
 ### Added
-- `tools/remove_presets.js` — removes a given list of exact preset names
+- `tools/remove_presets.js` - removes a given list of exact preset names
   from `src/presets-extra/index.js`, their backing chunk files, any
   vendored `.min.js` pack that contains them, and the matching
   `preset-inventory.csv` rows, with a pre-flight existence check (aborts
   with nothing written if any name isn't found) and a post-edit
   consistency check. Productionizes the manual curation procedure so it
   doesn't need to be reconstructed for each batch.
-- `tools/analyze_curation_history.js` — reconstructs the full history of
+- `tools/analyze_curation_history.js` - reconstructs the full history of
   presets curated out of this repo from `git log` and prints neutral word
   /bigram/contributor-prefix frequency statistics over their names, with
   no built-in notion of "risky" content, so anyone using this repo can
@@ -54,7 +60,7 @@ All notable changes to this project are documented here. Format loosely follows
   `src/presets-extra/` (38 chunk files) and the vendored
   `butterchurnPresetsExtra`/`butterchurnPresetsExtra2` packs, with the
   matching `preset-inventory.csv` rows dropped. Same intentional editorial
-  curation as prior batches — see the *Curation* section in the README.
+  curation as prior batches - see the *Curation* section in the README.
   Ships 14,770 deduplicated presets now (378 vendored + 14,392
   lazy-loaded from 14,458 index names minus 66 that duplicate a vendored
   name).
@@ -70,7 +76,7 @@ All notable changes to this project are documented here. Format loosely follows
   edit colors2`, `Optiks - Nerve`), plus every preset whose name contains
   "seizure" or "sezure" (28 presets, mostly `Eo.S. + Phat` /
   `Bdrv`/`beta106`/`bdrv + al` "recursion frustum" and "Let_go_Wana_Sezure"
-  variants). Same intentional editorial curation as prior batches — see the
+  variants). Same intentional editorial curation as prior batches - see the
   *Curation* section in the README. Ships 14,954 deduplicated presets now
   (381 vendored + 14,573 lazy-loaded from 14,640 index names minus 67 that
   duplicate a vendored name).
@@ -87,12 +93,12 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.6.0] - 2026-07-07
 
 ### Added
-- `preset-inventory.csv` — a full inventory of every preset name and the pack
+- `preset-inventory.csv` - a full inventory of every preset name and the pack
   that provides it (a vendored pack, or the lazy-loaded `presets-extra`
   collection with its chunk id), generated with the same dedup/precedence
   rules `visualizer-core.js` applies at runtime. Reflects the curated set
   (14,770 rows).
-- `tools/fetch-extra-presets-curated.py` — regenerates `src/presets-extra/`
+- `tools/fetch-extra-presets-curated.py` - regenerates `src/presets-extra/`
   like `fetch-extra-presets.py`, but diffs a fresh upstream pull against the
   currently committed `index.js` and re-excludes anything present upstream
   but missing from the current tree, so running it preserves curation
@@ -111,7 +117,7 @@ All notable changes to this project are documented here. Format loosely follows
   `butterchurnPresetsMD1`), with the matching `preset-inventory.csv` rows
   removed. These removals are an **intentional content-curation choice for
   this deployment**, independent of the upstream collection and the butterchurn
-  libraries — not an upstream change. `tools/fetch-extra-presets-curated.py`
+  libraries - not an upstream change. `tools/fetch-extra-presets-curated.py`
   (above) now re-applies this curation automatically on regeneration; the
   plain `fetch-extra-presets.py` still rebuilds `src/presets-extra/` from
   upstream verbatim and will reintroduce these presets (see the *Curation*
@@ -119,7 +125,7 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Fixed
 - Corrected the documented preset counts to match the current curated packs:
-  14,770 deduplicated presets total — 378 vendored (100 base + 135 new from
+  14,770 deduplicated presets total - 378 vendored (100 base + 135 new from
   Extra + 116 new from Extra2 + 27 new from MD1, after merge-order dedup)
   plus 14,392 lazy-loaded (14,458 index names minus 66 that duplicate a
   vendored name). Replaces the stale 15,330 / 15,264 totals and 387 / 385
@@ -143,7 +149,7 @@ All notable changes to this project are documented here. Format loosely follows
   offline, and under the strict CSP; an in-memory LRU keeps at most 16
   chunks resident. If the folder is removed the app falls back to the 387
   vendored presets.
-- `tools/fetch-extra-presets.py` — stdlib-only generator that downloads the
+- `tools/fetch-extra-presets.py` - stdlib-only generator that downloads the
   pinned, sha256-verified upstream zip and regenerates `src/presets-extra/`,
   excluding presets that reference custom textures the app can't supply
   (`tools/butterchurn-image-names.json` lists the vendored textures).
@@ -227,8 +233,8 @@ All notable changes to this project are documented here. Format loosely follows
 ### Added
 - Shared `visualizer-core.js` controller (`window.BCViz`) holding all butterchurn
   setup, preset cycling, and audio-device handling.
-- `obs.html` — OBS browser-source page with a hideable control panel.
-- `fullscreen.html` — standalone keyboard-only fullscreen page.
+- `obs.html` - OBS browser-source page with a hideable control panel.
+- `fullscreen.html` - standalone keyboard-only fullscreen page.
 - Per-page CSS (`panel.css`, `fullscreen.css`) and UI wiring
   (`obs-ui.js`, `fullscreen-ui.js`).
 - Docs: OBS setup and audio-routing guides.
