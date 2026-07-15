@@ -7,7 +7,7 @@ browser. Includes 67,134 deduplicated presets: 378 from the four
 butterchurn preset packs, 22,753 mainline lazy-loaded presets from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
 collection, and 44,003 experimental NestDrop presets; the latter two
-collections are lazy-loaded in chunks — fully self-hosted (no CDN).
+collections are lazy-loaded in chunks - fully self-hosted (no CDN).
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html` and `/fullscreen.html`). GitHub Actions deploys it from the `develop` branch.
 
@@ -20,59 +20,59 @@ Both entry points share one controller module:
 
 ```text
 butterchurn-visualizer/
-├── README.md
-├── LICENSE
-├── CHANGELOG.md
-├── .gitignore
-├── package.json            # Development tools and server configuration
-├── preset-inventory.csv    # Every preset name, its pack, and chunk id
-├── Caddyfile               # Caddy web server configuration
-├── Dockerfile              # Container definition for local hosting
-├── docker-compose.yml      # Docker Compose deployment configuration
-├── .dockerignore
-├── .github/
-│   └── workflows/          # Deployment, lint, security, and pin checks
-├── patches/                # Native converter compatibility patch
-├── scripts/                # CI checks and instruction synchronization
-├── tests/                  # CI check tests
-├── src/
-│   ├── index.html          # Landing page
-│   ├── obs.html            # OBS browser source entry point
-│   ├── fullscreen.html     # Standalone fullscreen entry point
-│   ├── css/
-│   │   ├── panel.css
-│   │   └── fullscreen.css
-│   ├── js/
-│   │   ├── visualizer-core.js   # shared BCViz controller (the brains)
-│   │   ├── obs-ui.js            # panel wiring
-│   │   └── fullscreen-ui.js     # keyboard wiring
-│   ├── vendor/                  # vendored butterchurn + preset/texture packs
-│   │   ├── butterchurn.min.js
-│   │   ├── butterchurnExtraImages.min.js
-│   │   ├── butterchurnExtraImagesExp.js
-│   │   ├── butterchurnPresets.min.js
-│   │   ├── butterchurnPresetsExtra.min.js
-│   │   ├── butterchurnPresetsExtra2.min.js
-│   │   └── butterchurnPresetsMD1.min.js
-│   └── presets-extra/           # ~67k lazy-loaded presets (generated, committed)
-│       ├── index.js             # preset name → chunk mapping
-│       └── chunk-NNN.js         # generated logical/physical chunks
-├── tools/
-│   ├── fetch-extra-presets.py           # regenerates src/presets-extra/ from upstream
-│   ├── fetch-extra-presets-curated.py   # same, but re-applies prior curation
-│   ├── import-nestdrop-presets.py       # imports supplied .milk archives as [EXP]
-│   ├── compare-experimental-presets.py  # reports EXP/mainline equivalence
-│   ├── remove-experimental-duplicates.py # removes approved EXP curation targets
-│   ├── fetch-cream-of-the-crop-presets.py # adds raw MilkDrop source presets
-│   ├── convert-milk-presets.js           # converts raw .milk to JSON
-│   ├── convert-shader-worker.js          # isolated shader conversion worker
-│   ├── remove_presets.js                 # removes exact curated names
-│   ├── validate-experimental-presets.js  # checks generated equation JavaScript
-│   └── butterchurn-image-names.json
-└── docs/
-    ├── obs-setup.md
-    ├── audio-routing.md
-    └── local-hosting.md
++-- README.md
++-- LICENSE
++-- CHANGELOG.md
++-- .gitignore
++-- package.json            # Development tools and server configuration
++-- preset-inventory.csv    # Every preset name, its pack, and chunk id
++-- Caddyfile               # Caddy web server configuration
++-- Dockerfile              # Container definition for local hosting
++-- docker-compose.yml      # Docker Compose deployment configuration
++-- .dockerignore
++-- .github/
+|   +-- workflows/          # Deployment, lint, security, and pin checks
++-- patches/                # Native converter compatibility patch
++-- scripts/                # CI checks and instruction synchronization
++-- tests/                  # CI check tests
++-- src/
+|   +-- index.html          # Landing page
+|   +-- obs.html            # OBS browser source entry point
+|   +-- fullscreen.html     # Standalone fullscreen entry point
+|   +-- css/
+|   |   +-- panel.css
+|   |   +-- fullscreen.css
+|   +-- js/
+|   |   +-- visualizer-core.js   # shared BCViz controller (the brains)
+|   |   +-- obs-ui.js            # panel wiring
+|   |   +-- fullscreen-ui.js     # keyboard wiring
+|   +-- vendor/                  # vendored butterchurn + preset/texture packs
+|   |   +-- butterchurn.min.js
+|   |   +-- butterchurnExtraImages.min.js
+|   |   +-- butterchurnExtraImagesExp.js
+|   |   +-- butterchurnPresets.min.js
+|   |   +-- butterchurnPresetsExtra.min.js
+|   |   +-- butterchurnPresetsExtra2.min.js
+|   |   +-- butterchurnPresetsMD1.min.js
+|   +-- presets-extra/           # ~67k lazy-loaded presets (generated, committed)
+|       +-- index.js             # preset name -> chunk mapping
+|       +-- chunk-NNN.js         # generated logical/physical chunks
++-- tools/
+|   +-- fetch-extra-presets.py           # regenerates src/presets-extra/ from upstream
+|   +-- fetch-extra-presets-curated.py   # same, but re-applies prior curation
+|   +-- import-nestdrop-presets.py       # imports supplied .milk archives as [EXP]
+|   +-- compare-experimental-presets.py  # reports EXP/mainline equivalence
+|   +-- remove-experimental-duplicates.py # removes approved EXP curation targets
+|   +-- fetch-cream-of-the-crop-presets.py # adds raw MilkDrop source presets
+|   +-- convert-milk-presets.js           # converts raw .milk to JSON
+|   +-- convert-shader-worker.js          # isolated shader conversion worker
+|   +-- remove_presets.js                 # removes exact curated names
+|   +-- validate-experimental-presets.js  # checks generated equation JavaScript
+|   +-- butterchurn-image-names.json
++-- docs/
+    +-- obs-setup.md
+    +-- audio-routing.md
+    +-- local-hosting.md
 ```
 
 ### Experimental NestDrop presets
@@ -172,7 +172,7 @@ https://visualizer.1a2n.net/fullscreen.html
 
 On every push to `develop`, `.github/workflows/deploy.yml` publishes `src/`.
 
-To deploy from a fork or new clone, select **Settings → Pages → Source → GitHub Actions**. The site will be available at `https://<user>.github.io/<repo>/`.
+To deploy from a fork or new clone, select **Settings -> Pages -> Source -> GitHub Actions**. The site will be available at `https://<user>.github.io/<repo>/`.
 
 GitHub Pages serves content over HTTPS, so browser audio capture needs no local workaround. In OBS, create a Browser Source in URL mode and use the `obs.html` URL.
 
@@ -258,8 +258,8 @@ to build the converter.
 packed into 184 logical chunks that load lazily through injected `<script>` tags
 when a user first selects one of their presets (works from `file://` and
 under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
-The 66 presets that duplicate a vendored pack name are skipped at startup —
-vendored packs win — for 22,753 unique mainline presets. If the folder is
+The 66 presets that duplicate a vendored pack name are skipped at startup -
+vendored packs win - for 22,753 unique mainline presets. If the folder is
 missing, the app silently falls back to the 378 vendored presets.
 
 The experimental NestDrop import adds 44,003 `[EXP] ` presets in 377 physical
@@ -279,10 +279,10 @@ python3 tools/fetch-extra-presets-curated.py --zip P   # use an already-download
 python3 tools/fetch-extra-presets-curated.py --dry-run # preview the diff, write nothing
 ```
 
-`tools/fetch-extra-presets.py` is the same generator without curation —
+`tools/fetch-extra-presets.py` is the same generator without curation -
 useful for a clean reset from upstream, or as the one both scripts import
 their fetch/filter/write logic from. Both pin the upstream commit and verify
-the zip's sha256 (constants at the top of `fetch-extra-presets.py` — bump
+the zip's sha256 (constants at the top of `fetch-extra-presets.py` - bump
 them when upstream grows), and exclude any preset referencing custom
 textures that neither butterchurn nor the vendored extra-images pack can
 supply. The upstream collection has
@@ -313,12 +313,12 @@ Three things to know if you're regenerating presets:
 - **`presets-extra` regeneration is curation-safe by default.**
   `tools/fetch-extra-presets-curated.py` diffs a fresh upstream pull against
   the currently committed `index.js` *and* against `removed-presets.csv`,
-  excluding anything caught by either check — so running it preserves this
+  excluding anything caught by either check - so running it preserves this
   curation instead of undoing it. Its plain counterpart,
   `tools/fetch-extra-presets.py`, has no such memory: it rebuilds
   `src/presets-extra/` verbatim from the pinned upstream zip and will
   reintroduce every curated-out preset, so only use it for a clean reset.
-  Neither script touches the vendored `.min.js` packs — replacing one with a
+  Neither script touches the vendored `.min.js` packs - replacing one with a
   stock npm build restores the presets removed from that pack, and that
   curation has to be re-applied by hand.
 - **The removal lists come from the app.** The `fullscreen.html` interface can
@@ -327,7 +327,7 @@ Three things to know if you're regenerating presets:
   source of the names curated out of the codebase here.
 - **New upstream sources should consult `removed-presets.csv` too.** A fetch
   script pulling presets from a different collection should exclude names
-  present in the ledger, the same way `fetch-extra-presets-curated.py` does —
+  present in the ledger, the same way `fetch-extra-presets-curated.py` does -
   not just names absent from the current `index.js` snapshot, since a
   different source could coincidentally share a name with something removed
   from an entirely different collection.
@@ -348,14 +348,14 @@ node tools/remove_presets.js --name "Foo" --name "Bar"
 node tools/remove_presets.js --names-file names.txt --dry-run
 ```
 
-It does not update the preset counts documented in this README/CHANGELOG —
+It does not update the preset counts documented in this README/CHANGELOG -
 recompute those by hand after a removal (see the numbers in the "Extra
 Presets" section above for the formula).
 
 `tools/analyze_curation_history.js` reconstructs the full history of presets
-curated out via `git log` — auto-discovering every commit that ever touched
+curated out via `git log` - auto-discovering every commit that ever touched
 `src/presets-extra/` or `src/vendor/*.min.js`, so it stays correct across
-history rewrites instead of relying on a hand-maintained commit list — and
+history rewrites instead of relying on a hand-maintained commit list - and
 prints neutral frequency statistics (top words, bigrams, and likely
 contributor-name prefixes) over their names. It has no built-in notion of
 what's "risky" or unwanted, just the raw data, so anyone using this repo can
