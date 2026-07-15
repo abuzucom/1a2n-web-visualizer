@@ -11,6 +11,7 @@ from typing import Any
 
 
 CODE_OWNER = "itsjustatank"
+MAX_FILE_PAGES = 50
 AGENT_FILES = {
     "AGENTS.md", "CLAUDE.md", "GEMINI.md", "CONVENTIONS.md",
     ".cursorrules", ".clinerules", ".windsurfrules",
@@ -34,7 +35,7 @@ def is_protected(path: str) -> bool:
     name = PurePosixPath(normalized).name
     if name in AGENT_FILES:
         return True
-    if normalized in PROTECTED_FILES or normalized.startswith(PROTECTED_PREFIXES):
+    if name in PROTECTED_FILES or normalized.startswith(PROTECTED_PREFIXES):
         return True
     return normalized.startswith("src/") and normalized.endswith((".html", ".htm"))
 
@@ -63,12 +64,12 @@ def changed_files(event: dict[str, Any]) -> list[str]:
     number = event["pull_request"]["number"]
     files = []
     page = 1
-    while True:
+    for page in range(1, MAX_FILE_PAGES + 1):
         batch = github_get(f"/repos/{repository}/pulls/{number}/files?per_page=100&page={page}")
         files.extend(item["filename"] for item in batch)
         if len(batch) < 100:
             return files
-        page += 1
+    raise RuntimeError(f"pull request file list exceeded {MAX_FILE_PAGES * 100} files")
 
 
 def current_owner_approval(event: dict[str, Any]) -> bool:

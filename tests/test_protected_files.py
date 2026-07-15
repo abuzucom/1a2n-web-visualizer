@@ -10,7 +10,10 @@ class ProtectedFileTests(unittest.TestCase):
                 self.assertTrue(is_protected(path))
 
     def test_protects_runtime_and_deployment_files(self) -> None:
-        for path in ("package-lock.json", "Dockerfile", "Caddyfile", "src/fullscreen.html", "src/js/app.js"):
+        for path in (
+            "package-lock.json", "infra/Dockerfile", "deploy/Caddyfile",
+            "infra/docker-compose.yml", "src/fullscreen.html", "src/js/app.js",
+        ):
             with self.subTest(path=path):
                 self.assertTrue(is_protected(path))
 
