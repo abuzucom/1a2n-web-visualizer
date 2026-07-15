@@ -27,9 +27,15 @@
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
-      if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(function (error) {
+          say('Fullscreen failed: ' + error.message);
+        });
+      }
     } else if (document.exitFullscreen) {
-      document.exitFullscreen();
+      document.exitFullscreen().catch(function (error) {
+        say('Fullscreen exit failed: ' + error.message);
+      });
     }
   }
 
@@ -108,7 +114,9 @@
         say('Cycle: ' + viz.setCycleSecs(
           viz.getCycleSecs() + (viz.getCycleSecs() < 10 ? 1 : 5)) + 's');
         break;
-      case 'd': case 'D': viz.nextDevice(); break;
+      case 'd': case 'D':
+        viz.nextDevice().catch(function (error) { say('Audio device error: ' + error.message); });
+        break;
       case 'f': case 'F': toggleFullscreen(); break;
       case 'x': case 'X': removeCurrent(); break;
       case 'l': case 'L': showExcludedPanel(); break;
