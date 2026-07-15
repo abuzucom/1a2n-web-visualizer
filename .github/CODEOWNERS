@@ -1,0 +1,22 @@
+# Security-sensitive instructions, automation, dependencies, and deployment.
+AGENTS.md @itsjustatank
+**/AGENTS.md @itsjustatank
+CLAUDE.md @itsjustatank
+GEMINI.md @itsjustatank
+CONVENTIONS.md @itsjustatank
+**/.cursorrules @itsjustatank
+**/.clinerules @itsjustatank
+**/.windsurfrules @itsjustatank
+.github/** @itsjustatank
+scripts/** @itsjustatank
+tools/** @itsjustatank
+patches/** @itsjustatank
+package.json @itsjustatank
+package-lock.json @itsjustatank
+Dockerfile @itsjustatank
+docker-compose.yml @itsjustatank
+Caddyfile @itsjustatank
+.dockerignore @itsjustatank
+src/*.html @itsjustatank
+src/js/** @itsjustatank
+src/vendor/** @itsjustatank
