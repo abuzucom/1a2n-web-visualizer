@@ -223,8 +223,15 @@
         if (cid != null) touchChunk(cid);
         try {
           visualizer.loadPreset(presets[name], blend != null ? blend : defaultBlend);
-        } catch {
+        } catch (error) {
           failed.add(name);
+          console.warn('Preset load failed; skipping:', {
+            name: name,
+            logicalChunk: cid == null ? null : cid,
+            physicalFile: cid == null || !extraIndex.files
+              ? null : extraIndex.files[cid],
+            error: error
+          });
           onToast('\u26A0 broken preset skipped: ' + name);
           i = stepIndex(1);
           continue;
