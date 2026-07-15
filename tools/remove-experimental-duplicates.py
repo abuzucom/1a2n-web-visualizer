@@ -4,6 +4,8 @@
 import argparse
 import csv
 import json
+import os
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -38,6 +40,19 @@ def read_chunk(cid, filename):
 def csv_escape(value):
     text = str(value)
     return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(c in text for c in '",\n') else text
+
+
+def atomic_write_text(path, text):
+    """Write one generated file without exposing a partial file."""
+    temporary = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, delete=False,
+    )
+    try:
+        with temporary:
+            temporary.write(text)
+        os.replace(temporary.name, path)
+    finally:
+        Path(temporary.name).unlink(missing_ok=True)
 
 
 def main():  # noqa: C901
@@ -109,7 +124,7 @@ def main():  # noqa: C901
                 del chunk[name]
             elif not args.allow_invalid:
                 raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
-        path.write_text(f"{prefix}{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n", encoding="utf-8")
+        atomic_write_text(path, f"{prefix}{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n")
 
     removed = set(approved)
     csv_lines = CSV_PATH.read_text(encoding="utf-8").splitlines()
@@ -122,18 +137,16 @@ def main():  # noqa: C901
         if row and row[0].strip('"') in removed:
             continue
         kept_lines.append(line)
-    with CSV_PATH.open("w", encoding="utf-8", newline="") as handle:
-        handle.write("\n".join(kept_lines).rstrip("\n") + "\n")
+    atomic_write_text(CSV_PATH, "\n".join(kept_lines).rstrip("\n") + "\n")
 
     ledger_exists = REMOVED_CSV_PATH.exists()
-    with REMOVED_CSV_PATH.open("a", encoding="utf-8", newline="") as handle:
-        if not ledger_exists:
-            handle.write("name,pack,chunk,commit,date,subject\n")
-        for item in targets:
-            handle.write(
-                f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
-                f"{args.reason}\n"
-            )
+    ledger = REMOVED_CSV_PATH.read_text(encoding="utf-8") if ledger_exists else "name,pack,chunk,commit,date,subject\n"
+    ledger += "".join(
+        f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
+        f"{args.reason}\n"
+        for item in targets
+    )
+    atomic_write_text(REMOVED_CSV_PATH, ledger)
 
     manifest["presets"] = [item for item in manifest.get("presets", []) if item["displayName"] not in removed]
     exclusions = json.loads(EXCLUSIONS_PATH.read_text(encoding="utf-8")) if EXCLUSIONS_PATH.exists() else []
@@ -143,9 +156,9 @@ def main():  # noqa: C901
         "mainlineMatches": item["mainlineMatches"],
         "reason": args.reason,
     } for item in targets)
-    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    EXCLUSIONS_PATH.write_text(json.dumps(exclusions, indent=2) + "\n", encoding="utf-8")
-    INDEX_PATH.write_text(INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n", encoding="utf-8")
+    atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
+    atomic_write_text(EXCLUSIONS_PATH, json.dumps(exclusions, indent=2) + "\n")
+    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
     print(f"removed {len(targets)} experimental presets")
 
 
