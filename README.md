@@ -56,12 +56,67 @@ butterchurn-visualizer/
 ├── tools/
 │   ├── fetch-extra-presets.py           # regenerates src/presets-extra/ from upstream
 │   ├── fetch-extra-presets-curated.py   # same, but re-applies prior curation
+│   ├── import-nestdrop-presets.py       # imports supplied .milk archives as [EXP]
+│   ├── compare-experimental-presets.py  # reports EXP/mainline equivalence
+│   ├── remove-experimental-duplicates.py # removes approved EXP duplicates only
 │   └── butterchurn-image-names.json
 └── docs/
     ├── obs-setup.md
     ├── audio-routing.md
     └── local-hosting.md
 ```
+
+### Experimental NestDrop presets
+
+The experimental import pipeline accepts supplied NestDrop ZIP archives and
+converts their raw `.milk` files into the same Butterchurn preset shape used
+by the mainline lazy-loaded collection. Experimental runtime names receive a
+reserved `[EXP] ` prefix so they are visually distinct.
+
+Mainline logical chunk IDs remain contiguous and low. Experimental physical
+chunk files begin at `chunk-9000.js` and are referenced through the optional
+`index.js` `files` mapping. The `9000+` range is a physical filename
+namespace, not a logical chunk ID; developers and agents must never advance
+logical IDs into that range.
+
+`tools/compare-experimental-presets.py` compares experimental data with the
+baseline mainline chunks using canonical content hashes. It reports exact
+duplicates, name conflicts, and EXP-only presets. Only entries with a
+confirmed mainline counterpart can be supplied to
+`tools/remove-experimental-duplicates.py`; EXP-only presets are ineligible.
+The `[EXP] ` prefix is removed for analysis only and remains part of runtime
+and exact curation names.
+
+#### Experimental import methodology
+
+The import is deliberately staged so supplied archives remain data, not code:
+
+1. Preflight records the archive digest, member counts, duplicate basenames,
+   textures, and ignored members. Extraction uses a whitelist of `.milk` files
+   and approved image formats; archive executables and scripts are never
+   extracted or invoked. ZIP traversal and symlink-like entries are rejected.
+2. Conversion runs only the repository's trusted converter in the supported
+   WSL Node 22 environment. Malformed EEL and unsupported shader programs are
+   recorded as conversion failures rather than blocking the batch.
+3. Texture references are checked before a preset is retained. DDS-dependent
+   presets and presets with unresolved texture references are skipped and
+   recorded in `experimental-presets.json`; DDS data is not placed in the
+   browser image bundle.
+4. Preset data is canonicalized and hashed. Exact mainline matches are
+   eligible for removal only through an explicit approved decision file.
+   Normalized-name matches are review information only and are never removed
+   automatically.
+5. Source basenames are not assumed to be globally unique. Byte-identical
+   collisions are retained once; distinct-content collisions receive a
+   deterministic `[variant N]` suffix. The archive-relative source path and
+   collision information remain in the manifest.
+
+Generated output must be regenerated, not hand-merged. If mainline preset
+generation changes, start from the updated mainline `index.js`, rerun the
+experimental importer, regenerate the inventory and reports, and then run
+the browser and lint checks. Keep source archives and temporary conversion
+logs out of Git; retain manifests and approval/report files when provenance or
+curation history requires them.
 
 ## Quick Start
 
