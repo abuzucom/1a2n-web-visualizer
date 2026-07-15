@@ -43,6 +43,26 @@
     return extraChunkOf;
   }
 
+  function validateEquation(source) {
+    if (!source || !source.trim()) return;
+    // Compile only. Butterchurn also uses dynamic functions for equations;
+    // this prevents malformed text from reaching its shader setup path.
+    new Function('a', source);
+  }
+
+  function validatePresetEquations(preset) {
+    ['init_eqs_str', 'frame_eqs_str', 'pixel_eqs_str'].forEach(function (field) {
+      validateEquation(preset[field]);
+    });
+    [['shape', preset.shapes], ['wave', preset.waves]].forEach(function (group) {
+      (group[1] || []).forEach(function (item) {
+        ['init_eqs_str', 'frame_eqs_str', 'point_eqs_str'].forEach(function (field) {
+          validateEquation(item[field]);
+        });
+      });
+    });
+  }
+
   function settleChunk(state, cid, ok) {
     const waiters = state.waiters[cid] || [];
     delete state.waiters[cid];
@@ -153,69 +173,119 @@
     return (controller.idx + direction + controller.store.keys.length) % controller.store.keys.length;
   }
 
-  function candidatePool(controller) {
+  function candidatePool(controller, includeFailedFallback) {
     let pool = controller.store.keys.map(function (_, index) { return index; })
       .filter(function (index) {
         const name = controller.store.keys[index];
         return index !== controller.idx && !controller.excluded.has(name) && !controller.store.failed.has(name);
       });
-    if (!pool.length) {
+    if (!pool.length && includeFailedFallback !== false) {
       pool = controller.store.keys.map(function (_, index) { return index; })
         .filter(function (index) { return index !== controller.idx; });
     }
     return pool;
   }
 
+  function readWebGLError(canvas) {
+    if (!canvas || !canvas.getContext) return null;
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+      || canvas.getContext('experimental-webgl');
+    if (!gl || !gl.getError) return null;
+    const error = gl.getError();
+    return error === gl.NO_ERROR ? null : `0x${error.toString(16)}`;
+  }
+
   function applyPreset(controller, index, blend, announce) {
     const name = controller.store.keys[index];
     const cid = controller.store.state.extraChunkOf[name];
-    controller.idx = index;
+    const preset = controller.store.presets[name];
+    const effectiveBlend = blend != null ? blend : controller.defaultBlend;
     if (cid != null) touchChunk(controller.store.state, cid);
     try {
-      controller.visualizer.loadPreset(
-        controller.store.presets[name], blend != null ? blend : controller.defaultBlend,
-      );
+      validatePresetEquations(preset);
+      controller.visualizer.loadPreset(preset, effectiveBlend);
+      const webglError = readWebGLError(controller.canvas);
+      if (webglError) throw new Error(`WebGL error after preset load: ${webglError}`);
     } catch (error) {
       controller.store.failed.add(name);
-      console.warn('Preset load failed; skipping:', { name: name, logicalChunk: cid, error: error });
+      console.warn('Preset load failed; skipping:', {
+        name: name,
+        logicalChunk: cid,
+        mode: controller.navigationMode,
+        error: error,
+      });
+      restoreLastGood(controller);
       controller.onToast('\u26A0 broken preset skipped: ' + name);
       return false;
     }
+    controller.idx = index;
+    controller.lastGoodPreset = preset;
+    controller.lastGoodBlend = effectiveBlend;
+    controller.lastGoodName = name;
     controller.onPreset(index, name);
     if (announce !== false) controller.onToast(name);
     return true;
   }
 
-  function loadMissingPreset(controller, index, blend, announce, seq) {
+  function restoreLastGood(controller) {
+    if (!controller.lastGoodPreset) return false;
+    try {
+      controller.visualizer.loadPreset(controller.lastGoodPreset, controller.lastGoodBlend);
+      return true;
+    } catch (error) {
+      console.error('Unable to restore last known-good preset:', {
+        name: controller.lastGoodName,
+        error: error,
+      });
+      stopRenderLoop(controller);
+      controller.onToast('\u26A0 visualizer recovery failed');
+      return false;
+    }
+  }
+
+  function loadMissingPreset(controller, index, blend, announce, seq, mode) {
     const name = controller.store.keys[index];
-    controller.idx = index;
     ensureChunk(controller.store.state, controller.store.state.extraChunkOf[name]).then(function (ok) {
       if (seq !== controller.loadSeq) return;
       if (!ok || !(name in controller.store.presets)) {
         controller.onToast('\u26A0 preset unavailable, skipping: ' + name);
         if (controller.store.failed.size + controller.excluded.size < controller.store.keys.length) {
-          loadPreset(controller, stepIndex(controller, 1), blend, announce);
+          const fallback = fallbackIndex(controller, mode);
+          if (fallback != null) loadPreset(controller, fallback, blend, announce, mode);
         }
         return;
       }
-      loadPreset(controller, index, blend, announce);
+      loadPreset(controller, index, blend, announce, mode);
     });
   }
 
-  function loadPreset(controller, requestedIndex, blend, announce) {
-    if (!controller.visualizer || !controller.store.keys.length) return;
+  function fallbackIndex(controller, mode) {
+    if (mode === 'random') {
+      const pool = candidatePool(controller, false);
+      return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+    }
+    return stepIndex(controller, 1);
+  }
+
+  function loadPreset(controller, requestedIndex, blend, announce, mode) {
+    if (!controller.visualizer || !controller.store.keys.length) return false;
     let index = (requestedIndex + controller.store.keys.length) % controller.store.keys.length;
     const seq = ++controller.loadSeq;
+    controller.navigationMode = mode || 'sequential';
     for (let attempts = 0; attempts < controller.store.keys.length; attempts++) {
       const name = controller.store.keys[index];
       if (!(name in controller.store.presets)) {
-        loadMissingPreset(controller, index, blend, announce, seq);
-        return;
+        loadMissingPreset(controller, index, blend, announce, seq, controller.navigationMode);
+        return undefined;
       }
-      if (applyPreset(controller, index, blend, announce)) return;
-      index = stepIndex(controller, 1);
+      if (applyPreset(controller, index, blend, announce)) return true;
+      const fallback = fallbackIndex(controller, controller.navigationMode);
+      if (fallback == null) break;
+      index = fallback;
     }
     controller.onToast('\u26A0 no working preset found');
+    stopRenderLoop(controller);
+    return false;
   }
 
   function restartCycle(controller) {
@@ -228,9 +298,13 @@
   }
 
   function loadRandom(controller) {
-    if (controller.store.keys.length < 2) return loadPreset(controller, 0);
-    const pool = candidatePool(controller);
-    loadPreset(controller, pool[Math.floor(Math.random() * pool.length)]);
+    if (controller.store.keys.length < 2) return loadPreset(controller, 0, undefined, true, 'random');
+    const pool = candidatePool(controller, false);
+    if (!pool.length) {
+      controller.onToast('\u26A0 no working random preset found');
+      return false;
+    }
+    loadPreset(controller, pool[Math.floor(Math.random() * pool.length)], undefined, true, 'random');
   }
 
   function removeCurrent(controller) {
@@ -243,11 +317,12 @@
     return removed;
   }
 
-  function createPlaybackController(store, opts, onToast, onPreset) {
+  function createPlaybackController(store, opts, onToast, onPreset, canvas) {
     return {
       store: store,
       onToast: onToast,
       onPreset: onPreset,
+      canvas: canvas,
       defaultBlend: opts.blend != null ? opts.blend : 2.7,
       visualizer: null,
       idx: 0,
@@ -257,7 +332,21 @@
       shuffleOn: opts.shuffle === true,
       cycleSecs: opts.cycleSecs || 20,
       cycleTimer: null,
+      navigationMode: 'sequential',
+      lastGoodPreset: null,
+      lastGoodBlend: 0,
+      lastGoodName: '',
+      renderFrame: null,
+      rendering: false,
     };
+  }
+
+  function stopRenderLoop(controller) {
+    controller.rendering = false;
+    if (controller.renderFrame != null) {
+      global.cancelAnimationFrame(controller.renderFrame);
+      controller.renderFrame = null;
+    }
   }
 
   function sizeCanvas(audio) {
@@ -335,15 +424,25 @@
     await audio.audioCtx.resume();
     const stream = await openStream(deviceId);
     await getDevices(audio);
+    createVisualizer(audio, playback);
+    connectStream(audio, stream);
+  }
+
+  function createVisualizer(audio, playback) {
     audio.visualizer = audio.Butterchurn.createVisualizer(audio.audioCtx, audio.canvas, {
       width: audio.canvas.width, height: audio.canvas.height, pixelRatio: 1, textureRatio: 1,
     });
     playback.visualizer = audio.visualizer;
     loadExtraImages(audio);
-    connectStream(audio, stream);
   }
 
-  function startRenderLoop(audio, playback) {
+  function startRenderLoop(audio, playback, loadInitial) {
+    if (!loadInitial) {
+      playback.rendering = true;
+      scheduleRender(audio, playback);
+      restartCycle(playback);
+      return;
+    }
     const resident = playback.store.keys.filter(function (name) {
       return name in playback.store.presets;
     });
@@ -351,12 +450,43 @@
     if (audio.opts.randomFirst && resident.length) {
       first = playback.store.keys.indexOf(resident[Math.floor(Math.random() * resident.length)]);
     }
-    loadPreset(playback, first, 0, false);
-    (function render() {
-      audio.visualizer.render();
-      requestAnimationFrame(render);
-    }());
+    const loaded = loadPreset(playback, first, 0, false, 'startup');
+    if (loaded === false || !playback.lastGoodPreset) {
+      audio.onToast('\u26A0 no valid preset could be loaded');
+      return;
+    }
+    playback.rendering = true;
+    scheduleRender(audio, playback);
     restartCycle(playback);
+  }
+
+  function scheduleRender(audio, playback) {
+    (function render() {
+      if (!playback.rendering) return;
+      try {
+        audio.visualizer.render();
+      } catch (error) {
+        console.error('Visualizer render failed:', error);
+        stopRenderLoop(playback);
+        audio.onToast('\u26A0 visualizer render failed');
+        return;
+      }
+      playback.renderFrame = global.requestAnimationFrame(render);
+    }());
+  }
+
+  function recoverVisualizer(audio, playback) {
+    try {
+      createVisualizer(audio, playback);
+      if (!playback.lastGoodPreset) throw new Error('no known-good preset available');
+      audio.visualizer.loadPreset(playback.lastGoodPreset, playback.lastGoodBlend);
+      startRenderLoop(audio, playback, false);
+      console.info('WebGL context restored:', playback.lastGoodName);
+    } catch (error) {
+      console.error('WebGL context recovery failed:', error);
+      stopRenderLoop(playback);
+      audio.onToast('\u26A0 WebGL recovery failed');
+    }
   }
 
   async function startAudio(audio, playback, deviceId) {
@@ -402,9 +532,17 @@
     const onPreset = opts.onPreset || function () {};
     let playback;
     const store = createPresetStore(opts, function () { return playback.idx; });
-    playback = createPlaybackController(store, opts, onToast, onPreset);
+    playback = createPlaybackController(store, opts, onToast, onPreset, canvas);
     const audio = createAudioController(canvas, opts, onToast);
     global.addEventListener('resize', function () { sizeCanvas(audio); });
+    canvas.addEventListener('webglcontextlost', function (event) {
+      event.preventDefault();
+      stopRenderLoop(playback);
+      console.warn('WebGL context lost');
+    });
+    canvas.addEventListener('webglcontextrestored', function () {
+      if (audio.started) recoverVisualizer(audio, playback);
+    });
     sizeCanvas(audio);
 
     return {

@@ -70,7 +70,7 @@ function parseArgs(argv) {
 // --- CSV parsing (name,pack,chunk) ---
 
 function parseCsvLine(line) {
-  const m = line.match(/^(?:"((?:[^"]|"")*)"|([^,]*)),([^,]*),(.*)$/);
+  const m = line.match(/^(?:"((?:[^"]|"")*)"|([^,]*)),([^,]*),([^,]*)(?:,(.*))?$/);
   if (!m) return null;
   const name = m[1] !== undefined ? m[1].replace(/""/g, '"') : m[2];
   return { name, pack: m[3], chunk: m[4] };
@@ -421,7 +421,8 @@ function appendRemovedPresetsCsv(names, byName) {
   const existing = fs.existsSync(REMOVED_CSV_PATH)
     ? fs.readFileSync(REMOVED_CSV_PATH, 'utf8')
     : 'name,pack,chunk,commit,date,subject\n';
-  atomicWrite(REMOVED_CSV_PATH, existing + rows.join('\n') + '\n');
+  const newline = existing.includes('\r\n') ? '\r\n' : '\n';
+  atomicWrite(REMOVED_CSV_PATH, existing + rows.join(newline) + newline);
 }
 
 // Consistency check: verify each file dropped by exactly the expected amount

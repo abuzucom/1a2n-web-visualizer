@@ -59,6 +59,19 @@ class RemediationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tool.extract_source(archive_path, Path(directory) / "out")
 
+    def test_curation_tool_reads_three_column_inventory(self):
+        result = subprocess.run(
+            [
+                "node", "tools/remove_presets.js", "--dry-run",
+                "--name", "Aderrasi - Afterimage Cyclotron",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("Would remove 1 presets", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
