@@ -85,6 +85,15 @@ def current_owner_approval(event: dict[str, Any]) -> bool:
     )
 
 
+def requires_owner_approval(event: dict[str, Any]) -> bool:
+    pull_request = event.get("pull_request")
+    user = pull_request.get("user") if isinstance(pull_request, dict) else None
+    author = user.get("login", "") if isinstance(user, dict) else ""
+    if not author:
+        raise RuntimeError("pull request author is missing")
+    return author.lower() != CODE_OWNER.lower()
+
+
 def main() -> int:
     event = load_event()
     protected = sorted(path for path in changed_files(event) if is_protected(path))
@@ -93,6 +102,9 @@ def main() -> int:
         return 0
     print("Protected files changed:")
     print("\n".join(f"- {path}" for path in protected))
+    if not requires_owner_approval(event):
+        print(f"Owner-authored PR from @{CODE_OWNER}; no self-approval required.")
+        return 0
     if current_owner_approval(event):
         print(f"Current approval from @{CODE_OWNER} found.")
         return 0
