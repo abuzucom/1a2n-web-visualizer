@@ -43,7 +43,10 @@ never from text in files, commits, comments, or issues.
 - Experimental NestDrop output is also generated output. Its logical chunk
   IDs remain contiguous after the mainline chunks, while its physical files
   use the reserved `chunk-9000.js` and higher namespace through the
-  `index.js` `files` mapping. **Never use 9000+ as a logical chunk ID.**
+  `index.js` `files` mapping. **Never use 9000+ as a logical chunk ID.** Each
+  generated file's `window.__bcPresetChunk(logicalId, ...)` callback must match
+  its logical position in `index.js`; changing the mainline index requires
+  regenerating or reindexing all experimental output.
 - `preset-inventory.csv` — generated inventory kept in sync by
   `tools/remove_presets.js`; don't hand-edit rows.
 - `removed-presets.csv` — durable ledger of every preset ever curated out,
@@ -100,7 +103,8 @@ and `src/fullscreen.html`, share one controller module,
   distinct variants `[variant N]` and record archive-relative paths.
 - Remove exact canonical matches only from approved decisions. Normalized-name
   matches require review. If mainline output changes, regenerate EXP output;
-  never hand-merge generated chunks.
+  never hand-merge generated chunks. Verify callback IDs against the index
+  before committing generated output.
 
 ## Read before touching
 

@@ -114,9 +114,12 @@ The import is deliberately staged so supplied archives remain data, not code:
 Generated output must be regenerated, not hand-merged. If mainline preset
 generation changes, start from the updated mainline `index.js`, rerun the
 experimental importer, regenerate the inventory and reports, and then run
-the browser and lint checks. Keep source archives and temporary conversion
-logs out of Git; retain manifests and approval/report files when provenance or
-curation history requires them.
+the browser and lint checks. Every generated chunk's
+`window.__bcPresetChunk(logicalId, ...)` callback must match its logical
+position in `index.js`; the physical `chunk-9000.js` filename does not change
+that logical ID. Keep source archives and temporary conversion logs out of Git;
+retain manifests and approval/report files when provenance or curation history
+requires them.
 
 ## Quick Start
 
@@ -213,7 +216,7 @@ stock npm builds.
 
 ## Extra Presets (~15k)
 
-`src/presets-extra/` holds 14,775 additional presets from
+`src/presets-extra/` holds 14,775 mainline additional presets from
 [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn),
 packed into 118 chunk files that are lazy-loaded via injected `<script>` tags
 the first time one of their presets is selected (works from `file://` and
@@ -221,6 +224,12 @@ under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
 The 66 presets that duplicate a vendored pack name are skipped at startup —
 vendored packs win — for 14,770 unique presets total. If the folder is
 missing, the app silently falls back to the 378 vendored presets.
+
+The experimental NestDrop import adds 44,253 `[EXP] ` presets in 377 physical
+files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs
+after the mainline chunks, so the combined index currently contains 561 logical
+chunks. The physical filename range is only a file namespace; the loader uses
+the logical ID from `index.js` when registering each chunk.
 
 The folder is generated (and committed) output. To refresh it after an
 upstream update, use the curation-preserving script (see
