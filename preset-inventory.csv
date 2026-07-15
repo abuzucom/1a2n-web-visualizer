@@ -5,14 +5,12 @@ name,pack,chunk
 !mu$  and  Rovastar - The Shroomery (syllaciban cerbremium),presets-extra,0
 !mu$  and T-miles - halflife3 (Pbag UPdatE),presets-extra,0
 !mu$ + PieturP - PacMad (introducing non-educated small monster),presets-extra,0
-"!mu$ , PieturP and Zylot - PacMad (blue Ghosties reMix)",presets-extra,0
 !mu$ - Rovastar - Harlequin's Fluid Wallpaper 3,presets-extra,0
 !mu$ - Zylot - DISCO INFERNO (powerball),presets-extra,0
 !mu$ - and  Rovastar - The Shroomery (psilobellum),presets-extra,0
 !mu$ -and Fvese - Tripping [legally insane mix],presets-extra,0
 !mu$- mstress - Acoustic nerve impulses (under drug effetcs),presets-extra,0
 !mu$- mstress - Acoustic nerve impulses (under drug effetcs)2,presets-extra,0
-"!muS, PieturP and Zylot - PacMad (blue Ghosties reMix)",presets-extra,0
 $$$ Royal - Mashup (177),butterchurnPresetsExtra,
 $$$ Royal - Mashup (197),butterchurnPresets,
 $$$ Royal - Mashup (220),butterchurnPresets,
@@ -60,7 +58,6 @@ $$$ Royal - Mashup (441),butterchurnPresetsExtra,
 0000shifter+fishbrain+malalol - spills betelguesiest blender on fire + krash beatdetect OMG2,presets-extra,0
 00malalol_eos_phat_aderrasi_redijedi-technicolor curse of the damned one,presets-extra,0
 00malalol_eos_phat_aderrasi_redijedi-technicolor curse of the damned one weepeeeeeeeee,presets-extra,0
-01111111malalol+bdrv+al Aderrasi+Krash - Framed Brilliance of Consuming,presets-extra,0
 02,presets-extra,0
 04,presets-extra,0
 05,presets-extra,0
@@ -257,7 +254,6 @@ Aderrasi - (Hybrid Plant),presets-extra,2
 Aderrasi - 234,presets-extra,2
 Aderrasi - 25,presets-extra,2
 Aderrasi - Accelerator (Fissile Fuel)zzz af,presets-extra,2
-Aderrasi - Accelerator (Hot Lead Transfusion),presets-extra,2
 Aderrasi - Afterimage Cyclotron,presets-extra,2
 Aderrasi - Agitator,butterchurnPresetsExtra2,
 Aderrasi - Aimless,presets-extra,2
@@ -450,7 +446,6 @@ Aderrasi - Glueball,presets-extra,3
 Aderrasi - Going And Going,presets-extra,4
 Aderrasi - Graft (First Rate Heart),presets-extra,4
 Aderrasi - Gravity Conform,presets-extra,4
-Aderrasi - Gravity Lensing (Psycho Remorse),presets-extra,4
 Aderrasi - Gridster,presets-extra,4
 Aderrasi - Haggard Hemisphere of Control,presets-extra,4
 Aderrasi - Halls Of Centrifuge,butterchurnPresetsMD1,
@@ -1004,12 +999,7 @@ BDRV - starpaste1,presets-extra,8
 BDRV Aderrasi - Accelerator (Contractor Core) BDRV et  AL  rmx1,presets-extra,8
 BDRV Aderrasi - Accelerator (Contractor Core) BDRV et  AL  rmx2,presets-extra,8
 BDRV Aderrasi - Accelerator (Contractor Core) BDRV et  AL  rmx3,presets-extra,8
-BDRV Aderrasi - Accelerator (Orbital Migraine) BDRV et  AL  rmx3,presets-extra,8
-BDRV Aderrasi - Accelerator (Orbital Migraine) BDRV et  AL  rmx33,presets-extra,8
 BDRV Aderrasi - Accelerator (Orbital Migraine) BDRV et  AL  rmx4,presets-extra,8
-BDRV Aderrasi - Accelerator (Plastique Palace) BDRV et  AL  rmx,presets-extra,8
-BDRV Aderrasi - Accelerator (Plastique Palace) BDRV et  AL  rmx2,presets-extra,8
-BDRV Aderrasi - Accelerator (Plastique Palace) BDRV et  AL  rmx3,presets-extra,8
 BDRV Aderrasi - Accelerator (Reactor Chamber) BDRV et  AL  rmx,presets-extra,8
 BDRV Aderrasi - Airborne Artifact of Destruction BDRV et  AL  rmx2,presets-extra,8
 BDRV Aderrasi - Airhandler (Air of Paradise - Navigator) BDRV et  AL  rmx,presets-extra,8
@@ -1093,9 +1083,6 @@ BDRV PieturP - triptrap_(ultimate-trip-mix) BDRV et  AL  rmxmix4,presets-extra,9
 BDRV Rovastar - serotonomometer,presets-extra,9
 BDRV Telek - Matrix Encoding (Progressive Layer Codec Mix) BDRV et  AL  rmx3hj2hg1,presets-extra,9
 BDRV et  AL  rmx - calendar pipe z,presets-extra,9
-BDRV et AL Aderrasi - Accelerator (Orbital Migraine) bdvr xxx2,presets-extra,9
-BDRV et AL Aderrasi - Oracle bdrv global warming  mix xxx,presets-extra,9
-BDRV et AL Eo.S - Phat - randombox bdrv xxx,presets-extra,9
 BDRV et AL Rovastar - Altars Of Harlequin's Madness (Dark Disorder Mix)xx11112,presets-extra,9
 BDRV et AL Rovastar - Cerebral Parasites (Attack Mix) 4,presets-extra,9
 BDRV et AL Rovastar - Cerebral photomatamere,presets-extra,9
@@ -1127,8 +1114,6 @@ Bdrv - cuddly blob23,presets-extra,9
 Bdrv - cuddly blob23 [rotating],presets-extra,9
 Bdrv Aderrasi - Accelerator (Mighty Startling) bdrv et.AL,presets-extra,9
 Bdrv Aderrasi - Accelerator (Orbital Migraine) BDRV et  AL  rmx8,presets-extra,9
-Bdrv Aderrasi - Accelerator (Orbital Migraine) bdrv et.AL46,presets-extra,9
-Bdrv Aderrasi - Accelerator (Plastique Garden - The Way Things Always Were) bdrv et.AL,presets-extra,9
 Bdrv Aderrasi - Airborne Artifact of Destruction BDRV et  AL  rmx3,presets-extra,9
 Bdrv Aderrasi - Airborne Artifact of Destruction BDRV et  AL  splat rmx,presets-extra,9
 Bdrv Aderrasi - Airhandler (Feed) BDRV et  AL  rmx15,presets-extra,9
@@ -1144,14 +1129,12 @@ Bdrv Aderrasi - Curvature of Sound (Infinite Dimensions)bdrv et.AL,presets-extra
 Bdrv Aderrasi - Divine Finery (Vishnu's Tophat) bdrv et.AL3,presets-extra,9
 Bdrv Aderrasi - Divine Finery (Vishnu's Tophat)bdrv et.AL,presets-extra,9
 Bdrv Aderrasi - Eruption (Organic Soup) bdrv et.AL,presets-extra,9
-Bdrv Aderrasi - Gravity Conform (Quell) bdrv et.AL,presets-extra,9
 Bdrv Aderrasi - Hard Drink bdrv et.AL,presets-extra,9
 Bdrv Aderrasi - Inhuman Emotion bw5,presets-extra,9
 Bdrv Aderrasi - Madness Teaches us to Fight bdrv et.AL,presets-extra,9
 Bdrv Aderrasi - Madness Teaches us to Fly bdrv et.AL,presets-extra,9
 Bdrv Aderrasi - Negative Sun (Haze Star)BDRV et  AL  rmxmix4,presets-extra,9
 Bdrv Aderrasi - Negative Sun (Haze Star)BDRV et  AL  rmxmix4.1 narcotobasin mix,presets-extra,9
-Bdrv Aderrasi - Oracle BDRV et  AL  global warming  mix xxx,presets-extra,9
 Bdrv Aderrasi - Oracle BDRV et  AL  rmx11,presets-extra,9
 Bdrv Aderrasi - Oracle BDRV et  AL  rmx12,presets-extra,9
 Bdrv Aderrasi - Oracle BDRV et  AL  rmx12a,presets-extra,9
@@ -1162,7 +1145,6 @@ Bdrv Aderrasi - Oracle BDRV et  AL  rmx9,presets-extra,9
 Bdrv Aderrasi - Oracle BDRV et  AL  rmx9.1,presets-extra,9
 Bdrv Aderrasi - Oracle BDRV et  AL  rmx9.2,presets-extra,9
 Bdrv Aderrasi - Oracle BDRV et  AL  rmx9.3,presets-extra,9
-Bdrv Aderrasi - Oracle BDRV et  AL  rmx9.4,presets-extra,9
 Bdrv Aderrasi - Oracle BDRV et  AL  rmxb af,presets-extra,9
 Bdrv Aderrasi - Potion of Life BDRV et  AL  rmxmix 2,presets-extra,9
 Bdrv Aderrasi - Potion of Resurrection BDRV et  AL  rmx3,presets-extra,9
@@ -1182,7 +1164,6 @@ Bdrv Eo.S - Phat - randombox zzz xxx,presets-extra,9
 Bdrv Eo.S - Phat - randombox zzz xxx2,presets-extra,9
 Bdrv Eo.S. + Phat - I was looking back at you,presets-extra,9
 Bdrv Eo.S. + Phat - chasers 08 nematode_Teal_mix bdrv et.AL,presets-extra,9
-Bdrv Eo.S. + Phat - chasers 08 nematode_Teal_mix bdrv et.AL2,presets-extra,9
 Bdrv Eo.S. + Phat - chasers 08 nematode_Teal_mix2,presets-extra,9
 Bdrv Eo.S. + Phat - chasers 19 Portal_v2 bdrv et.AL,presets-extra,9
 Bdrv Eo.S. + Phat - chasers 19 Portal_v2 bdrv et.AL3p,presets-extra,9
@@ -1195,8 +1176,6 @@ Bdrv Eo.S. + Redi Jedi - frequency analysis + glowsticks -  glow - o - scope mal
 Bdrv Eo.S. + Redi Jedi - frequency analysis + glowsticks -  glow - o - scope male left handed complements (Milkdrop beta ver2) bdrv et.AL7 af,presets-extra,9
 Bdrv Eo.S. + Redi Jedi _Phat_Mexican_Insanity_Pepper_Striped(1.04) BDRV et  AL  rmxweirdx,presets-extra,9
 Bdrv Eo.S. - blueberry jam ,presets-extra,9
-Bdrv Eo.S. - pulsecube BDRV et  AL  rmxmix 2,presets-extra,9
-Bdrv Eo.S. - pulsecube BDRV et  AL  rmxmix 24,presets-extra,9
 Bdrv Eo.S. - pulsecube BDRV et  AL  rmxmix 26 af,presets-extra,9
 Bdrv Eo.S. - pulsecube BDRV et  AL  rmxmix2,presets-extra,9
 Bdrv Eo.S. - pulsecube BDRV et  AL  rmxmixx,presets-extra,9
@@ -1266,11 +1245,6 @@ Bdrv et  AL  rmx - static rug power zap,presets-extra,10
 Bdrv et  AL  rmx - static rug power zapf,presets-extra,10
 Bdrv et  AL  rmx et al - phantasm5.2,presets-extra,10
 Bdrv et  AL  rmx et al - phantasm5.4,presets-extra,10
-Bdrv et AL Aderrasi - Accelerator (Orbital Migraine) bdvr xxx2_1,presets-extra,10
-Bdrv et AL Aderrasi - Accelerator (Orbital Migraine) bdvr xxx3,presets-extra,10
-Bdrv et AL Aderrasi - Accelerator (Orbital Migraine) bdvr xxx4,presets-extra,10
-Bdrv et AL Eo.S - Phat - randombox bdrv xxx_1,presets-extra,10
-Bdrv et al Rovastar - azurione 2.1,presets-extra,10
 Bdrv fiShbRaiN - gandalf does it best (pipeweed remix v2)2,presets-extra,10
 Bdrv fiShbRaiN - gandalf does it best (pipeweed remix v2)2c,presets-extra,10
 Bdrv phat + Eo.S. - Bass_responce_Red_Movements_Disorienting nebula2 bdrv et.AL,presets-extra,10
@@ -3483,7 +3457,6 @@ Flexi - space voyage,presets-extra,28
 Flexi - spin-off,presets-extra,28
 Flexi - stop it if you can,presets-extra,28
 Flexi - tentacles,presets-extra,28
-Flexi - tentacles w bg,presets-extra,28
 Flexi - the distant point between derivative,butterchurnPresetsExtra2,
 Flexi - the early bird,presets-extra,28
 Flexi - the fountain,presets-extra,28
@@ -4801,8 +4774,6 @@ Hexcollie n bdrv - not dun,presets-extra,38
 "Hexcollie, Bdrv n Aderrasi - We waste death together",presets-extra,38
 "Hexcollie, Bdrv n Aderrasi - We waste death together but i waste life alone",presets-extra,38
 "Hexcollie, Bdrv n Eo.S - Smuddle",presets-extra,38
-"Hexcollie, Bdrv n Eo.S. - Dorsal Ganglion",presets-extra,38
-"Hexcollie, Bdrv n Eo.S. - Dorsal Ganglion 2",presets-extra,38
 "Hexcollie, Bdrv n Rova - Conquering Mr Danger",presets-extra,38
 "Hexcollie, Bdrv, Eo.S., Phat n Aderrasi - Fire up the plasma cutter I need to light this spliff",presets-extra,38
 "Hexcollie, Bdrv, Goody, Eo.S. n Phat - Space (crack) Rock!",presets-extra,38
@@ -4815,7 +4786,6 @@ Hexcollie n bdrv - not dun,presets-extra,38
 "Hexcollie, Eo.S. n Phat - Just an object",presets-extra,38
 "Hexcollie, Eo.S. n Redi - Ribbon painting",presets-extra,38
 "Hexcollie, Eo.s n Phat - Lurching Spunnel",presets-extra,38
-"Hexcollie, Eo.s, Phat, bdrv n Aderrasi - What a party",presets-extra,38
 "Hexcollie, Flexi Eo.S, Esotic, Krash.n Phat - But none will ever be as sexy as flexi",presets-extra,38
 "Hexcollie, Flexi Eo.S.n Phat - Parasitic Reverberation",presets-extra,38
 "Hexcollie, Flexi n Eo.S. - Squable",presets-extra,38
@@ -4837,8 +4807,6 @@ Hexcollie n bdrv - not dun,presets-extra,38
 "Hexcollie, Phat n unchained - The love of a silent echo",presets-extra,38
 "Hexcollie, Phat, Eo.S. n Mstress - Man I need to find someone to sell me a sack in Michigan",presets-extra,38
 "Hexcollie, PieturP n Telek - Self induced psychosis",presets-extra,38
-"Hexcollie, Pieturp n Orb - This may be my favorite preset ever",presets-extra,38
-"Hexcollie, Pieturp n Orb - This one needs some TLC",presets-extra,38
 "Hexcollie, Pieturp n Phat - Free amphetamines to those willing to take them",presets-extra,38
 "Hexcollie, Pieturp, Rozzor n Phat - This isnt cool, but it is crazy =)",presets-extra,38
 "Hexcollie, Redi, Rova n Krash - Kangaroos stole my pipe",presets-extra,38
@@ -5230,10 +5198,8 @@ Idiot24-7 & Rovastar - Hyper Ball Wrap 1,presets-extra,41
 Idiot24-7 & Rovastar - Hyper Ball Wrap 2,presets-extra,41
 Idiot24-7 & Rovastar - Self-Destruct,presets-extra,41
 Idiot24-7 & Rovastar - The New Source,presets-extra,42
-Idiot24-7 & Unchained - A Little Too Unchainedish,presets-extra,42
 Idiot24-7 & Unchained - Celestial Moon,presets-extra,42
 Idiot24-7 & Unchained - I Don't Get It,presets-extra,42
-Idiot24-7 & Unchained - Mind Bending Beat Demo,presets-extra,42
 Idiot24-7 & Unchained - NES Cartridge,presets-extra,42
 Idiot24-7 & Unchained - Nuclear Reactor,presets-extra,42
 Idiot24-7 & Unchained - Who The Hell Is Morat 1,presets-extra,42
@@ -5372,7 +5338,6 @@ Idiot24-7 - Morphing Grid ,presets-extra,43
 Idiot24-7 - Morphing Grid (Unreleased Mix 1),presets-extra,43
 Idiot24-7 - Morphing Grid (Unreleased Mix 2),presets-extra,43
 Idiot24-7 - Morphing Grid (Unreleased Mix 3),presets-extra,43
-Idiot24-7 - Morphing Grid 2,presets-extra,43
 Idiot24-7 - Morphing Grid 3,presets-extra,43
 Idiot24-7 - My Best Yet,presets-extra,43
 Idiot24-7 - My Best Yet (Solar Mix),presets-extra,43
@@ -5521,10 +5486,8 @@ Idiot24-7&sysrq-therotorproject(tre3),presets-extra,44
 Idiot24-7&sysrq-therotorproject(trebl,presets-extra,44
 Idiot24-7&theafter(idiotsoverhaulmix),presets-extra,44
 Idiot24-7&theaftershock-ANewAfterlife,presets-extra,44
-Idiot24-7&unchained-alittletoounchain,presets-extra,44
 Idiot24-7&unchained-celestialmoon,presets-extra,44
 Idiot24-7&unchained-idontgetit,presets-extra,44
-Idiot24-7&unchained-mindbendingbeatde,presets-extra,44
 Idiot24-7&unchained-nescartridge,presets-extra,44
 Idiot24-7&unchained-nuclearreactor,presets-extra,44
 Idiot24-7&unchained-whothehellismora1,presets-extra,44
@@ -5717,7 +5680,6 @@ Idiot24-7-morphinggrid,presets-extra,45
 Idiot24-7-morphinggrid(unreleasedmi1),presets-extra,45
 Idiot24-7-morphinggrid(unreleasedmi2),presets-extra,45
 Idiot24-7-morphinggrid(unreleasedmi3),presets-extra,45
-Idiot24-7-morphinggrid2,presets-extra,45
 Idiot24-7-morphinggrid3,presets-extra,45
 Idiot24-7-mybestyet,presets-extra,45
 Idiot24-7-mybestyet(solarmix),presets-extra,45
@@ -5912,7 +5874,6 @@ Illusion & Unchained - Breathing In,presets-extra,47
 Illusion & Unchained - Frozen Eye 1,presets-extra,47
 Illusion & Unchained - Frozen Eye 2,presets-extra,47
 Illusion & Unchained - Hazy Dots,presets-extra,47
-Illusion & Unchained - Invade My Mind,presets-extra,47
 Illusion & Unchained - New Strategy,presets-extra,47
 Illusion & Unchained - Outside The Square,presets-extra,47
 Illusion & Unchained - Re-Enter Homeworld,presets-extra,47
@@ -6053,7 +6014,6 @@ Illusion&unchained-breathingin,presets-extra,48
 Illusion&unchained-frozeneye1,presets-extra,48
 Illusion&unchained-frozeneye2,presets-extra,48
 Illusion&unchained-hazydots,presets-extra,48
-Illusion&unchained-invademymind,presets-extra,48
 Illusion&unchained-jaggedxeon,presets-extra,48
 Illusion&unchained-newstrategy,presets-extra,48
 Illusion&unchained-outsidethesquare,presets-extra,48
@@ -7085,7 +7045,6 @@ New (Indecision Code),presets-extra,56
 New (Indecision code for MV),presets-extra,56
 New (Rust),presets-extra,56
 New (Seceret Wave),presets-extra,56
-New (Unchained Beat Code -  coler code),presets-extra,56
 New (Vectrip Code),presets-extra,56
 New (bass treb mid) 3,presets-extra,56
 New Master Mashup FX 2 Rovastar + Unchained - Voodoo Chess Magnet (Everglow Mix)+ Krash AdamOFX,presets-extra,56
@@ -7221,7 +7180,6 @@ ORB - Death and Darkness,presets-extra,57
 ORB - Depth Charge 2,butterchurnPresetsExtra2,
 ORB - Dragon Breath,presets-extra,57
 ORB - Driffting in time,presets-extra,57
-ORB - Eat me,presets-extra,57
 ORB - Evil Friutloops From Space ,presets-extra,57
 ORB - Eye of time,presets-extra,57
 ORB - Fire Poi,presets-extra,57
@@ -7253,7 +7211,6 @@ ORB - Mental super nutcase jellyfish,presets-extra,57
 ORB - Mind Warp,presets-extra,57
 ORB - Nebula,presets-extra,57
 ORB - Night Lights,presets-extra,57
-ORB - Paper Cutouts,presets-extra,57
 ORB - Pastel Primer,butterchurnPresetsExtra,
 ORB - Planetary Alignment Acid Burn,butterchurnPresetsExtra2,
 ORB - Radiation,presets-extra,57
@@ -7542,7 +7499,6 @@ Phat_Eo.S. tracers,presets-extra,60
 Phat_Eo.S. tracers cosmic flower,presets-extra,60
 Phat_Eo.S. tracers echo mix,presets-extra,60
 Phat_Eo.S._Algorithm,presets-extra,60
-Phat_Eo.S._Algorithm_v2,presets-extra,60
 Phat_Eo.S._Anis0tropic,presets-extra,60
 Phat_Eo.S._Data_swimer,presets-extra,60
 Phat_Eo.S._Data_swimmer,presets-extra,60
@@ -7631,7 +7587,6 @@ Phat_Zylot_Eo.S. I_hope_someone_will_see_this_triping,presets-extra,61
 Phat_Zylot_Eo.S. I_hope_someone_will_see_this_triping_v2,presets-extra,61
 Phat_Zylot_Eo.S. I_hope_someone_will_see_this_triping_v2b,presets-extra,61
 Phat_Zylot_Eo.S. Just_another_form_of_movement,presets-extra,61
-Phat_Zylot_Eo.S. Puzzle_box,presets-extra,61
 Phat_Zylot_Eo.S. Trippy_rotation,presets-extra,61
 Phat_Zylot_Eo.S. Trippy_rotation_v2,presets-extra,61
 Phat_Zylot_Eo.S. Trippy_rotation_v2_alt_colours,presets-extra,61
@@ -7754,18 +7709,6 @@ PieturP - ERROR_phat_edit_v3+Eo.S.,presets-extra,62
 PieturP - ERROR_phat_edit_v3+Eo.S._1,presets-extra,62
 PieturP - Equalizer,presets-extra,62
 PieturP - FEAR USA,presets-extra,62
-PieturP - HSL-demo-wave1,presets-extra,62
-PieturP - HSL-demo-wave2,presets-extra,62
-PieturP - HSL-demo-wave3,presets-extra,62
-PieturP - HSL-here-we-go-0.5,presets-extra,62
-PieturP - HSL-here-we-go-1,presets-extra,62
-PieturP - HSL-here-we-go-2,presets-extra,62
-PieturP - HSL-here-we-go-3,presets-extra,62
-PieturP - HSL-here-we-go-4,presets-extra,62
-PieturP - HSL-here-we-go-circle,presets-extra,62
-PieturP - HSL-here-we-go-circles,presets-extra,62
-PieturP - HSL-here-we-go-circles-weird,presets-extra,62
-PieturP - HSL-tunnelvisions,presets-extra,62
 PieturP - HSL-tunnelvisions_morphing,presets-extra,62
 PieturP - HSL-tunnelvisions_morphing2,presets-extra,62
 PieturP - HSL-tunnelvisions_morphing3,presets-extra,62
@@ -7773,7 +7716,6 @@ PieturP - HSLtoRGB - demo,presets-extra,62
 PieturP - HSLtoRGB-swirl,presets-extra,62
 PieturP - IT_MIGHT_BE_EVIL,presets-extra,62
 PieturP - IT_MIGHT_BE_EVIL_phat_remix,presets-extra,62
-PieturP - PacMad,presets-extra,62
 PieturP - PacMad (introducing stupid small monster),presets-extra,62
 PieturP - Slightly-Different,presets-extra,62
 PieturP - Slightly-Different2,presets-extra,62
@@ -7797,7 +7739,6 @@ PieturP - circles_progressive,presets-extra,62
 PieturP - dots_in_a_practical_way3_ultraplusversion,presets-extra,62
 PieturP - dots_in_a_practical_way3_zoomed,presets-extra,62
 PieturP - dots_in_a_practical_way_Plus_Shapes,presets-extra,62
-PieturP - dots_in_a_practical_way_sined_wave,presets-extra,62
 PieturP - fun with colors - tiles,presets-extra,62
 PieturP - harlequinzzz-beats-from-Rovastar2,presets-extra,62
 PieturP - harlequinzzz-beats-from-Rovastar3,presets-extra,62
@@ -7849,8 +7790,6 @@ PieturP - triptrap_(ultimate-trip-mix),presets-extra,63
 PieturP - triptrap_(ultimate-trip-mix) BDRV et  AL  rmxmix,presets-extra,63
 PieturP - weaving-colours_wicked-waves-version1,presets-extra,63
 PieturP - weaving-colours_wicked-waves-version2,presets-extra,63
-PieturP HSL-demo-circle,presets-extra,63
-PieturP and Zylot - PacMad (Ghosties reMix),presets-extra,63
 Pieturp-staring-into-the-sun1,presets-extra,63
 Pieturp-sunflare2,presets-extra,63
 Pieturp-triptrap(gettingconcretevisio,presets-extra,63
@@ -8216,7 +8155,6 @@ Redi Jedi - porthole to the underworld(dround in a vat of milk),presets-extra,66
 Redi Jedi - porthole to the underworld(hit by a bus edition),presets-extra,66
 "Redi Jedi - quit smoking my watter,you dick_1",presets-extra,66
 Redi Jedi - self painting portrait of the universe,presets-extra,66
-Redi Jedi - self painting portrait of the universe ver2,presets-extra,66
 Redi Jedi - self painting portrait of the universe_1,presets-extra,66
 Redi Jedi - something,presets-extra,66
 Redi Jedi - static fusion,presets-extra,66
@@ -11504,7 +11442,6 @@ baked - trip searchlights [Gr0oVy],presets-extra,91
 baked - trip searchlights [WarPed RemiX],presets-extra,91
 baked - trip searchlights [almost there],presets-extra,91
 baked - tyedeyed,presets-extra,91
-baked - wAsted,presets-extra,91
 baking powder,presets-extra,91
 ball of combustion,presets-extra,91
 bass kaleidosphere,presets-extra,91
@@ -11554,16 +11491,12 @@ bdrv + al - temporary displacement plasma4,presets-extra,92
 bdrv + al - temporary displacement tube2d,presets-extra,92
 bdrv + al - temporary displacement tube2lk,presets-extra,92
 bdrv + al - velocity2e,presets-extra,92
-bdrv + al - wriggly friend shaolin bhudda finger,presets-extra,92
-bdrv + al - wriggly friend shaolin bhudda finger2,presets-extra,92
-bdrv + al - wriggly friend shaolin bhudda finger3b,presets-extra,92
 bdrv + al - wriggly friend25,presets-extra,92
 bdrv + al - wriggly friend25g,presets-extra,92
 bdrv + al -digistar10s,presets-extra,92
 bdrv + al -digistar6cs,presets-extra,92
 bdrv + al 3dRaGoNs - Shape 2 mx5,presets-extra,92
 bdrv + al Aderrasi - Accelerator (Orbital Migraine) BDRV et  AL  rmxx,presets-extra,92
-bdrv + al Aderrasi - Accelerator (Orbital Migraine) bdvr xxx4,presets-extra,92
 bdrv + al Aderrasi - Accelerator (orbital Migraine)bdrv et.AL Bromo Mix,presets-extra,92
 bdrv + al Aderrasi - Accelerator (orbital Migraine)bdrv et.AL Bromo Mix212,presets-extra,92
 bdrv + al Aderrasi - Accelerator (orbital Migraine)bdrv91,presets-extra,92
@@ -11583,7 +11516,6 @@ bdrv + al Aderrasi - Barcode Of Honor rmx4,presets-extra,92
 bdrv + al Aderrasi - Barcode of Honor  mx,presets-extra,92
 bdrv + al Aderrasi - Blender rmx,presets-extra,92
 bdrv + al Aderrasi - Blender rmx2,presets-extra,92
-bdrv + al Aderrasi - Brilliance (Mind Twisting Substance) rmx 5,presets-extra,92
 bdrv + al Aderrasi - Chromatic Voyagej phasing,presets-extra,92
 bdrv + al Aderrasi - Graft (First Rate Heart) 5,presets-extra,92
 bdrv + al Aderrasi - Hethram (korbinus) 2,presets-extra,92
@@ -11623,8 +11555,6 @@ bdrv + al BDRV et  AL  rmx rovastar phat eos - cosmic sea2 BDRV et  AL  rmx2bc,p
 bdrv + al BDRV et  AL - beelte7,presets-extra,92
 bdrv + al BDRV et  AL - hypngoggles x4,presets-extra,92
 bdrv + al Bablonwarp - Rovaster Harlequin Fractal rmx,presets-extra,92
-bdrv + al Baked - Narcotic Hypnotic rmx3,presets-extra,92
-bdrv + al Baked - Narcotic Hypnotic rmx5,presets-extra,92
 bdrv + al Benjam - Grid (Color remix),presets-extra,92
 bdrv + al Bw - Wobblinatorbdrv212,presets-extra,92
 bdrv + al Bw - Wobblinatorbdrv2121,presets-extra,92
@@ -11789,7 +11719,6 @@ bdrv + al Eo.s. + Redi Jedi _phat_mexican_insanity_pepper_striped(1.04) rmx9,pre
 bdrv + al Eo.s. + Redi Jedi _phat_mexican_insanity_pepper_striped(1.04) rmx99,presets-extra,94
 bdrv + al Eo.s. + Redi Jedi _phat_mexican_insanity_peppers(1.04) patio mix,presets-extra,94
 bdrv + al Eo.s. + Redi Jedi _phat_mexican_insanity_peppers(1.04) vertigo rmx,presets-extra,94
-bdrv + al Eo.s. - Pulsecubebdrv et.AL  Rmxmix 25,presets-extra,94
 bdrv + al Eo.s. - Sarc Gbdrv2,presets-extra,94
 bdrv + al Eo.s. - Sarc Gbdrv2 mx,presets-extra,94
 bdrv + al Eo.s. - Sarc Gbdrv2 mx_Phat_RedEye_FractalView_v2,presets-extra,94
@@ -11881,7 +11810,6 @@ bdrv + al Rovastar - Fractopia (Upspoken Mix) bdrv et.AL55,presets-extra,94
 bdrv + al Rovastar - Fractopia (Upspoken Mix) bdrv et.AL57,presets-extra,94
 bdrv + al Rovastar - Fractopia (Upspoken Mix) mx,presets-extra,94
 bdrv + al Rovastar - Fractopia (Upspoken Mix)mx 5,presets-extra,94
-bdrv + al Rovastar - Fractopia (Upspoken Mix)mx 53,presets-extra,94
 bdrv + al Rovastar - Fractopia (Upspoken Mix)mx 6,presets-extra,94
 bdrv + al Rovastar - Fractopia (Upspoken Mix)mx31,presets-extra,94
 bdrv + al Rovastar - Fractopia bdrv132456 mix bleuarg,presets-extra,94
@@ -12051,7 +11979,6 @@ bdrv et.AL = dribble2,presets-extra,96
 bdrv et.AL = dribble2a,presets-extra,96
 bdrv et.AL = dribble2ag42,presets-extra,96
 bdrv et.AL Aderrasi - Accelerator (contractor Core) rmx,presets-extra,96
-bdrv et.AL Aderrasi - Accelerator (orbital Migraine) Pac-fractalbdrv,presets-extra,96
 bdrv et.AL Aderrasi - Accelerator (orbital Migraine)bdrv et.AL Bromo Mix,presets-extra,96
 bdrv et.AL Aderrasi - Accelerator (orbital Migraine)bdrv et.AL Bromo Mix2,presets-extra,96
 bdrv et.AL Aderrasi - Accelerator (orbital Migraine)bdrv11,presets-extra,96
@@ -12117,7 +12044,6 @@ bdrv et.AL Eo.s. + Redi Jedi _phat_mexican_insanity_pepper_striped(1.04) rmx2,pr
 bdrv et.AL Eo.s. + Redi Jedi _phat_mexican_insanity_peppers(1.04) vertigo rmx,presets-extra,96
 bdrv et.AL Eo.s. - Ascopic C rmx,presets-extra,96
 bdrv et.AL Eo.s. - Ascopic E Better rmx,presets-extra,96
-bdrv et.AL Eo.s. - Pulsecubebdrv et.AL  Rmxmix 25,presets-extra,96
 bdrv et.AL Eo.s. - Sarc Gbdrv2,presets-extra,96
 bdrv et.AL Eo.s. - Sarc Gbdrv2m,presets-extra,96
 bdrv et.AL Eo.s.+phat - Conductor_module_inward_portal rmx,presets-extra,96
@@ -12251,19 +12177,11 @@ beta106i + Redi Jedi - Curse of the Ochre Owl(hangover mix),presets-extra,98
 "beta106i + Redi Jedi - Curse of the Ochre Owl(now you see a ring on her finger... anyone missing a knife, cause here it is, stuck in your heart)",presets-extra,98
 beta106i - Accelerator,presets-extra,98
 beta106i - Accelerator (Accelerator Shading),presets-extra,98
-beta106i - Accelerator (Blast Hat),presets-extra,98
 beta106i - Accelerator (Cold Blood Transfusion),presets-extra,98
 beta106i - Accelerator (Contractor Core),presets-extra,98
-beta106i - Accelerator (Evidence Bluster),presets-extra,98
 beta106i - Accelerator (Fissile Fuel),presets-extra,98
-beta106i - Accelerator (Hot Chocolate Transfusion),presets-extra,98
-beta106i - Accelerator (Liquid Gelatin Headache),presets-extra,98
 beta106i - Accelerator (Mighty Startling),presets-extra,98
 beta106i - Accelerator (Old Antigua Sea Dweller),presets-extra,98
-beta106i - Accelerator (Orbital Migraine),presets-extra,98
-beta106i - Accelerator (Plastique Garden - The Way Things Always Were),presets-extra,98
-beta106i - Accelerator (Plastique Garden),presets-extra,98
-beta106i - Accelerator (Plastique Palace),presets-extra,98
 beta106i - Accelerator (Reactor Chamber),presets-extra,98
 beta106i - Accelerator (Timeoutput),presets-extra,98
 beta106i - Aimless (Gravity Directive),presets-extra,98
@@ -12605,10 +12523,6 @@ beta106i - Grainbow (The Pavement at the End of the Grainbow),presets-extra,100
 beta106i - Gravity Conform (Quell Druck),presets-extra,100
 beta106i - Gravity Conform (Quell II),presets-extra,100
 beta106i - Gravity Conform (Quell),presets-extra,100
-beta106i - Gravity Lensing,presets-extra,100
-beta106i - Gravity Lensing (Psycho Extasy),presets-extra,100
-beta106i - Gravity Lensing (Psycho Joy),presets-extra,100
-beta106i - Gravity Lensing (Psycho Regret),presets-extra,100
 beta106i - Great Bath,presets-extra,100
 beta106i - Great Bath (Emerger),presets-extra,101
 beta106i - Great Bath (Submerger),presets-extra,101
@@ -13873,7 +13787,6 @@ limiting movement2,presets-extra,110
 living emotion,presets-extra,110
 loz tribute,presets-extra,110
 luz,presets-extra,110
-malalol + Aderrasi - Gravity Lensing (ooooops remix),presets-extra,110
 malalol + Eo.S.+Phat Fractical_dancer (mla's more dance remix2),presets-extra,110
 malalol + Eo.S.+Phat Fractical_dancer - light in the distance (mla's more dance remix),presets-extra,110
 malalol + Mstress & Darius - Pursuing The Sunset (jet ski mix),presets-extra,110
@@ -15419,10 +15332,6 @@ A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (WithFlexRmx),
 A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting),presets-extra,123
 A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)1,presets-extra,123
 A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)3,presets-extra,123
-A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)4,presets-extra,123
-A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)6,presets-extra,123
-"A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexoc10",presets-extra,123
-"A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexoco2",presets-extra,123
 "A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexoco3",presets-extra,123
 "A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexoco5",presets-extra,123
 "A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexocollie 3",presets-extra,123
@@ -15430,7 +15339,6 @@ A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting
 "A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexocollie 5",presets-extra,123
 "A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexocollie Che",presets-extra,123
 "A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexocollie Che Remixed",presets-extra,123
-"A Ultimate AdamFX 2 Martin - disco mix 6 (UFO RMX)Inside the ship (thereShooting)Flexi,Fishbrain,Hexocollie1",presets-extra,123
 AAdamFX Infection 2 martin - disco mix (FireOptics)Ft Che Escape(IntoTheDisco)by AdamFX and Ft Milk C2,presets-extra,123
 AAdamFX Infection 2 martin - disco mix (FireOptics)Ft Che Escape(IntoTheDisco)by AdamFX and Ft Milk C4,presets-extra,123
 AAdamFX Infection 2 martin - disco mix (FireOptics)Ft Che Escape(IntoTheDisco)by AdamFX and Ft Milk C8,presets-extra,123
@@ -17040,7 +16948,6 @@ Hexcollie - Virtual LSD (martin shader) newborns of satan,presets-extra,135
 Hexcollie - X warp harsh - klive,presets-extra,135
 Hexcollie - electronegativity,presets-extra,135
 Hexcollie - is it alive,presets-extra,135
-"Hexcollie - now entering the wormhole2 - mash0000 - if you like this, maybe you, like me, are insane",presets-extra,135
 Hexcollie n EoS - sunburst baboon,presets-extra,135
 Hexcollie n EoS - sunburst baboon - species muppet,presets-extra,135
 Hexcollie n Fvese - The Photosynthetic jelly fish,presets-extra,135
@@ -17052,7 +16959,6 @@ Hexcollie n Fvese - The Photosynthetic jelly fish,presets-extra,135
 "Hexcollie, Bdrv, Goody, Esotic, EoS n Phat - Space (crack) Rock! (#2)",presets-extra,135
 "Hexcollie, Dbleja, EoSn Phat - Too much freedumb",presets-extra,135
 "Hexcollie, EoS n Phat - Just an object",presets-extra,135
-"Hexcollie, EoS, Phat, bdrv n Aderrasi - What a party",presets-extra,135
 "Hexcollie, Flexi n Aderrasi - Black out, I mean time travel",presets-extra,135
 "Hexcollie, Flexi n Geiss - Caught in the vortex of the mystery pill",presets-extra,135
 "Hexcollie, Flexi n Suksma - Yep, LSD in my morning coffee",presets-extra,135
@@ -18467,11 +18373,6 @@ TonyMilkdrop - Angels Of Glory [Flexi - try again + techstyle] --- Isosceles edi
 TonyMilkdrop - Angels Of Glory [Flexi - where's a reverser when you need one + techstyle] --- Isosceles edit,presets-extra,146
 TonyMilkdrop - Blood In Me --- Isosceles edit1,presets-extra,146
 TonyMilkdrop - Blood In Me --- Isosceles edit2,presets-extra,146
-TonyMilkdrop - Dawning The Peacocks [Flexi - opinion + techstyle] --- Isosceles edit,presets-extra,146
-TonyMilkdrop - Dawning The Peacocks [Flexi - quirks + multiverse],presets-extra,146
-TonyMilkdrop - Dawning The Peacocks [Flexi - quirks + techstyle] --- Isosceles edit,presets-extra,146
-TonyMilkdrop - Dawning The Peacocks [Flexi - quitter + $this shall not retain] --- Isosceles edit,presets-extra,146
-TonyMilkdrop - Dawning The Peacocks [Flexi - quitter] --- Isosceles edit,presets-extra,146
 TonyMilkdrop - Go To Heaven --- Isosceles edit,presets-extra,146
 TonyMilkdrop - Haunted [MashUp],presets-extra,146
 TonyMilkdrop - I Like Cartoon --- Isosceles edit,presets-extra,146
@@ -18773,8 +18674,6 @@ Waltra - Worm Hole,presets-extra,149
 With AdamFX Presentation - Flexi - self similarity ft Martin Charisma with AdamFX K xfr+,presets-extra,149
 With AdamFX Presentation - Flexi - self similarity ft Martin Charisma with AdamFX M - antiborg llorde,presets-extra,149
 With AdamFX Presentation - Flexi - self similarity ft Martin Charisma with AdamFX M shf,presets-extra,149
-X-pand - quant combines ray - santa klaus vs anile nekrow PAIR rnz,presets-extra,149
-X-pand - quant combines ray - santa klaus vs anile nekrow PAIR rnz r,presets-extra,149
 Yin - 250 - Artificial Poles Of The Continuum 3,presets-extra,149
 Zylot & Idiot24-7 - Unknown Power Source,presets-extra,149
 Zylot & Rovastar - Crystal Ball (Cerimonial Decor Mix),presets-extra,149
@@ -19074,7 +18973,6 @@ away dog roof everything is here to serve me and hate me too rumorst,presets-ext
 backwrit,presets-extra,151
 bdrv + al - dude's starpulse vector - chemosynthetic kreb's psycle,presets-extra,151
 bdrv + al - dude's starpulse vector - re-refridgewraith,presets-extra,151
-bdrv + al EoS - Pulsecubebdrv etAL  Rmxmix 25 - qabalistic space invading homo-nutrient mouth swish transmuting 9d symbiosis - fed,presets-extra,151
 bdrv + al EoS - more waveforms 5 mx,presets-extra,151
 bdrv + al EoS - more waveforms 5 mx - ver-ing chris lundberg,presets-extra,151
 bdrv + al Rovastar - Fractopia bdrv132456 mix bleuarg - delight in freakish sothsaying,presets-extra,151
@@ -19343,15 +19241,6 @@ eye disease,presets-extra,153
 eye disease ngornggniq,presets-extra,153
 eye disease ngornggniq no business mashing,presets-extra,153
 eye disease ngornggniq say what you think on pcp,presets-extra,153
-f wen blew my wallet,presets-extra,153
-"f wen blew my wallet - chub, smack",presets-extra,153
-f wen blew my wallet - hooray for fed,presets-extra,153
-f wen blew my wallet - how to beat nothingness into omninmi-submission-potence,presets-extra,153
-"f wen blew my wallet - it's not that the drugs make me stronger, faster, and smarter, it's that i eat shellfish",presets-extra,153
-f wen blew my wallet - my thoughts are not,presets-extra,153
-f wen blew my wallet - phlenexiconal section,presets-extra,153
-"f wen blew my wallet - you've seen it before, now you see it again",presets-extra,153
-f wen blew my wallet nz,presets-extra,153
 fanciful bratwurst engine,presets-extra,153
 fanciful bratwurst engine less,presets-extra,153
 farovathe,presets-extra,153
@@ -19966,11 +19855,7 @@ martin - Geiss - Psychotic Roulette,presets-extra,158
 martin - X Portal,presets-extra,158
 martin - attack of the beast [flexi's plasma + glass lens mix],presets-extra,158
 martin - autumn leaves,presets-extra,158
-martin - beamer code 20h - rhythmic and fast,presets-extra,158
-martin - beamer code 20h - rhythmic and slower,presets-extra,158
 martin - beamer code 21h,presets-extra,158
-martin - beamer code 21h - silent stars,presets-extra,158
-martin - beat test pendel sergej shapes only,presets-extra,158
 martin - castle in the air more mbahlsce,presets-extra,158
 martin - charming tiles,presets-extra,158
 martin - city lights,presets-extra,158
@@ -20284,7 +20169,6 @@ passionless internal cow why is it so hard to leave a world that won't miss me,p
 paying to be made fun of by devvo,presets-extra,161
 paying to be made fun of by devvo footless offense,presets-extra,161
 paying to be made fun of by devvo sinewesoy,presets-extra,161
-pestilential vibrhatorik,presets-extra,161
 phalsiphiqathe,presets-extra,161
 phalsiphiqathe nisclehilth,presets-extra,161
 phat + EoS - Bass_responce_Red_Movements_Disorienting nebula,presets-extra,161
@@ -20492,7 +20376,6 @@ shadowharlequin - gracefull sunshine smiles,presets-extra,162
 shadowharlequin - gracefull sunshine smiles roam,presets-extra,162
 shadowharlequin - lovely shiney cubes [ liquid starburst rmx ] - fix vars - wave - 2 - flexin8,presets-extra,162
 "shadowharlequin, goody - woven beads (ps2-0) [outlined]",presets-extra,162
-"shadowharlequin, martin - (unfinished) gold pellets [warped synapse]",presets-extra,162
 she just meant there is no such thing as danger,presets-extra,162
 shell robot - argon --- Isosceles edit,presets-extra,162
 shell robot --- Isosceles edit,presets-extra,162
@@ -21070,7 +20953,6 @@ suksma - Hexcollie - Julian Carnival - shimmy dumb grid,presets-extra,167
 suksma - Hexcollie - Julian Carnival - shimmy dumb grid dogmaklyasm,presets-extra,167
 suksma - Hexcollie - Julian Carnival - shimmy dumb grid fainted puppet wax,presets-extra,167
 suksma - Hexcollie - Julian Carnival - shimmy dumb grid scowling priestess,presets-extra,167
-"suksma - Hexcollie - now entering the wormhole2 - mash0000 - if you like this, maybe you, like me, are insane",presets-extra,167
 suksma - Jim & Geiss - Inverse Bass Zoom - mash0000 - aim your scream toward the avalanche,presets-extra,167
 suksma - Krash + shifter - Witchcraft (illumination mix) - aic - flx ap3 bowling,presets-extra,167
 suksma - Krash + shifter - Witchcraft (illumination mix) - aic - topos jezos hog rot,presets-extra,167
@@ -21101,7 +20983,6 @@ suksma - absolute loon coming your way,presets-extra,167
 suksma - absolutely solid waves of terror,presets-extra,167
 suksma - accredited omniversidioty,presets-extra,167
 suksma - actually i didn't eat last night,presets-extra,167
-suksma - adam martin geiss - come into my closet of rot,presets-extra,167
 suksma - aenomolys throaet suggaest,presets-extra,167
 suksma - age of the child,presets-extra,167
 suksma - alkehmikal konflagellum uslerpretation - colormuze,presets-extra,167
@@ -21160,10 +21041,6 @@ suksma - barium titanate --- Isosceles edit16,presets-extra,167
 suksma - barium titanate --- Isosceles edit17,presets-extra,167
 suksma - barnacle coated hemoclubbin',presets-extra,167
 suksma - bathory kollect kallz,presets-extra,167
-suksma - bdrv + al Aderrasi - Brilliance (Mind Twisting Substance) rmx 5 - indeterminate,presets-extra,167
-suksma - bdrv + al Aderrasi - Brilliance (Mind Twisting Substance) rmx 5 - indeterminate - 1-ret,presets-extra,167
-suksma - bdrv + al Aderrasi - Brilliance (Mind Twisting Substance) rmx 5 - indeterminate - 1-ret2,presets-extra,167
-suksma - bdrv + al Aderrasi - Brilliance (Mind Twisting Substance) rmx 5 - indeterminate2,presets-extra,167
 suksma - bdrv - radioactive recombination3 - deaf microphone,presets-extra,167
 suksma - beyond imbalance understate,presets-extra,168
 suksma - beyond imbalance understate - couldn't not,presets-extra,168
@@ -21739,7 +21616,6 @@ suksma - erowids' bearcub traipse,presets-extra,172
 suksma - escape skelevator,presets-extra,172
 suksma - estrangedaholic grandfather cloques,presets-extra,172
 suksma - eternally occulted - crash course in apathy,presets-extra,172
-suksma - eternally occulted --- Isosceles edit,presets-extra,172
 suksma - ethereal heat fake orb,presets-extra,172
 suksma - evangelical lines candy noses (high on christ),presets-extra,172
 suksma - evangelical lines candy noses (high on christ) --- Isosceles edit,presets-extra,172
@@ -21901,7 +21777,6 @@ suksma - flying again in my dreams,presets-extra,173
 suksma - foaming bastard rampage - log smell,presets-extra,173
 suksma - foghorn leggo my edgart,presets-extra,173
 suksma - foldrinymicull,presets-extra,173
-suksma - foolish mash,presets-extra,173
 suksma - formula one stock car engines,presets-extra,173
 suksma - fremgnology crate cakes,presets-extra,173
 suksma - fringe math is still math,presets-extra,173
@@ -22596,7 +22471,6 @@ suksma - shifter - urchin kali echos - bowel roams nz3,presets-extra,179
 suksma - shifter - urchin kali echos - moish dt r3,presets-extra,179
 suksma - shifter - urchin kali echos - moish dt r3 nz+,presets-extra,179
 suksma - shiny-bladed homicide machine at dusk - sunset misanthrope,presets-extra,179
-suksma - shoot dna into tobacco to mass grow vaccines,presets-extra,179
 suksma - sick star bloat,presets-extra,179
 suksma - sick star bloat --- Isosceles edit01,presets-extra,179
 suksma - sick star bloat --- Isosceles edit02,presets-extra,179
@@ -22941,9 +22815,6 @@ va ultramix2 - 30,presets-extra,181
 va ultramix2 - 310_1,presets-extra,181
 va ultramix2 - 313_1,presets-extra,181
 va ultramix2 - 323,presets-extra,181
-va ultramix2 - 354,presets-extra,181
-va ultramix2 - 355_1,presets-extra,181
-va ultramix2 - 356_1,presets-extra,181
 va ultramix2 - 358_1,presets-extra,181
 va ultramix2 - 359,presets-extra,181
 va ultramix2 - 360,presets-extra,181
@@ -23080,8 +22951,6 @@ yin - 100 - Through the ether - sparse coherence,presets-extra,182
 yin - 100 - Through the ether qansre phevre nz+ exhoneration by disassociation,presets-extra,182
 "yin - 100 - Through the ether qansre phevre nz+ if love is so important, maybe we should show it",presets-extra,182
 yin - 100 - Through the ether qansre phevre nz+ phlegmtastiq,presets-extra,182
-yin - 102 - Through the ether (The separation),presets-extra,182
-yin - 102 - Through the ether (The separation) - Bitcore Tweak,presets-extra,182
 yin - 140 - Ohm to the stars,presets-extra,182
 yin - 190 - Temporal fluctuations --- Isosceles edit,presets-extra,182
 yin - 191 - Temporal singularities --- Isosceles edit,presets-extra,182
