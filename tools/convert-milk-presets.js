@@ -65,6 +65,7 @@ const os = require('os');
 const path = require('path');
 const utils = require('milkdrop-preset-utils');
 const eel = require('milkdrop-eel-parser');
+const acorn = require('acorn');
 
 const SHADER_WORKER = path.join(__dirname, 'convert-shader-worker.js');
 const SHADER_TIMEOUT_MS = 8000;
@@ -106,7 +107,14 @@ function convertWaveOrShape(item, kind, index, presetVersion) {
     (item.frame_eqs_str && item.frame_eqs_str.trim()) ||
     (kind === 'wave' && item.point_eqs_str && item.point_eqs_str.trim());
 
-  if (!hasCustomEqs) return { baseVals };
+  if (!hasCustomEqs) {
+    return {
+      baseVals,
+      init_eqs_str: '',
+      frame_eqs_str: '',
+      ...(kind === 'wave' ? { point_eqs_str: '' } : {}),
+    };
+  }
 
   try {
     const converted = eel.convert_preset_wave_and_shape(
@@ -117,7 +125,12 @@ function convertWaveOrShape(item, kind, index, presetVersion) {
       item.frame_eqs_str || '',
       kind === 'wave' ? (item.point_eqs_str || '') : '',
     );
-    const result = { baseVals };
+    const result = {
+      baseVals,
+      init_eqs_str: '',
+      frame_eqs_str: '',
+      ...(kind === 'wave' ? { point_eqs_str: '' } : {}),
+    };
     if (converted.perFrameInitEQs && converted.perFrameInitEQs.trim()) {
       result.init_eqs_str = converted.perFrameInitEQs.trim();
     }
@@ -132,6 +145,34 @@ function convertWaveOrShape(item, kind, index, presetVersion) {
     // Conversion of this item's custom equations failed -- fall back to
     // just its baseVals rather than dropping the whole preset.
     return { baseVals };
+  }
+}
+
+/** Reject generated equation text that Butterchurn cannot compile. */
+function validateEquation(source, label) {
+  if (!source || !source.trim()) return;
+  try {
+    acorn.parse(source, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      allowReturnOutsideFunction: true,
+    });
+  } catch (error) {
+    throw new Error(`${label}: ${error.message}`, { cause: error });
+  }
+}
+
+/** Validate every generated JavaScript equation without executing it. */
+function validatePresetEquations(preset) {
+  for (const field of ['init_eqs_str', 'frame_eqs_str', 'pixel_eqs_str']) {
+    validateEquation(preset[field], field);
+  }
+  for (const [kind, items] of [['shape', preset.shapes], ['wave', preset.waves]]) {
+    items.forEach((item, index) => {
+      for (const field of ['init_eqs_str', 'frame_eqs_str', 'point_eqs_str']) {
+        validateEquation(item[field], `${kind}[${index}].${field}`);
+      }
+    });
   }
 }
 
@@ -158,6 +199,9 @@ function convertMilkText(text) {
     baseVals: split.baseVals || {},
     warp: warpResult.ok ? warpResult.glsl : '',
     comp: compResult.ok ? compResult.glsl : '',
+    init_eqs_str: '',
+    frame_eqs_str: '',
+    pixel_eqs_str: '',
     waves: (split.waves || []).map((w, i) => convertWaveOrShape(w, 'wave', i, split.presetVersion)),
     shapes: (split.shapes || []).map((s, i) => convertWaveOrShape(s, 'shape', i, split.presetVersion)),
   };
@@ -171,6 +215,7 @@ function convertMilkText(text) {
     preset.pixel_eqs_str = basic.perPixelEQs.trim();
   }
 
+  validatePresetEquations(preset);
   return { preset, warnings };
 }
 
@@ -244,6 +289,6 @@ function main() {
   console.log(JSON.stringify(preset, null, 2));
 }
 
-module.exports = { convertMilkText };
+module.exports = { convertMilkText, validatePresetEquations };
 
 if (require.main === module) main();

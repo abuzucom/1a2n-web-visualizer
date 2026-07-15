@@ -1,6 +1,6 @@
 {
   "name": "butterchurn-visualizer",
-  "version": "1.6.3",
+  "version": "1.6.5",
   "description": "Milkdrop (butterchurn) audio visualizer pages for OBS and standalone browser use.",
   "private": true,
   "scripts": {
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "acorn": "^8.17.0",
     "eslint": "^10.7.0",
     "milkdrop-eel-parser": "^0.0.4",
     "milkdrop-preset-utils": "^0.2.1",

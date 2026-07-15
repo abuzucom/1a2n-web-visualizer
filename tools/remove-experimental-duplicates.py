@@ -44,6 +44,14 @@ def main():  # noqa: C901
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decisions", required=True, help="JSON report or list of approved experimental names")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--allow-invalid", action="store_true",
+        help="allow removal records without mainline matches when explicitly marked invalid",
+    )
+    parser.add_argument(
+        "--reason", default="experimental duplicate approved",
+        help="ledger and exclusion reason for the removal",
+    )
     args = parser.parse_args()
 
     decision_data = json.loads(Path(args.decisions).read_text(encoding="utf-8"))
@@ -79,7 +87,7 @@ def main():  # noqa: C901
         item["displayName"] for item in targets
         if not (item.get("mainlineMatches") or item.get("normalizedNameMatches"))
     ]
-    if invalid:
+    if invalid and not args.allow_invalid:
         raise SystemExit(f"refusing EXP-only targets without mainline matches: {invalid}")
 
     if args.dry_run:
@@ -94,10 +102,13 @@ def main():  # noqa: C901
     for cid, names in by_chunk.items():
         path, prefix, chunk = read_chunk(cid, files[cid])
         for name in names:
-            if name not in data["chunks"][cid] or name not in chunk:
+            if name not in data["chunks"][cid]:
                 raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
             data["chunks"][cid].remove(name)
-            del chunk[name]
+            if name in chunk:
+                del chunk[name]
+            elif not args.allow_invalid:
+                raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
         path.write_text(f"{prefix}{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n", encoding="utf-8")
 
     removed = set(approved)
@@ -121,7 +132,7 @@ def main():  # noqa: C901
         for item in targets:
             handle.write(
                 f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
-                "experimental duplicate approved\n"
+                f"{args.reason}\n"
             )
 
     manifest["presets"] = [item for item in manifest.get("presets", []) if item["displayName"] not in removed]
@@ -130,7 +141,7 @@ def main():  # noqa: C901
         "displayName": item["displayName"],
         "sourceName": item["sourceName"],
         "mainlineMatches": item["mainlineMatches"],
-        "reason": "approved experimental duplicate removal",
+        "reason": args.reason,
     } for item in targets)
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     EXCLUSIONS_PATH.write_text(json.dumps(exclusions, indent=2) + "\n", encoding="utf-8")

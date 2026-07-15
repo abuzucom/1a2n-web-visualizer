@@ -1,8 +1,8 @@
 # Local usage & internal hosting
 
 The primary deployment is GitHub Pages (<https://visualizer.1a2n.net/>), but
-nothing here depends on it — every library and preset (including the ~15k
-extra presets) is committed in the repo, so the site runs the same way
+nothing here depends on it — every library and preset (including the ~67k
+presets) is committed in the repo, so the site runs the same way
 offline. Three local modes, from simplest to most capable:
 
 ## 1. Open directly in a browser (`file://`)

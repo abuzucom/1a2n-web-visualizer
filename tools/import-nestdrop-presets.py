@@ -87,6 +87,42 @@ def read_chunk(cid, filename):
     return json.loads(text[len(prefix):-2])
 
 
+def normalize_equation_fields(preset):
+    """Keep optional equation fields defined for Butterchurn's compiler."""
+    changed = False
+    for field in ("init_eqs_str", "frame_eqs_str", "pixel_eqs_str"):
+        if field not in preset:
+            preset[field] = ""
+            changed = True
+    for item in preset.get("shapes", []):
+        for field in ("init_eqs_str", "frame_eqs_str"):
+            if field not in item:
+                item[field] = ""
+                changed = True
+    for item in preset.get("waves", []):
+        for field in ("init_eqs_str", "frame_eqs_str", "point_eqs_str"):
+            if field not in item:
+                item[field] = ""
+                changed = True
+    return changed
+
+
+def normalize_experimental_chunks(data, files):
+    """Normalize existing EXP chunks and return their changed file payloads."""
+    changed = {}
+    for cid, filename in enumerate(files):
+        if not filename.startswith("chunk-9"):
+            continue
+        path = OUT_DIR / filename
+        chunk = read_chunk(cid, filename)
+        chunk_changed = False
+        for preset in chunk.values():
+            chunk_changed = normalize_equation_fields(preset) or chunk_changed
+        if chunk_changed:
+            changed[cid] = (path, chunk)
+    return changed
+
+
 def canonicalize(value):
     if isinstance(value, dict):
         return {key: canonicalize(value[key]) for key in sorted(value)}
@@ -294,21 +330,40 @@ def csv_escape(value):
 
 def main():  # noqa: C901
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--zip", action="append", required=True, help="local source ZIP; repeat for multiple archives")
+    parser.add_argument("--zip", action="append", help="local source ZIP; repeat for multiple archives")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--normalize-existing", action="store_true",
+        help="repair equation fields in already imported EXP chunks without importing archives",
+    )
     parser.add_argument("--offset", type=int, default=0, help="skip this many .milk files per archive")
     parser.add_argument("--limit", type=int, help="convert at most this many .milk files per archive")
     args = parser.parse_args()
+    if not args.zip and not args.normalize_existing:
+        parser.error("provide --zip or --normalize-existing")
 
-    zip_paths = [Path(path).resolve() for path in args.zip]
+    zip_paths = [Path(path).resolve() for path in (args.zip or [])]
     for path in zip_paths:
         if not path.is_file() or path.suffix.lower() != ".zip":
             raise SystemExit(f"not a readable ZIP file: {path}")
 
     data, files = read_index()
+    normalized_chunks = normalize_experimental_chunks(data, files)
     mainline_hashes, mainline_names = build_mainline_hashes(data, files)
     removed_names = read_csv_names(REMOVED_CSV_PATH)
     existing_manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
+    manifest_by_name = {
+        item["displayName"]: item for item in existing_manifest.get("presets", [])
+    }
+    for cid, names in enumerate(data["chunks"]):
+        if not files[cid].startswith("chunk-9"):
+            continue
+        for name in names:
+            if name in manifest_by_name:
+                manifest_by_name[name].update({
+                    "logicalChunk": cid,
+                    "physicalFile": files[cid],
+                })
     existing_exp_names = {item["displayName"] for item in existing_manifest.get("presets", [])}
     existing_exp_hashes = {
         item["canonicalHash"] for item in existing_manifest.get("presets", [])
@@ -466,6 +521,12 @@ def main():  # noqa: C901
             del record["preset"]
             manifest["presets"].append(record)
 
+    for cid, (path, chunk) in normalized_chunks.items():
+        path.write_text(
+            f"window.__bcPresetChunk({cid},{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n",
+            encoding="utf-8",
+        )
+
     data["v"] = max(2, data.get("v", 1))
     data["files"] = files
     INDEX_PATH.write_text(INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n", encoding="utf-8")
@@ -475,7 +536,8 @@ def main():  # noqa: C901
             for name in chunk_names:
                 handle.write(f"{csv_escape(name)},presets-extra,{logical}\n")
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    write_texture_bundle(texture_images, texture_records)
+    if zip_paths:
+        write_texture_bundle(texture_images, texture_records)
 
 
 if __name__ == "__main__":
