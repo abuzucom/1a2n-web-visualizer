@@ -95,7 +95,7 @@ function readIndex() {
 }
 
 function writeIndex({ data, prefix, suffix }) {
-  fs.writeFileSync(INDEX_PATH, prefix + JSON.stringify(data) + suffix);
+  atomicWrite(INDEX_PATH, prefix + JSON.stringify(data) + suffix);
 }
 
 // --- src/presets-extra/chunk-NNN.js (JSON) ---
@@ -119,7 +119,18 @@ function readChunk(id) {
 }
 
 function writeChunk(id, { data, prefix, suffix }) {
-  fs.writeFileSync(chunkPath(id), prefix + JSON.stringify(data) + suffix);
+  atomicWrite(chunkPath(id), prefix + JSON.stringify(data) + suffix);
+}
+
+function atomicWrite(filePath, content) {
+  const directory = fs.mkdtempSync(path.join(path.dirname(filePath), '.curation-'));
+  const temporaryPath = path.join(directory, path.basename(filePath));
+  try {
+    fs.writeFileSync(temporaryPath, content);
+    fs.renameSync(temporaryPath, filePath);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 // --- src/vendor/*.min.js (minified UMD bundles) ---
@@ -389,9 +400,9 @@ function writeAll(pendingWrites, keptLines) {
   for (const w of pendingWrites) {
     if (w.kind === 'index') writeIndex(w);
     else if (w.kind === 'chunk') writeChunk(w.id, w.chunk);
-    else if (w.kind === 'vendor') fs.writeFileSync(w.path, w.content);
+    else if (w.kind === 'vendor') atomicWrite(w.path, w.content);
   }
-  fs.writeFileSync(CSV_PATH, keptLines.join('\n'));
+  atomicWrite(CSV_PATH, keptLines.join('\n'));
 }
 
 // --- removed-presets.csv (durable ledger of everything ever curated out) ---
@@ -407,15 +418,10 @@ function appendRemovedPresetsCsv(names, byName) {
     return [escCsv(n), pack, chunk, '', today, ''].join(',');
   });
 
-  try {
-    // 'wx' creates the file only if it doesn't already exist, atomically --
-    // avoids a TOCTOU race against a concurrent run between an existsSync
-    // check and a separate writeFileSync.
-    fs.writeFileSync(REMOVED_CSV_PATH, 'name,pack,chunk,commit,date,subject\n', { flag: 'wx' });
-  } catch (err) {
-    if (err.code !== 'EEXIST') throw err;
-  }
-  fs.appendFileSync(REMOVED_CSV_PATH, rows.join('\n') + '\n');
+  const existing = fs.existsSync(REMOVED_CSV_PATH)
+    ? fs.readFileSync(REMOVED_CSV_PATH, 'utf8')
+    : 'name,pack,chunk,commit,date,subject\n';
+  atomicWrite(REMOVED_CSV_PATH, existing + rows.join('\n') + '\n');
 }
 
 // Consistency check: verify each file dropped by exactly the expected amount
