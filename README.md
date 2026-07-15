@@ -59,6 +59,7 @@ butterchurn-visualizer/
 │   ├── import-nestdrop-presets.py       # imports supplied .milk archives as [EXP]
 │   ├── compare-experimental-presets.py  # reports EXP/mainline equivalence
 │   ├── remove-experimental-duplicates.py # removes approved EXP duplicates only
+│   ├── validate-experimental-presets.js  # checks generated equation JavaScript
 │   └── butterchurn-image-names.json
 └── docs/
     ├── obs-setup.md
@@ -96,8 +97,9 @@ The import is deliberately staged so supplied archives remain data, not code:
    and approved image formats; archive executables and scripts are never
    extracted or invoked. ZIP traversal and symlink-like entries are rejected.
 2. Conversion runs only the repository's trusted converter in the supported
-   WSL Node 22 environment. Malformed EEL and unsupported shader programs are
-   recorded as conversion failures rather than blocking the batch.
+   WSL Node 22 environment. Malformed EEL, unsupported shader programs, and
+   equation text that cannot be parsed as JavaScript are recorded as conversion
+   failures rather than blocking the batch.
 3. Texture references are checked before a preset is retained. DDS-dependent
    presets and presets with unresolved texture references are skipped and
    recorded in `experimental-presets.json`; DDS data is not placed in the
@@ -120,6 +122,19 @@ position in `index.js`; the physical `chunk-9000.js` filename does not change
 that logical ID. Keep source archives and temporary conversion logs out of Git;
 retain manifests and approval/report files when provenance or curation history
 requires them.
+
+The generated equation fields are always present, even when empty, because
+Butterchurn compiles them into function bodies. To repair an existing EXP
+collection after updating the converter, run:
+
+```bash
+python3 tools/import-nestdrop-presets.py --normalize-existing
+node tools/validate-experimental-presets.js
+```
+
+The validator parses generated equation text without executing it. Presets
+that fail validation must be removed through the curation/removal tooling and
+recorded in the exclusion and removal ledgers.
 
 ## Quick Start
 
