@@ -6,8 +6,8 @@ Milkdrop-style audio visualizer pages built on
 modern browser. Ships 67,134 deduplicated presets — 378 from the four
 butterchurn preset packs, 22,753 mainline lazy-loaded presets from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
-collection, and 44,003 experimental NestDrop presets, all lazy-loaded in
-chunks — fully self-hosted (no CDN).
+collection, and 44,003 experimental NestDrop presets; the latter two
+collections are lazy-loaded in chunks — fully self-hosted (no CDN).
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html` and `/fullscreen.html`), automatically deployed from the `develop` branch.
 
@@ -24,15 +24,17 @@ butterchurn-visualizer/
 ├── LICENSE
 ├── CHANGELOG.md
 ├── .gitignore
-├── package.json            # Development server configuration
+├── package.json            # Development tools and server configuration
 ├── preset-inventory.csv    # Every preset name, its pack, and chunk id
 ├── Caddyfile               # Caddy web server configuration
 ├── Dockerfile              # Container definition for local hosting
 ├── docker-compose.yml      # Docker Compose deployment configuration
 ├── .dockerignore
 ├── .github/
-│   └── workflows/
-│       └── deploy.yml      # GitHub Actions deployment workflow
+│   └── workflows/          # Deployment, lint, security, and pin checks
+├── patches/                # Native converter compatibility patch
+├── scripts/                # CI checks and instruction synchronization
+├── tests/                  # CI check tests
 ├── src/
 │   ├── index.html          # Landing page
 │   ├── obs.html            # OBS browser source entry point
@@ -47,19 +49,24 @@ butterchurn-visualizer/
 │   ├── vendor/                  # vendored butterchurn + preset/texture packs
 │   │   ├── butterchurn.min.js
 │   │   ├── butterchurnExtraImages.min.js
+│   │   ├── butterchurnExtraImagesExp.js
 │   │   ├── butterchurnPresets.min.js
 │   │   ├── butterchurnPresetsExtra.min.js
 │   │   ├── butterchurnPresetsExtra2.min.js
 │   │   └── butterchurnPresetsMD1.min.js
-│   └── presets-extra/           # ~15k lazy-loaded presets (generated, committed)
+│   └── presets-extra/           # ~67k lazy-loaded presets (generated, committed)
 │       ├── index.js             # preset name → chunk mapping
-│       └── chunk-NNN.js         # 118 chunks (~128 presets each)
+│       └── chunk-NNN.js         # generated logical/physical chunks
 ├── tools/
 │   ├── fetch-extra-presets.py           # regenerates src/presets-extra/ from upstream
 │   ├── fetch-extra-presets-curated.py   # same, but re-applies prior curation
 │   ├── import-nestdrop-presets.py       # imports supplied .milk archives as [EXP]
 │   ├── compare-experimental-presets.py  # reports EXP/mainline equivalence
-│   ├── remove-experimental-duplicates.py # removes approved EXP duplicates only
+│   ├── remove-experimental-duplicates.py # removes approved EXP curation targets
+│   ├── fetch-cream-of-the-crop-presets.py # adds raw MilkDrop source presets
+│   ├── convert-milk-presets.js           # converts raw .milk to JSON
+│   ├── convert-shader-worker.js          # isolated shader conversion worker
+│   ├── remove_presets.js                 # removes exact curated names
 │   ├── validate-experimental-presets.js  # checks generated equation JavaScript
 │   └── butterchurn-image-names.json
 └── docs/
@@ -83,9 +90,10 @@ logical IDs into that range.
 
 `tools/compare-experimental-presets.py` compares experimental data with the
 baseline mainline chunks using canonical content hashes. It reports exact
-duplicates, name conflicts, and EXP-only presets. Only entries with a
-confirmed mainline counterpart can be supplied to
-`tools/remove-experimental-duplicates.py`; EXP-only presets are ineligible.
+duplicates, name conflicts, and EXP-only presets. Confirmed mainline matches
+can be supplied to `tools/remove-experimental-duplicates.py` for duplicate
+removal; parser-invalid EXP presets may also be supplied with the explicit
+invalid-equation option and are recorded separately.
 The `[EXP] ` prefix is removed for analysis only and remains part of runtime
 and exact curation names.
 
@@ -95,8 +103,8 @@ The import is deliberately staged so supplied archives remain data, not code:
 
 1. Preflight records the archive digest, member counts, duplicate basenames,
    textures, and ignored members. Extraction uses a whitelist of `.milk` files
-   and approved image formats; archive executables and scripts are never
-   extracted or invoked. ZIP traversal and symlink-like entries are rejected.
+    and approved image formats; archive executables and scripts are never
+    extracted or invoked. ZIP traversal paths are rejected.
 2. Conversion runs only the repository's trusted converter in the supported
    WSL Node 22 environment. Malformed EEL, unsupported shader programs, and
    equation text that cannot be parsed as JavaScript are recorded as conversion
@@ -146,7 +154,7 @@ Browsers require a click or keypress before they'll grant audio capture permissi
 **Local Development Server:**
 
 ```bash
-npm ci                # Install the pinned development dependencies
+npm ci --ignore-scripts # Install dependencies without building the native converter
 npm start             # Serves ./src via the pinned `serve` package
 # Alternatively, using Python:
 python3 -m http.server --directory src 8000
@@ -185,13 +193,19 @@ The application will be available at `http://localhost:8080`. Further configurat
 
 ButterChurn dynamically compiles its audited MilkDrop preset equations, so the
 Content Security Policy intentionally permits `'unsafe-eval'`. Removing this
-directive breaks core visualizer functionality. Presets are vendored or
-generated from a pinned, hash-verified upstream archive, reviewed as executable
-content, and are not fetched from users or remote sources at runtime.
+directive breaks core visualizer functionality. The ansorre collection is
+pinned and SHA-256 verified; supplied archives record their digests, while the
+Cream of the Crop source is pinned to a commit but its ZIP checksum is not yet
+verified. All shipped presets are reviewed as executable content and are not
+fetched from users or remote sources at runtime.
 
 The Docker/Caddy configuration is an internal deployment option only. Docker
 binds it to `127.0.0.1:8080`; it is not intended to be exposed to a network or
 the public internet.
+
+Dependency security is reinforced with a lodash version override in
+`package.json`. Pull requests also run `scripts/sync.py --check`, the pinned
+GitHub Actions check, ESLint, and Ruff through `.github/workflows/checks.yml`.
 
 ## Controls
 
@@ -207,6 +221,9 @@ the public internet.
 | <kbd>[</kbd> / <kbd>]</kbd> | Adjust cycle interval (1s increments up to 10s, 5s increments above 10s) |
 | <kbd>D</kbd> | Switch audio input device |
 | <kbd>F</kbd> | Toggle fullscreen mode |
+| <kbd>X</kbd> | Remove current preset from this session's shuffle |
+| <kbd>L</kbd> | Show presets excluded this session |
+| <kbd>Escape</kbd> | Close the excluded-presets panel |
 | <kbd>?</kbd> | Show/hide the help menu |
 
 ### OBS Panel (`obs.html`)
@@ -229,6 +246,13 @@ corresponding `lib/` builds from the npm packages. A few presets have been
 intentionally curated out of the vendored packs for this deployment (see
 [Curation](#curation) below), so these bundles differ slightly from the
 stock npm builds.
+
+Development tools also include `serve`, `patch-package`, `acorn`, the
+MilkDrop EEL/preset parsers, and the native `milkdrop-shader-converter`. The
+native converter is needed only by raw `.milk` import tools; local serving does
+not require building it. Use `npm ci --ignore-scripts` for the serving-only
+setup, and follow `tools/convert-milk-presets.js` if the converter itself must
+be built.
 
 ## Extra Presets (~67k total)
 
@@ -268,6 +292,10 @@ supply, so everything shipped renders correctly. The upstream collection has
 **no license file**; the presets are community-created MilkDrop content
 redistributed as-is.
 
+`tools/fetch-cream-of-the-crop-presets.py` is a separate additive importer for
+raw `.milk` files from the pinned Cream of the Crop commit. Its upstream ZIP
+checksum is not yet verified, and it requires the native converter build.
+
 ## Curation
 
 This deployment ships a **deliberately curated** subset of the upstream
@@ -283,7 +311,8 @@ presets.
 ever curated out of this repo, with its pack, chunk, and (when known) the
 commit/date/subject that removed it. Like `preset-inventory.csv`, it's a
 generated bookkeeping record, not the source of truth the app reads from —
-only `tools/remove_presets.js` should ever write to it.
+`tools/remove_presets.js` is the normal writer for vendored/mainline curation;
+the experimental import and removal tools also update it for EXP decisions.
 
 Three things to know if you're regenerating presets:
 

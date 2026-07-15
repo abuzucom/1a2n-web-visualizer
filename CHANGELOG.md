@@ -12,8 +12,14 @@ All notable changes to this project are documented here. Format loosely follows
 - Added parser-based validation for generated equation JavaScript and removed
   250 malformed EXP presets from the shipped collection, with corresponding
   exclusion, inventory, and removal-ledger records.
+- Added runtime diagnostics for broken preset loads, including the preset name,
+  logical chunk ID, physical chunk file, and caught exception.
 
 ## [1.6.4] - 2026-07-15
+
+### Security
+- Added a lodash version override of `>=4.17.12` to prevent the known
+  prototype-pollution vulnerability in the dependency tree.
 
 ### Fixed
 - Corrected the logical IDs passed by all 377 experimental NestDrop preset
