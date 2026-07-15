@@ -16,12 +16,24 @@ requests from forks from failing.
 
 ## Issue Linking
 
-The pull request workflow searches the branch name, title, body, and commit
-messages for keys such as `VID-123`. It adds a remote link and an idempotent
-status comment to each matching issue.
+The pull request workflow runs only after a maintainer applies the `needs-jira`
+label. It searches the branch name, title, body, and commit messages for keys
+such as `VID-123`. It adds a remote link and an idempotent status comment to
+each matching issue.
 
-If no issue key is present, it creates a `Task` in `VID` with the `github-pr`
-label, then links the pull request to the new issue.
+If no issue key is present, it does nothing unless a maintainer also applies
+the `jira-create` label. With both labels present, it creates a `Task` in `VID`
+with the `github-pr` label, then links the pull request to the new issue.
+
+Maintainer process:
+
+1. Review the PR and confirm the intended Jira issue or title.
+2. Apply `needs-jira` to enable synchronization.
+3. Add `jira-create` only when creating a new Jira Task is explicitly desired.
+4. Remove `needs-jira` to stop future PR synchronization.
+
+The PR workflow uses `pull_request_target` but checks out only the trusted
+default branch. It never executes code from the PR branch with Jira secrets.
 
 ## Deployments
 

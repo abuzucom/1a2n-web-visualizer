@@ -18,6 +18,7 @@ JIRA_BASE_URL = os.environ.get("JIRA_BASE_URL", "https://abuzucom.atlassian.net"
 PROJECT_KEY = os.environ.get("JIRA_PROJECT_KEY", "VID")
 JIRA_EMAIL = os.environ.get("JIRA_EMAIL", "")
 JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
+JIRA_ALLOW_CREATE = os.environ.get("JIRA_ALLOW_CREATE", "false").lower() == "true"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 ISSUE_KEY_RE = re.compile(rf"\b{re.escape(PROJECT_KEY)}-\d+\b", re.IGNORECASE)
@@ -152,6 +153,9 @@ def pr_sync(event: dict[str, Any]) -> None:
         commit_messages = [commit["commit"]["message"] for commit in commits]
     keys = issue_keys([pr.get("title", ""), pr.get("body", ""), pr["head"]["ref"], *commit_messages])
     if not keys:
+        if not JIRA_ALLOW_CREATE:
+            print(f"No Jira key found for PR #{number}; jira-create label is absent.")
+            return
         existing = find_existing_pr_issue(pr_url)
         keys = {existing or create_issue(pr_url, pr.get("title", "Untitled PR"), pr["head"]["ref"])}
     state = "merged" if pr.get("merged") else action

@@ -29,6 +29,25 @@ class JiraSyncTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("Jira secrets are not configured", output.getvalue())
 
+    def test_pr_without_issue_key_skips_creation_without_label(self) -> None:
+        event = {
+            "pull_request": {
+                "number": 55,
+                "html_url": "https://github.com/example/repo/pull/55",
+                "title": "untracked change",
+                "body": "",
+                "head": {"ref": "feature/untracked"},
+            },
+            "repository": {"full_name": "example/repo"},
+            "action": "opened",
+        }
+        with (
+            patch.object(jira_sync, "GITHUB_TOKEN", ""),
+            patch.object(jira_sync, "JIRA_ALLOW_CREATE", False),
+            patch.object(jira_sync, "create_issue", side_effect=AssertionError("Issue created")),
+        ):
+            jira_sync.pr_sync(event)
+
 
 if __name__ == "__main__":
     unittest.main()
