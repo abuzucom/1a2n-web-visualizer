@@ -63,7 +63,6 @@ def changed_files(event: dict[str, Any]) -> list[str]:
     repository = event["repository"]["full_name"]
     number = event["pull_request"]["number"]
     files = []
-    page = 1
     for page in range(1, MAX_FILE_PAGES + 1):
         batch = github_get(f"/repos/{repository}/pulls/{number}/files?per_page=100&page={page}")
         files.extend(item["filename"] for item in batch)
