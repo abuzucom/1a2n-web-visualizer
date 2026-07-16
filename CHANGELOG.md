@@ -14,6 +14,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Started the visualizer before microphone permission and device enumeration
   finish, so the first frame does not wait on audio input setup.
 - Fixed equation validation for valid statements without trailing semicolons.
+- Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ## [1.7.1] - 2026-07-16
 
