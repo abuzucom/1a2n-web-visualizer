@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Format loosely follows
 ## [Unreleased]
 
 ### Fixed
+- Randomized the initial fullscreen preset across the resident vendored
+  collection while leaving the OBS startup behavior unchanged.
 - Normalized equation strings with a trailing newline before load, so presets
   whose final statement lacks a semicolon compile in butterchurn's
   space-separated equation wrapper instead of being skipped.
@@ -22,6 +24,17 @@ All notable changes to this project are documented here. Format loosely follows
   finish, so the first frame does not wait on audio input setup.
 - Fixed equation validation for valid statements without trailing semicolons.
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
+
+### Added
+- Added a visible five-second fullscreen startup countdown with an accessible
+  progress indicator and a `Still loading...` state for slower starts.
+
+### Changed
+- Curated 1,625 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Made preset curation recoverable after partial writes and Windows file-lock
+  replacement failures, while resolving generated chunks from the authoritative
+  index instead of stale inventory metadata.
 
 ## [1.7.1] - 2026-07-16
 
