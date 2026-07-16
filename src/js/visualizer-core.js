@@ -47,7 +47,7 @@
     if (!source || !source.trim()) return;
     // Compile only. Butterchurn also uses dynamic functions for equations;
     // this prevents malformed text from reaching its shader setup path.
-    new Function('a', source + ' return a;');
+    new Function('a', source + '\nreturn a;');
   }
 
   function validatePresetEquations(preset) {
@@ -587,7 +587,6 @@
 
     return {
       start: function (deviceId) { return startAudio(audio, playback, deviceId); },
-      prepare: function () { return prepareAudio(audio, playback); },
       next: function () { loadPreset(playback, stepIndex(playback, 1)); restartCycle(playback); },
       prev: function () { loadPreset(playback, stepIndex(playback, -1)); restartCycle(playback); },
       random: function () { loadRandom(playback); restartCycle(playback); },

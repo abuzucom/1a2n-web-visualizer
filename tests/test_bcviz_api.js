@@ -100,11 +100,13 @@ test('startup selects a resident preset without loading a lazy chunk', async fun
   assert.equal(harness.chunkLoads(), 0);
 });
 
-test('prepares the visualizer before the first interaction', function () {
-  const harness = createHarness({ vendor: { baseVals: {} } });
+test('accepts a valid equation without a trailing semicolon', async function () {
+  const harness = createHarness({
+    vendor: { baseVals: {}, frame_eqs_str: 'a = 1' },
+  });
   const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
 
-  viz.prepare();
+  await viz.start();
 
   assert.equal(viz.currentName(), 'vendor');
 });

@@ -13,6 +13,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Stopped treating post-load WebGL error state as proof that a preset failed.
 - Started the visualizer before microphone permission and device enumeration
   finish, so the first frame does not wait on audio input setup.
+- Fixed equation validation for valid statements without trailing semicolons.
 
 ### Changed
 - Bumped the application version to `1.7.2`.
