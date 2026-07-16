@@ -155,7 +155,6 @@ function validateEquation(source, label) {
     acorn.parse(`function __bcEquation(a) {${source}\nreturn a;}`, {
       ecmaVersion: 'latest',
       sourceType: 'script',
-      allowReturnOutsideFunction: true,
     });
   } catch (error) {
     throw new Error(`${label}: ${error.message}`, { cause: error });
