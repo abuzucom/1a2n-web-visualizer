@@ -27,6 +27,8 @@ All notable changes to this project are documented here. Format loosely follows
   checks as documented repository gates.
 
 ### Changed
+- Renamed the README heading to `1a2n Web Visualizer` to match the repository
+  name.
 - Made curation output writes atomic and guarded audio-device recovery against
   asynchronous failures and leaked resources.
 - Split the BCViz controller responsibilities and hardened preset loading,
