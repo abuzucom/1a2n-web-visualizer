@@ -127,7 +127,16 @@ function atomicWrite(filePath, content) {
   const temporaryPath = path.join(directory, path.basename(filePath));
   try {
     fs.writeFileSync(temporaryPath, content);
-    fs.renameSync(temporaryPath, filePath);
+    try {
+      fs.renameSync(temporaryPath, filePath);
+    } catch (error) {
+      if (error.code !== 'EPERM') throw error;
+      // Windows can reject replacing a tracked file while an external scanner
+      // briefly holds the destination. The content was prepared and checked;
+      // copy it over as the platform-specific fallback.
+      fs.copyFileSync(temporaryPath, filePath);
+      fs.unlinkSync(temporaryPath);
+    }
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -274,8 +283,8 @@ function loadCsvByName(csvLines) {
   return byName;
 }
 
-function resolveTargets(names, byName) {
-  const notFound = names.filter((n) => !byName.has(n));
+function resolveTargets(names, byName, alreadyRemoved) {
+  const notFound = names.filter((n) => !byName.has(n) && !alreadyRemoved.has(n));
   if (notFound.length > 0) {
     console.error(`Aborting — ${notFound.length} name(s) not found in preset-inventory.csv (no changes made):`);
     for (const n of notFound) console.error(`  ${JSON.stringify(n)}`);
@@ -284,6 +293,7 @@ function resolveTargets(names, byName) {
 
   const byPack = new Map(); // pack -> [name]
   for (const n of names) {
+    if (!byName.has(n)) continue;
     const { pack } = byName.get(n);
     if (!byPack.has(pack)) byPack.set(pack, []);
     byPack.get(pack).push(n);
@@ -291,11 +301,14 @@ function resolveTargets(names, byName) {
   return byPack;
 }
 
-function chunkChanges(targets, indexData) {
+function chunkChanges(targets, indexData, alreadyRemoved) {
   const byChunk = new Map(); // chunk id -> [name]
   for (const n of targets) {
     const id = indexData.chunks.findIndex((names) => names.includes(n));
-    if (id === -1) throw new Error(`"${n}" not found in index.js`);
+    if (id === -1) {
+      if (alreadyRemoved.has(n)) continue;
+      throw new Error(`"${n}" not found in index.js`);
+    }
     if (!byChunk.has(id)) byChunk.set(id, []);
     byChunk.get(id).push(n);
   }
@@ -319,11 +332,11 @@ function removeFromChunk(id, chunkNames, indexData) {
   return chunk;
 }
 
-function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary) {
+function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alreadyRemoved) {
   if (!byPack.has('presets-extra')) return;
   const targets = byPack.get('presets-extra');
   const { data: indexData, prefix: idxPrefix, suffix: idxSuffix } = readIndex();
-  const byChunk = chunkChanges(targets, indexData);
+  const byChunk = chunkChanges(targets, indexData, alreadyRemoved);
 
   for (const [id, chunkNames] of byChunk) {
     const chunk = removeFromChunk(id, chunkNames, indexData);
@@ -334,16 +347,23 @@ function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary) {
   pendingWrites.push({ kind: 'index', data: indexData, prefix: idxPrefix, suffix: idxSuffix });
 }
 
-function removeFromVendorPackValidated(pack, targets) {
+function removeFromVendorPackValidated(pack, targets, alreadyRemoved) {
   const vendorPath = path.join(VENDOR_DIR, `${pack}.min.js`);
   if (!fs.existsSync(vendorPath)) throw new Error(`unknown pack "${pack}" — no file at ${vendorPath}`);
   const before = fs.readFileSync(vendorPath, 'utf8');
   const beforeNames = loadVendorPresetNames(before);
-
-  const { newSource, removed } = removeFromVendorPack(before, targets);
-  const missing = targets.filter((n) => !removed.includes(n));
+  const activeTargets = targets.filter((name) => beforeNames.has(name));
+  const missing = targets.filter((name) => !beforeNames.has(name) && !alreadyRemoved.has(name));
   if (missing.length > 0) {
     throw new Error(`could not locate these presets in ${pack}: ${missing.map((n) => JSON.stringify(n)).join(', ')}`);
+  }
+  if (activeTargets.length === 0) return null;
+
+  const { newSource, removed } = removeFromVendorPack(before, activeTargets);
+  const notRemoved = activeTargets.filter((n) => !removed.includes(n));
+  if (notRemoved.length > 0) {
+    const names = notRemoved.map((n) => JSON.stringify(n)).join(', ');
+    throw new Error(`could not locate these presets in ${pack}: ${names}`);
   }
 
   // validate the edited bundle still loads and only the intended names changed
@@ -354,21 +374,23 @@ function removeFromVendorPackValidated(pack, targets) {
     throw new Error(`editing ${pack} unexpectedly added preset(s): ${actuallyAdded.join(', ')}`);
   }
   const removedSet = new Set(actuallyRemoved);
-  const expectedSet = new Set(targets);
-  if (actuallyRemoved.length !== targets.length || [...expectedSet].some((n) => !removedSet.has(n))) {
+  const expectedSet = new Set(activeTargets);
+  if (actuallyRemoved.length !== activeTargets.length || [...expectedSet].some((n) => !removedSet.has(n))) {
     throw new Error(
       `editing ${pack} did not remove exactly the requested names (removed: ${actuallyRemoved.join(', ')})`,
     );
   }
-  return { vendorPath, newSource };
+  return { vendorPath, newSource, removedCount: activeTargets.length };
 }
 
-function prepareVendorWrites(byPack, pendingWrites, summary) {
+function prepareVendorWrites(byPack, pendingWrites, summary, alreadyRemoved) {
   for (const [pack, targets] of byPack) {
     if (pack === 'presets-extra') continue;
-    const { vendorPath, newSource } = removeFromVendorPackValidated(pack, targets);
+    const result = removeFromVendorPackValidated(pack, targets, alreadyRemoved);
+    if (!result) continue;
+    const { vendorPath, newSource } = result;
     pendingWrites.push({ kind: 'vendor', path: vendorPath, content: newSource });
-    summary.vendor[pack] = targets.length;
+    summary.vendor[pack] = result.removedCount;
   }
 }
 
@@ -413,10 +435,15 @@ function escCsv(s) {
 
 function appendRemovedPresetsCsv(names, byName, indexData) {
   const today = new Date().toISOString().slice(0, 10);
-  const rows = names.map((n) => {
-    const { pack } = byName.get(n);
-    const chunk = indexData.chunks.findIndex((chunkNames) => chunkNames.includes(n));
-    if (chunk === -1) throw new Error(`"${n}" not found in index.js`);
+  const rows = names.filter((n) => byName.has(n)).map((n) => {
+    const { pack, chunk: inventoryChunk } = byName.get(n);
+    const indexChunk = indexData.chunks.findIndex((chunkNames) => chunkNames.includes(n));
+    const chunk = pack === 'presets-extra' && indexChunk !== -1
+      ? indexChunk
+      : inventoryChunk;
+    if (chunk === -1 || chunk === undefined) {
+      throw new Error(`"${n}" has no valid chunk assignment`);
+    }
     return [escCsv(n), pack, chunk, '', today, ''].join(',');
   });
 
@@ -424,7 +451,19 @@ function appendRemovedPresetsCsv(names, byName, indexData) {
     ? fs.readFileSync(REMOVED_CSV_PATH, 'utf8')
     : 'name,pack,chunk,commit,date,subject\n';
   const newline = existing.includes('\r\n') ? '\r\n' : '\n';
-  atomicWrite(REMOVED_CSV_PATH, existing + rows.join(newline) + newline);
+  const existingNames = new Set(existing.split(/\r?\n/).map(parseCsvLine)
+    .filter(Boolean).map((row) => row.name));
+  const newRows = rows.filter((row) => {
+    const name = parseCsvLine(row)?.name;
+    return name && !existingNames.has(name);
+  });
+  if (newRows.length > 0) atomicWrite(REMOVED_CSV_PATH, existing + newRows.join(newline) + newline);
+}
+
+function loadRemovedNames() {
+  if (!fs.existsSync(REMOVED_CSV_PATH)) return new Set();
+  return new Set(fs.readFileSync(REMOVED_CSV_PATH, 'utf8').split(/\r?\n/)
+    .map(parseCsvLine).filter(Boolean).map((row) => row.name));
 }
 
 // Consistency check: verify each file dropped by exactly the expected amount
@@ -456,13 +495,15 @@ function main() {
 
   const csvLines = fs.readFileSync(CSV_PATH, 'utf8').split('\n');
   const byName = loadCsvByName(csvLines);
-  const byPack = resolveTargets(names, byName);
+  const alreadyRemoved = loadRemovedNames();
+  const byPack = resolveTargets(names, byName, alreadyRemoved);
+  const csvTargets = names.filter((name) => byName.has(name));
 
   const pendingWrites = []; // [{ path, content }]
   const summary = { presetsExtra: 0, vendor: {}, csv: 0 };
-  preparePresetsExtraWrites(byPack, byName, pendingWrites, summary);
-  prepareVendorWrites(byPack, pendingWrites, summary);
-  const keptLines = prepareCsvUpdate(csvLines, names, summary);
+  preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alreadyRemoved);
+  prepareVendorWrites(byPack, pendingWrites, summary, alreadyRemoved);
+  const keptLines = prepareCsvUpdate(csvLines, csvTargets, summary);
 
   if (dryRun) {
     console.log('Dry run — no files written.');
