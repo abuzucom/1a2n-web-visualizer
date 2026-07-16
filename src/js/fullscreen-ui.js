@@ -13,6 +13,7 @@
   const closeExcludedBtn = document.getElementById('closeExcludedBtn');
 
   let toastTimer = null;
+  let startupPending = false;
   function say(msg) {
     const s = msg.length > 60 ? msg.slice(0, 57) + '\u2026' : msg;
     toast.textContent = s;
@@ -74,16 +75,22 @@
   }
 
   async function start() {
-    if (viz.isStarted()) return;
+    if (viz.isStarted() || startupPending) return;
+    startupPending = true;
     help.classList.add('hidden');
-    try {
-      await viz.start();
-      document.body.classList.add('running');
-      say('\u25B6 Running \u2014 press ? for controls');
-    } catch (e) {
-      help.classList.remove('hidden');
-      say('Audio error: ' + e.message);
-    }
+    say('Starting visualizer...');
+    window.setTimeout(async function () {
+      try {
+        await viz.start();
+        document.body.classList.add('running');
+        say('\u25B6 Running \u2014 press ? for controls');
+      } catch (e) {
+        help.classList.remove('hidden');
+        say('Audio error: ' + e.message);
+      } finally {
+        startupPending = false;
+      }
+    }, 0);
   }
 
   document.addEventListener('keydown', function (e) {

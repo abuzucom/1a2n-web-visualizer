@@ -10,6 +10,9 @@ All notable changes to this project are documented here. Format loosely follows
 - Reduced fullscreen startup blocking by selecting the initial vendored preset
   from a resident index and deferring experimental image loading until idle or
   lazy-preset selection.
+- Stopped treating post-load WebGL error state as proof that a preset failed.
+- Started the visualizer before microphone permission and device enumeration
+  finish, so the first frame does not wait on audio input setup.
 
 ### Changed
 - Bumped the application version to `1.7.2`.
