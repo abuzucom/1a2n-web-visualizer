@@ -152,10 +152,9 @@ function convertWaveOrShape(item, kind, index, presetVersion) {
 function validateEquation(source, label) {
   if (!source || !source.trim()) return;
   try {
-    acorn.parse(source, {
+    acorn.parse(`function __bcEquation(a) {${source}\nreturn a;}`, {
       ecmaVersion: 'latest',
       sourceType: 'script',
-      allowReturnOutsideFunction: true,
     });
   } catch (error) {
     throw new Error(`${label}: ${error.message}`, { cause: error });

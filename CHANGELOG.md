@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Reduced fullscreen startup blocking by selecting the initial vendored preset
+  from a resident index and deferring experimental image loading until idle or
+  lazy-preset selection.
+- Stopped treating post-load WebGL error state as proof that a preset failed.
+- Started the visualizer before microphone permission and device enumeration
+  finish, so the first frame does not wait on audio input setup.
+- Fixed equation validation for valid statements without trailing semicolons.
+
 ## [1.7.1] - 2026-07-16
 
 ### Fixed
