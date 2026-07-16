@@ -15,9 +15,6 @@ All notable changes to this project are documented here. Format loosely follows
   finish, so the first frame does not wait on audio input setup.
 - Fixed equation validation for valid statements without trailing semicolons.
 
-### Changed
-- Bumped the application version to `1.7.2`.
-
 ## [1.7.1] - 2026-07-16
 
 ### Fixed
