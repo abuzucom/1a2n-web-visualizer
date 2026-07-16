@@ -9,7 +9,6 @@
   'use strict';
 
   const MAX_PIXEL_RATIO = 2;
-  const MAX_WEBGL_ERRORS_TO_DRAIN = 1024;
   const PRESET_PACKS = [
     'butterchurnPresets', 'butterchurnPresetsExtra',
     'butterchurnPresetsExtra2', 'butterchurnPresetsMD1',
@@ -48,7 +47,7 @@
     if (!source || !source.trim()) return;
     // Compile only. Butterchurn also uses dynamic functions for equations;
     // this prevents malformed text from reaching its shader setup path.
-    new Function('a', source);
+    new Function('a', source + ' return a;');
   }
 
   function validatePresetEquations(preset) {
@@ -139,9 +138,10 @@
 
   function createPresetStore(opts, getCurrentIndex) {
     const presets = mergePresetPacks();
+    const residentKeys = Object.keys(presets);
     const extraIndex = global.BCExtraPresetIndex || { chunks: [] };
     const extraChunkOf = buildExtraChunkMap(presets, extraIndex);
-    const keys = Object.keys(presets).concat(Object.keys(extraChunkOf)).sort();
+    const keys = residentKeys.concat(Object.keys(extraChunkOf)).sort();
     const failed = new Set();
     const state = {
       presets: presets,
@@ -160,7 +160,13 @@
     global.__bcPresetChunk = function (cid, chunkPresets) {
       registerChunk(state, cid, chunkPresets);
     };
-    return { state: state, presets: presets, keys: keys, failed: failed };
+    return {
+      state: state,
+      presets: presets,
+      residentKeys: residentKeys,
+      keys: keys,
+      failed: failed,
+    };
   }
 
   function stepIndex(controller, direction) {
@@ -187,20 +193,6 @@
     return pool;
   }
 
-  function readWebGLError(canvas) {
-    if (!canvas || !canvas.getContext) return null;
-    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
-      || canvas.getContext('experimental-webgl');
-    if (!gl || !gl.getError) return null;
-    let firstError = null;
-    for (let count = 0; count < MAX_WEBGL_ERRORS_TO_DRAIN; count++) {
-      const error = gl.getError();
-      if (error === gl.NO_ERROR) return firstError;
-      if (firstError === null) firstError = `0x${error.toString(16)}`;
-    }
-    return firstError;
-  }
-
   function applyPreset(controller, index, blend, announce) {
     const name = controller.store.keys[index];
     const cid = controller.store.state.extraChunkOf[name];
@@ -210,8 +202,6 @@
     try {
       validatePresetEquations(preset);
       controller.visualizer.loadPreset(preset, effectiveBlend);
-      const webglError = readWebGLError(controller.canvas);
-      if (webglError) throw new Error(`WebGL error after preset load: ${webglError}`);
     } catch (error) {
       controller.store.failed.add(name);
       console.warn('Preset load failed; skipping:', {
@@ -251,7 +241,12 @@
 
   function loadMissingPreset(controller, index, blend, announce, seq, mode) {
     const name = controller.store.keys[index];
-    ensureChunk(controller.store.state, controller.store.state.extraChunkOf[name]).then(function (ok) {
+    const ready = controller.ensureExperimentalImages
+      ? controller.ensureExperimentalImages()
+      : Promise.resolve();
+    ready.then(function () {
+      return ensureChunk(controller.store.state, controller.store.state.extraChunkOf[name]);
+    }).then(function (ok) {
       if (seq !== controller.loadSeq) return;
       if (!ok || !(name in controller.store.presets)) {
         controller.onToast('\u26A0 preset unavailable, skipping: ' + name);
@@ -411,10 +406,13 @@
     return index >= 0 ? useDevice(audio, index) : null;
   }
 
-  function loadExtraImages(audio) {
-    const libraries = [
-      getLib('butterchurnExtraImages'), getLib('butterchurnExtraImagesExp'),
-    ].filter(function (library) { return library && library.getImages; });
+  function loadExtraImages(audio, includeExperimental) {
+    const libraryNames = includeExperimental
+      ? ['butterchurnExtraImagesExp']
+      : ['butterchurnExtraImages'];
+    const libraries = libraryNames.map(getLib).filter(function (library) {
+      return library && library.getImages;
+    });
     if (!libraries.length) return;
     try {
       const images = {};
@@ -425,13 +423,47 @@
     }
   }
 
-  async function initializeAudio(audio, playback, deviceId) {
+  function ensureExperimentalImages(audio) {
+    if (audio.experimentalImagesReady) return Promise.resolve();
+    if (!audio.experimentalImagesLoading) {
+      audio.experimentalImagesLoading = Promise.resolve().then(function () {
+        loadExtraImages(audio, true);
+        audio.experimentalImagesReady = true;
+      });
+    }
+    return audio.experimentalImagesLoading;
+  }
+
+  async function connectInitialStream(audio, deviceId) {
+    try {
+      const stream = await openStream(deviceId);
+      await getDevices(audio);
+      if (audio.started) connectStream(audio, stream);
+      else stream.getTracks().forEach(function (track) { track.stop(); });
+    } catch (error) {
+      console.warn('Audio input unavailable; visualizer will continue:', error);
+      audio.onToast('Audio input unavailable; visualizer is running');
+    }
+  }
+
+  function initializeAudio(audio, playback, deviceId) {
+    if (!audio.prepared) prepareAudio(audio, playback);
+    audio.audioCtx.resume().catch(function (error) {
+      console.warn('Audio context resume failed:', error);
+    });
+    connectInitialStream(audio, deviceId);
+  }
+
+  function prepareAudio(audio, playback) {
+    if (audio.prepared) return;
     audio.audioCtx = new (global.AudioContext || global.webkitAudioContext)();
-    await audio.audioCtx.resume();
-    const stream = await openStream(deviceId);
-    await getDevices(audio);
     createVisualizer(audio, playback);
-    connectStream(audio, stream);
+    if (!loadInitialPreset(audio, playback, false)) {
+      audio.audioCtx.close();
+      audio.audioCtx = null;
+      throw new Error('no valid preset could be loaded');
+    }
+    audio.prepared = true;
   }
 
   function createVisualizer(audio, playback) {
@@ -439,28 +471,26 @@
       width: audio.canvas.width, height: audio.canvas.height, pixelRatio: 1, textureRatio: 1,
     });
     playback.visualizer = audio.visualizer;
-    loadExtraImages(audio);
+    playback.ensureExperimentalImages = function () { return ensureExperimentalImages(audio); };
+    loadExtraImages(audio, false);
   }
 
-  function startRenderLoop(audio, playback, loadInitial) {
-    if (!loadInitial) {
-      playback.rendering = true;
-      scheduleRender(audio, playback);
-      restartCycle(playback);
-      return;
-    }
-    const resident = playback.store.keys.filter(function (name) {
-      return name in playback.store.presets;
-    });
+  function loadInitialPreset(audio, playback, randomFirst) {
+    const resident = playback.store.residentKeys;
     let first = resident.length ? playback.store.keys.indexOf(resident[0]) : 0;
-    if (audio.opts.randomFirst && resident.length) {
+    if (randomFirst && audio.opts.randomFirst && resident.length) {
       first = playback.store.keys.indexOf(resident[Math.floor(Math.random() * resident.length)]);
     }
     const loaded = loadPreset(playback, first, 0, false, 'startup');
     if (loaded === false || !playback.lastGoodPreset) {
       audio.onToast('\u26A0 no valid preset could be loaded');
-      return;
+      return false;
     }
+    return true;
+  }
+
+  function startRenderLoop(audio, playback, loadInitial) {
+    if (loadInitial && !loadInitialPreset(audio, playback, true)) return;
     playback.rendering = true;
     scheduleRender(audio, playback);
     restartCycle(playback);
@@ -505,13 +535,14 @@
     try {
       await initializeAudio(audio, playback, deviceId);
       audio.started = true;
+      startRenderLoop(audio, playback, false);
     } catch (error) {
+      stopRenderLoop(playback);
       if (audio.audioCtx) { audio.audioCtx.close(); audio.audioCtx = null; }
       throw error;
     } finally {
       audio.starting = false;
     }
-    startRenderLoop(audio, playback, true);
   }
 
   function createAudioController(canvas, opts, onToast) {
@@ -529,6 +560,9 @@
       deviceRequestSeq: 0,
       started: false,
       starting: false,
+      prepared: false,
+      experimentalImagesReady: false,
+      experimentalImagesLoading: null,
     };
   }
 
@@ -553,6 +587,7 @@
 
     return {
       start: function (deviceId) { return startAudio(audio, playback, deviceId); },
+      prepare: function () { return prepareAudio(audio, playback); },
       next: function () { loadPreset(playback, stepIndex(playback, 1)); restartCycle(playback); },
       prev: function () { loadPreset(playback, stepIndex(playback, -1)); restartCycle(playback); },
       random: function () { loadRandom(playback); restartCycle(playback); },
