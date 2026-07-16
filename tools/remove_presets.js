@@ -291,11 +291,11 @@ function resolveTargets(names, byName) {
   return byPack;
 }
 
-function chunkChanges(targets, byName) {
+function chunkChanges(targets, indexData) {
   const byChunk = new Map(); // chunk id -> [name]
   for (const n of targets) {
-    const { chunk } = byName.get(n);
-    const id = Number(chunk);
+    const id = indexData.chunks.findIndex((names) => names.includes(n));
+    if (id === -1) throw new Error(`"${n}" not found in index.js`);
     if (!byChunk.has(id)) byChunk.set(id, []);
     byChunk.get(id).push(n);
   }
@@ -323,7 +323,7 @@ function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary) {
   if (!byPack.has('presets-extra')) return;
   const targets = byPack.get('presets-extra');
   const { data: indexData, prefix: idxPrefix, suffix: idxSuffix } = readIndex();
-  const byChunk = chunkChanges(targets, byName);
+  const byChunk = chunkChanges(targets, indexData);
 
   for (const [id, chunkNames] of byChunk) {
     const chunk = removeFromChunk(id, chunkNames, indexData);
@@ -411,10 +411,12 @@ function escCsv(s) {
   return /[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : s;
 }
 
-function appendRemovedPresetsCsv(names, byName) {
+function appendRemovedPresetsCsv(names, byName, indexData) {
   const today = new Date().toISOString().slice(0, 10);
   const rows = names.map((n) => {
-    const { pack, chunk } = byName.get(n);
+    const { pack } = byName.get(n);
+    const chunk = indexData.chunks.findIndex((chunkNames) => chunkNames.includes(n));
+    if (chunk === -1) throw new Error(`"${n}" not found in index.js`);
     return [escCsv(n), pack, chunk, '', today, ''].join(',');
   });
 
@@ -474,7 +476,7 @@ function main() {
   // future fetch won't resurrect them) versus the reverse order, where a
   // failure after removal but before the ledger write could let a name
   // slip back in.
-  appendRemovedPresetsCsv(names, byName);
+  appendRemovedPresetsCsv(names, byName, initialIndex);
   writeAll(pendingWrites, keptLines);
   logSummary('Removed', names, summary);
   verifyConsistency(indexCountBefore, csvRowCountBefore, summary);
