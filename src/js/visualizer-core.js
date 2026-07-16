@@ -50,6 +50,28 @@
     new Function('a', source + '\nreturn a;');
   }
 
+  /** Terminate a non-empty equation so butterchurn's space-separated
+   * "src return a;" compile parses it. Idempotent. */
+  function normalizeEquation(source) {
+    if (!source || source.slice(-1) === '\n') return source;
+    return source + '\n';
+  }
+
+  /** Normalize all equation strings on a preset in place. Empty strings
+   * stay empty; butterchurn shallow-copies presets so mutation is safe. */
+  function normalizePresetEquations(preset) {
+    ['init_eqs_str', 'frame_eqs_str', 'pixel_eqs_str'].forEach(function (field) {
+      if (typeof preset[field] === 'string') preset[field] = normalizeEquation(preset[field]);
+    });
+    [preset.shapes, preset.waves].forEach(function (items) {
+      (items || []).forEach(function (item) {
+        ['init_eqs_str', 'frame_eqs_str', 'point_eqs_str'].forEach(function (field) {
+          if (typeof item[field] === 'string') item[field] = normalizeEquation(item[field]);
+        });
+      });
+    });
+  }
+
   function validatePresetEquations(preset) {
     ['init_eqs_str', 'frame_eqs_str', 'pixel_eqs_str'].forEach(function (field) {
       validateEquation(preset[field]);
@@ -200,17 +222,26 @@
     const effectiveBlend = blend != null ? blend : controller.defaultBlend;
     if (cid != null) touchChunk(controller.store.state, cid);
     try {
+      normalizePresetEquations(preset);
       validatePresetEquations(preset);
+      if (controller.linkGuard) controller.linkGuard.failures.length = 0;
       controller.visualizer.loadPreset(preset, effectiveBlend);
+      if (controller.linkGuard && controller.linkGuard.failures.length) {
+        throw new Error('shader program link failed: ' + controller.linkGuard.failures.join('; '));
+      }
     } catch (error) {
+      const linkFailed = Boolean(controller.linkGuard && controller.linkGuard.failures.length);
       controller.store.failed.add(name);
+      controller.excluded.add(name);
       console.warn('Preset load failed; skipping:', {
         name: name,
         logicalChunk: cid,
         mode: controller.navigationMode,
         error: error,
       });
-      restoreLastGood(controller);
+      // Restore without blending after a link failure: blending keeps the
+      // broken program on screen as the previous shader for the whole blend.
+      restoreLastGood(controller, linkFailed ? 0 : undefined);
       controller.onToast('\u26A0 broken preset skipped: ' + name);
       return false;
     }
@@ -223,10 +254,11 @@
     return true;
   }
 
-  function restoreLastGood(controller) {
+  function restoreLastGood(controller, blendOverride) {
     if (!controller.lastGoodPreset) return false;
+    const blend = blendOverride != null ? blendOverride : controller.lastGoodBlend;
     try {
-      controller.visualizer.loadPreset(controller.lastGoodPreset, controller.lastGoodBlend);
+      controller.visualizer.loadPreset(controller.lastGoodPreset, blend);
       return true;
     } catch (error) {
       console.error('Unable to restore last known-good preset:', {
@@ -334,6 +366,7 @@
       cycleSecs: opts.cycleSecs || 20,
       cycleTimer: null,
       navigationMode: 'sequential',
+      linkGuard: null,
       lastGoodPreset: null,
       lastGoodBlend: 0,
       lastGoodName: '',
@@ -466,11 +499,32 @@
     audio.prepared = true;
   }
 
+  /** Wrap gl.linkProgram to record link failures per program; butterchurn
+   * never checks LINK_STATUS itself, so unlinked shaders otherwise render
+   * broken frames while the browser floods the console with GL errors. */
+  function installLinkGuard(canvas) {
+    const gl = canvas.getContext ? canvas.getContext('webgl2') : null;
+    if (!gl || typeof gl.linkProgram !== 'function') return { failures: [] };
+    if (gl.__bcLinkGuard) return gl.__bcLinkGuard;
+    const guard = { failures: [] };
+    const nativeLinkProgram = gl.linkProgram;
+    gl.linkProgram = function (program) {
+      nativeLinkProgram.call(gl, program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        guard.failures.push(typeof gl.getProgramInfoLog === 'function'
+          ? gl.getProgramInfoLog(program) : 'shader program link failed');
+      }
+    };
+    gl.__bcLinkGuard = guard;
+    return guard;
+  }
+
   function createVisualizer(audio, playback) {
     audio.visualizer = audio.Butterchurn.createVisualizer(audio.audioCtx, audio.canvas, {
       width: audio.canvas.width, height: audio.canvas.height, pixelRatio: 1, textureRatio: 1,
     });
     playback.visualizer = audio.visualizer;
+    playback.linkGuard = installLinkGuard(audio.canvas);
     playback.ensureExperimentalImages = function () { return ensureExperimentalImages(audio); };
     loadExtraImages(audio, false);
   }

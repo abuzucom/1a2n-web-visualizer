@@ -339,7 +339,9 @@ Three things to know if you're regenerating presets:
 - **The removal lists come from the app.** The `fullscreen.html` interface can
   remove the current preset from rotation and export the list of presets
   excluded during a session (the &#128683; / &#128203; controls), which is the
-  source of the names curated out of the codebase here.
+  source of the names curated out of the codebase here. Presets that fail at
+  runtime - broken equations or shader link failures - are added to that
+  exported list automatically when the app skips them.
 - **New upstream sources should consult `removed-presets.csv` too.** A fetch
   script pulling presets from a different collection should exclude names
   present in the ledger, the same way `fetch-extra-presets-curated.py` does -

@@ -7,6 +7,13 @@ All notable changes to this project are documented here. Format loosely follows
 ## [Unreleased]
 
 ### Fixed
+- Normalized equation strings with a trailing newline before load, so presets
+  whose final statement lacks a semicolon compile in butterchurn's
+  space-separated equation wrapper instead of being skipped.
+- Detected warp/comp shader link failures during preset load and skipped the
+  preset instead of rendering every frame with an unlinked program.
+- Added runtime-detected broken presets (bad equations or shader link
+  failures) to the exportable excluded-presets list for later curation.
 - Reduced fullscreen startup blocking by selecting the initial vendored preset
   from a resident index and deferring experimental image loading until idle or
   lazy-preset selection.
