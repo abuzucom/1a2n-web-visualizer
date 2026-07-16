@@ -491,7 +491,7 @@
     if (audio.prepared) return;
     audio.audioCtx = new (global.AudioContext || global.webkitAudioContext)();
     createVisualizer(audio, playback);
-    if (!loadInitialPreset(audio, playback, false)) {
+    if (!loadInitialPreset(audio, playback, true)) {
       audio.audioCtx.close();
       audio.audioCtx = null;
       throw new Error('no valid preset could be loaded');
