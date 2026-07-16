@@ -4,6 +4,40 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-07-15
+
+### Added
+- Jira Cloud synchronization for approved pull requests and successful GitHub
+  Pages deployments. The integration links `VID-*` issues and can create a
+  `Task` only when maintainers apply the `jira-create` label.
+- Protected-file review checks for agent instructions, GitHub Actions,
+  automation scripts, dependencies, deployment configuration, runtime code, and
+  vendored code. See [`docs/protected-file-review.md`](docs/protected-file-review.md).
+- Current-commit approval enforcement for protected files changed by agents,
+  while owner-authored pull requests avoid the impossible self-approval case.
+- GitHub Actions pin, instruction synchronization, lint, and protected-file
+  checks as documented repository gates.
+
+### Changed
+- Made curation output writes atomic and guarded audio-device recovery against
+  asynchronous failures and leaked resources.
+- Split the BCViz controller responsibilities and hardened preset loading,
+  rendering, WebGL context recovery, and render-loop failure handling.
+- Added favicon links to the visualizer pages.
+- Added known-good preset recovery and random fallback behavior when a preset
+  fails to compile or render.
+- Added bounded protected-file pagination and trusted-default-branch execution
+  for review checks and Jira workflows.
+- Removed 131 invalid generated presets and kept generated indexes, chunks,
+  inventories, and removal ledgers consistent.
+
+### Security
+- Jira secrets are used only by trusted `pull_request_target` and deployment
+  workflows; fork pull requests skip cleanly when secrets are unavailable.
+- Protected-file workflows never execute code from the pull request branch.
+- Documented the single-maintainer branch protection model without requiring
+  global GitHub Code Owner approval.
+
 ## [1.6.6] - 2026-07-15
 
 ### Changed
