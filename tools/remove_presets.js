@@ -302,6 +302,19 @@ function chunkChanges(targets, byName) {
   return byChunk;
 }
 
+function reconcilePresetExtraChunks(byName, indexData) {
+  const indexChunks = new Map();
+  indexData.chunks.forEach((names, id) => {
+    names.forEach((name) => indexChunks.set(name, id));
+  });
+  for (const [name, entry] of byName) {
+    if (entry.pack !== 'presets-extra') continue;
+    const chunk = indexChunks.get(name);
+    if (chunk === undefined) throw new Error(`"${name}" not found in index.js`);
+    entry.chunk = String(chunk);
+  }
+}
+
 function removeFromChunk(id, chunkNames, indexData) {
   const arr = indexData.chunks[id];
   if (!arr) throw new Error(`index.js has no chunk ${id}`);
@@ -454,6 +467,7 @@ function main() {
 
   const csvLines = fs.readFileSync(CSV_PATH, 'utf8').split('\n');
   const byName = loadCsvByName(csvLines);
+  reconcilePresetExtraChunks(byName, initialIndex);
   const byPack = resolveTargets(names, byName);
 
   const pendingWrites = []; // [{ path, content }]

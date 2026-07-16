@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Reduced fullscreen startup blocking by selecting the initial vendored preset
+  from a resident index and deferring experimental image loading until idle or
+  lazy-preset selection.
+
+### Changed
+- Bumped the application version to `1.7.2`.
+
 ## [1.7.1] - 2026-07-16
 
 ### Fixed
@@ -11,6 +21,8 @@ All notable changes to this project are documented here. Format loosely follows
   does not poison subsequent fallback presets.
 - Loaded the initial preset during audio startup instead of waiting for later
   navigation or auto-cycle activity.
+- Removed 2,182 generated presets whose equation text failed Butterchurn's
+  exact compilation format.
 
 ## [1.7.0] - 2026-07-15
 
