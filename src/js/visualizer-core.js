@@ -9,6 +9,7 @@
   'use strict';
 
   const MAX_PIXEL_RATIO = 2;
+  const MAX_WEBGL_ERRORS_TO_DRAIN = 1024;
   const PRESET_PACKS = [
     'butterchurnPresets', 'butterchurnPresetsExtra',
     'butterchurnPresetsExtra2', 'butterchurnPresetsMD1',
@@ -191,8 +192,13 @@
     const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
       || canvas.getContext('experimental-webgl');
     if (!gl || !gl.getError) return null;
-    const error = gl.getError();
-    return error === gl.NO_ERROR ? null : `0x${error.toString(16)}`;
+    let firstError = null;
+    for (let count = 0; count < MAX_WEBGL_ERRORS_TO_DRAIN; count++) {
+      const error = gl.getError();
+      if (error === gl.NO_ERROR) return firstError;
+      if (firstError === null) firstError = `0x${error.toString(16)}`;
+    }
+    return firstError;
   }
 
   function applyPreset(controller, index, blend, announce) {
@@ -505,7 +511,7 @@
     } finally {
       audio.starting = false;
     }
-    startRenderLoop(audio, playback);
+    startRenderLoop(audio, playback, true);
   }
 
   function createAudioController(canvas, opts, onToast) {
