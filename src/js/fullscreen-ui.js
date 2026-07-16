@@ -5,6 +5,10 @@
   const canvas  = document.getElementById('viz');
   const toast   = document.getElementById('toast');
   const help    = document.getElementById('help');
+  const startPrompt = document.getElementById('startPrompt');
+  const startupStatus = document.getElementById('startupStatus');
+  const startupStatusText = document.getElementById('startupStatusText');
+  const startupProgressBar = document.getElementById('startupProgressBar');
   const removeBtn      = document.getElementById('removeBtn');
   const excludedBtn    = document.getElementById('excludedBtn');
   const excludedPanel  = document.getElementById('excludedPanel');
@@ -14,6 +18,8 @@
 
   let toastTimer = null;
   let startupPending = false;
+  let startupTimer = null;
+  const STARTUP_COUNTDOWN = 5;
   function say(msg) {
     const s = msg.length > 60 ? msg.slice(0, 57) + '\u2026' : msg;
     toast.textContent = s;
@@ -23,6 +29,37 @@
   }
 
   const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true, randomFirst: true });
+
+  function updateStartupStatus(secondsRemaining) {
+    if (secondsRemaining > 0) {
+      startupStatusText.textContent = 'Loading visualizer... ' + secondsRemaining + 's';
+      startupProgressBar.style.width = (secondsRemaining / STARTUP_COUNTDOWN * 100) + '%';
+      startupProgressBar.parentElement.setAttribute('aria-valuenow', secondsRemaining);
+      return;
+    }
+    startupStatusText.textContent = 'Still loading...';
+    startupProgressBar.style.width = '0%';
+    startupProgressBar.parentElement.removeAttribute('aria-valuenow');
+  }
+
+  function showStartupStatus() {
+    startPrompt.hidden = true;
+    startupStatus.hidden = false;
+    help.classList.add('loading');
+    updateStartupStatus(STARTUP_COUNTDOWN);
+    startupTimer = window.setInterval(function () {
+      const remaining = Number(startupProgressBar.parentElement.getAttribute('aria-valuenow')) - 1;
+      updateStartupStatus(Number.isNaN(remaining) ? 0 : remaining);
+    }, 1000);
+  }
+
+  function clearStartupStatus(showPrompt) {
+    window.clearInterval(startupTimer);
+    startupTimer = null;
+    startupStatus.hidden = true;
+    help.classList.remove('loading');
+    startPrompt.hidden = !showPrompt;
+  }
 
   if (!viz.keys().length) say('\u26A0 Preset library failed to load');
 
@@ -77,15 +114,16 @@
   async function start() {
     if (viz.isStarted() || startupPending) return;
     startupPending = true;
-    help.classList.add('hidden');
-    say('Starting visualizer...');
+    showStartupStatus();
     window.setTimeout(async function () {
       try {
         await viz.start();
+        clearStartupStatus(false);
+        help.classList.add('hidden');
         document.body.classList.add('running');
         say('\u25B6 Running \u2014 press ? for controls');
       } catch (e) {
-        help.classList.remove('hidden');
+        clearStartupStatus(true);
         say('Audio error: ' + e.message);
       } finally {
         startupPending = false;
