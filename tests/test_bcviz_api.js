@@ -5,10 +5,15 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync('src/js/visualizer-core.js', 'utf8');
 
-function createHarness(presets) {
+function createHarness(presets, initialWebglErrors) {
   const canvas = {};
   canvas.addEventListener = function () {};
-  canvas.getContext = function () { return { NO_ERROR: 0, getError: function () { return 0; } }; };
+  const webglErrors = (initialWebglErrors || []).slice();
+  const webgl = {
+    NO_ERROR: 0,
+    getError: function () { return webglErrors.shift() || 0; },
+  };
+  canvas.getContext = function () { return webgl; };
   const loadCalls = [];
   const window = {
     BCExtraPresetIndex: { chunks: [['lazy']], files: ['chunk-000.js'] },
@@ -90,4 +95,17 @@ test('invalid equations are rejected and restore the last good preset', async fu
   assert.equal(harness.loadCalls.includes(bad), false);
   assert.equal(harness.loadCalls.length > 0, true);
   assert.equal(viz.currentName(), 'good');
+});
+
+test('drains queued WebGL errors before loading a fallback preset', async function () {
+  const harness = createHarness({
+    bad: { baseVals: {} },
+    good: { baseVals: {} },
+  }, [0x502, 0x502, 0x501, 0]);
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+
+  assert.equal(viz.currentName(), 'good');
+  assert.equal(harness.loadCalls.length, 2);
 });

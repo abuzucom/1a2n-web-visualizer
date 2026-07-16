@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.7.1] - 2026-07-16
+
+### Fixed
+- Drained queued WebGL errors after failed shader loads so one invalid preset
+  does not poison subsequent fallback presets.
+- Loaded the initial preset during audio startup instead of waiting for later
+  navigation or auto-cycle activity.
+
 ## [1.7.0] - 2026-07-15
 
 ### Added
