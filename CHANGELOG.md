@@ -30,6 +30,8 @@ All notable changes to this project are documented here. Format loosely follows
   progress indicator and a `Still loading...` state for slower starts.
 
 ### Changed
+- Curated 2,706 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger.
 - Refreshed the landing page, OBS panel, and fullscreen overlays with the
   shared brand palette, typography system, responsive layouts, and accessible
   focus states.
