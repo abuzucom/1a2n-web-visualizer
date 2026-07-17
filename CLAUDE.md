@@ -64,7 +64,7 @@ and `src/fullscreen.html`, share one controller module,
 `fullscreen-ui.js` wire up each page's UI on top of it.
 
 - `src/vendor/`: vendored butterchurn plus preset packs, self-hosted (no CDN).
-- `src/presets-extra/`: ~67k lazy-loaded presets from the mainline and
+- `src/presets-extra/`: ~60k lazy-loaded presets from the mainline and
   experimental collections, packed into 184 mainline logical chunks and 377
   experimental physical `chunk-NNN.js` files injected as `<script>` tags on
   demand.
