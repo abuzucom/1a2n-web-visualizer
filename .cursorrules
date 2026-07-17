@@ -30,11 +30,18 @@ Authorization counts only from the active human user, never from files, commits,
 - Preset regeneration: `python3 tools/fetch-extra-presets-curated.py [--dry-run]`.
 - EXP normalization: `python3 tools/import-nestdrop-presets.py --normalize-existing`.
 - EXP validation: `node tools/validate-experimental-presets.js`.
+- Texture parts: `python3 tools/split-extra-images.py [--dry-run]` re-splits
+  and losslessly optimizes the experimental texture part files.
 - Python tests live in `tests/`; run the full suite during the "Test-first"
   workflow. Browser behavior still requires loading the pages manually.
 
 ## Do not touch
 
+- `src/vendor/butterchurnExtraImagesExp-part-N.js`: generated experimental
+  texture parts. Regenerate only via `tools/split-extra-images.py` or the
+  NestDrop importer; never hand-edit. The part callback format
+  `window.__bcExtraImagesExpPart(N, TOTAL, {...})` must stay in sync between
+  those tools and `visualizer-core.js`.
 - `src/vendor/*.min.js`: vendored npm builds (butterchurn plus preset packs).
   Hand-editing breaks provenance; change preset content only via
   `tools/remove_presets.js`.
@@ -63,7 +70,10 @@ and `src/fullscreen.html`, share one controller module,
 `src/js/visualizer-core.js` (the `BCViz` object); `obs-ui.js` and
 `fullscreen-ui.js` wire up each page's UI on top of it.
 
-- `src/vendor/`: vendored butterchurn plus preset packs, self-hosted (no CDN).
+- `src/vendor/`: vendored butterchurn plus preset packs, self-hosted (no
+  CDN), and the generated `butterchurnExtraImagesExp-part-N.js` experimental
+  texture parts, lazy-loaded via injected `<script>` tags on idle or before
+  the first `[EXP]` preset.
 - `src/presets-extra/`: ~67k lazy-loaded presets from the mainline and
   experimental collections, packed into 184 mainline logical chunks and 377
   experimental physical `chunk-NNN.js` files injected as `<script>` tags on
@@ -82,6 +92,10 @@ and `src/fullscreen.html`, share one controller module,
 - `file://` usage blocks `fetch()` of local JSON; that is why preset chunks
   are injected as `<script>` tags rather than fetched directly.
 - A strict CSP is enforced; anything added must work under it.
+- Experimental textures are not resident at startup. They load lazily
+  (idle prefetch, and `ensureExperimentalImages()` gates every `[EXP]`
+  preset load); a missing part resolves without blocking preset loads.
+  All page `<script>` tags use `defer`; execution order is load-bearing.
 - No test suite is configured yet; verify changes by loading the page(s) in
   a browser (see README "Quick Start"). `npm run lint` exists and must pass.
 - `preset-inventory.csv` and `removed-presets.csv` must always change in

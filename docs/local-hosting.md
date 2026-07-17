@@ -63,6 +63,11 @@ The compose file and Caddyfile apply the following measures:
   so the header has no effect here but takes effect if this Caddyfile runs
   behind TLS termination.
 - **Server fingerprint removed** - the `Server` header is stripped.
+- **Asset caching** - `/vendor/*` and `/presets-extra/*` are cached for a
+  day and `/js/*` plus `/css/*` for an hour, all with ETag revalidation;
+  HTML stays `no-store`. Nothing is marked `immutable` because curation
+  rewrites vendored packs and preset chunks in place under the same
+  filenames.
 
 ### Accepted CSP exception
 

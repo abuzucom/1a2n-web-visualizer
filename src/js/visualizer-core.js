@@ -439,32 +439,67 @@
     return index >= 0 ? useDevice(audio, index) : null;
   }
 
-  function loadExtraImages(audio, includeExperimental) {
-    const libraryNames = includeExperimental
-      ? ['butterchurnExtraImagesExp']
-      : ['butterchurnExtraImages'];
-    const libraries = libraryNames.map(getLib).filter(function (library) {
-      return library && library.getImages;
-    });
-    if (!libraries.length) return;
+  function applyExtraImages(audio, images) {
     try {
-      const images = {};
-      libraries.forEach(function (library) { Object.assign(images, library.getImages()); });
       audio.visualizer.loadExtraImages(images);
     } catch (error) {
       console.warn('Failed to load extra images (non-critical):', error);
     }
   }
 
+  function loadExtraImages(audio) {
+    const library = getLib('butterchurnExtraImages');
+    if (library && library.getImages) applyExtraImages(audio, library.getImages());
+  }
+
+  function injectImagePart(number) {
+    return new Promise(function (resolve) {
+      const script = document.createElement('script');
+      script.src = 'vendor/butterchurnExtraImagesExp-part-' + number + '.js';
+      script.onerror = function () { resolve(false); };
+      script.onload = function () { resolve(true); };
+      document.head.appendChild(script);
+    });
+  }
+
+  /** Load the experimental texture parts lazily, feeding each payload to
+   * butterchurn as it arrives so no single parse blocks the render loop.
+   * Missing parts resolve rather than reject: textures are non-critical. */
   function ensureExperimentalImages(audio) {
-    if (audio.experimentalImagesReady) return Promise.resolve();
-    if (!audio.experimentalImagesLoading) {
+    if (audio.experimentalImagesLoading) return audio.experimentalImagesLoading;
+    const legacy = getLib('butterchurnExtraImagesExp');
+    if (legacy && legacy.getImages) {
       audio.experimentalImagesLoading = Promise.resolve().then(function () {
-        loadExtraImages(audio, true);
-        audio.experimentalImagesReady = true;
+        applyExtraImages(audio, legacy.getImages());
       });
+      return audio.experimentalImagesLoading;
     }
+    audio.experimentalImagesLoading = new Promise(function (resolve) {
+      let total = null;
+      let received = 0;
+      global.__bcExtraImagesExpPart = function (number, count, images) {
+        total = count;
+        received += 1;
+        applyExtraImages(audio, images);
+        if (received >= total) resolve();
+      };
+      (function loadNext(number) {
+        injectImagePart(number).then(function (loaded) {
+          if (!loaded) return resolve();
+          if (total == null || number + 1 < total) loadNext(number + 1);
+        });
+      })(0);
+    });
     return audio.experimentalImagesLoading;
+  }
+
+  function scheduleImagePrefetch(audio) {
+    const prefetch = function () { ensureExperimentalImages(audio); };
+    if (typeof global.requestIdleCallback === 'function') {
+      global.requestIdleCallback(prefetch, { timeout: 15000 });
+    } else {
+      setTimeout(prefetch, 5000);
+    }
   }
 
   async function connectInitialStream(audio, deviceId) {
@@ -526,7 +561,8 @@
     playback.visualizer = audio.visualizer;
     playback.linkGuard = installLinkGuard(audio.canvas);
     playback.ensureExperimentalImages = function () { return ensureExperimentalImages(audio); };
-    loadExtraImages(audio, false);
+    loadExtraImages(audio);
+    scheduleImagePrefetch(audio);
   }
 
   function loadInitialPreset(audio, playback, randomFirst) {
@@ -615,7 +651,6 @@
       started: false,
       starting: false,
       prepared: false,
-      experimentalImagesReady: false,
       experimentalImagesLoading: null,
     };
   }

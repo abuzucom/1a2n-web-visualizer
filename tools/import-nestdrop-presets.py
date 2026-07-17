@@ -23,6 +23,7 @@ import argparse
 import base64
 import csv
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -39,7 +40,6 @@ CSV_PATH = ROOT / "preset-inventory.csv"
 REMOVED_CSV_PATH = ROOT / "removed-presets.csv"
 MANIFEST_PATH = ROOT / "experimental-presets.json"
 TEXTURE_MANIFEST_PATH = ROOT / "experimental-textures.json"
-TEXTURE_BUNDLE_PATH = ROOT / "src" / "vendor" / "butterchurnExtraImagesExp.js"
 CONVERTER = ROOT / "tools" / "convert-milk-presets.js"
 INDEX_PREFIX = "window.BCExtraPresetIndex="
 EXP_PREFIX = "[EXP] "
@@ -329,13 +329,23 @@ def build_texture_bundle(texture_files):
 
 
 def write_texture_bundle(images, records):
-    atomic_write_text(TEXTURE_BUNDLE_PATH,
-        "window.butterchurnExtraImagesExp="
-        + "{getImages:function(){return "
-        + json.dumps(images, separators=(",", ":"))
-        + "}};\n"
-    )
+    """Write the lazy-loaded texture part files and the texture manifest.
+
+    Delegates the part layout to tools/split-extra-images.py so the part
+    format has exactly one implementation shared with re-splitting runs.
+    """
+    splitter = load_texture_splitter()
+    splitter.write_parts(images, dry_run=False)
     atomic_write_text(TEXTURE_MANIFEST_PATH, json.dumps(records, indent=2) + "\n")
+
+
+def load_texture_splitter():
+    """Load tools/split-extra-images.py as a module (hyphenated filename)."""
+    path = ROOT / "tools" / "split-extra-images.py"
+    spec = importlib.util.spec_from_file_location("split_extra_images", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def csv_escape(value):
