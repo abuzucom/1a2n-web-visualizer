@@ -30,6 +30,11 @@ All notable changes to this project are documented here. Format loosely follows
   progress indicator and a `Still loading...` state for slower starts.
 
 ### Changed
+- Removed 575 presets whose names contained slurs, hate ideology, sexual
+  violence, or explicit sexual content, identified by a full audit of all
+  preset names (including obfuscated spellings) and recorded in the inventory
+  and durable removal ledger; corrected the README preset counts to the
+  post-curation totals.
 - Curated 2,706 additional presets from the shipped collections and recorded
   the exact removals in the inventory and durable removal ledger.
 - Refreshed the landing page, OBS panel, and fullscreen overlays with the
