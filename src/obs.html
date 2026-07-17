@@ -10,17 +10,19 @@
                    object-src 'none'; base-uri 'none'">
     <meta name="robots" content="noindex, nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/brand.css">
     <link rel="stylesheet" href="css/panel.css">
 
   </head>
   <body>
     <canvas id="viz"></canvas>
     <div id="panel">
-      <h1>&#127925; Butterchurn &mdash; OBS setup</h1>
+      <p class="eyebrow">Butterchurn / OBS setup</p>
+      <h1>Audio visualizer</h1>
       <label for="device">Audio input</label>
       <select id="device"><option value="">&mdash; grant mic access first &mdash;</option></select>
       <button id="startBtn">Start visualizer</button>
-      <label for="preset" style="margin-top:16px;">Preset</label>
+      <label class="preset-label" for="preset">Preset</label>
       <input type="search" id="presetFilter" placeholder="Filter presets…" autocomplete="off">
       <select id="preset"></select>
       <div class="row">
@@ -30,10 +32,8 @@
       </div>
       <div class="check">
         <input type="checkbox" id="cycle" checked>
-        <label for="cycle"
-               style="margin:0; text-transform:none; opacity:1; font-size:13px;"
-        >Auto-cycle every</label>
-        <input type="number" id="cycleSecs" value="20" min="3" style="width:64px;"> s
+        <label class="cycle-label" for="cycle">Auto-cycle every</label>
+        <input class="cycle-secs" type="number" id="cycleSecs" value="20" min="3"> s
       </div>
       <div id="status"></div>
       <div class="hint">

@@ -16,6 +16,13 @@ Both entry points share one controller module:
 - `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel.
 - `src/fullscreen.html`: Provides a keyboard-controlled interface with no visible UI. It shows a five-second startup indicator, selects a random resident vendored preset, hides the cursor, and shuffles presets by default. Use it for window capture or secondary displays.
 
+The UI follows the brand visual system across the landing page, OBS panel, and
+fullscreen overlays. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`),
+Charcoal (`#242424`), Concrete (`#A6A39D`), and Dull Silver (`#74777A`).
+Libre Franklin is used for display and editorial text, with Helvetica, Neue Haas
+Grotesk, and Arial fallbacks. Cousine is used for utility text, with IBM Plex
+Mono and Courier New fallbacks.
+
 ## Repository Structure
 
 ```text
@@ -40,6 +47,8 @@ butterchurn-visualizer/
 |   +-- obs.html            # OBS browser source entry point
 |   +-- fullscreen.html     # Standalone fullscreen entry point
 |   +-- css/
+|   |   +-- brand.css            # shared brand palette and typography tokens
+|   |   +-- landing.css          # landing page presentation
 |   |   +-- panel.css
 |   |   +-- fullscreen.css
 |   +-- js/
