@@ -35,6 +35,9 @@ All notable changes to this project are documented here. Format loosely follows
   Gotchas, and Read before touching orientation.
 - Curated 2,498 additional presets from the shipped collections and recorded
   the exact removals in the inventory and durable removal ledger.
+- Curated 2,319 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger. Updated the
+  documented preset counts to match the generated output.
 - Curated 1,625 additional presets from the shipped collections and recorded
   the exact removals in the inventory and durable removal ledger.
 - Made preset curation recoverable after partial writes and Windows file-lock
