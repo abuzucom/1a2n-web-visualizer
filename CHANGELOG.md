@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+- `tools/split-extra-images.py` - splits the experimental texture bundle
+  into deterministic lazy-loaded part files and losslessly optimizes the
+  embedded images, verifying every optimized variant pixel-for-pixel.
+
 ### Fixed
 - Randomized the initial fullscreen preset across the resident vendored
   collection while leaving the OBS startup behavior unchanged.
@@ -30,6 +35,20 @@ All notable changes to this project are documented here. Format loosely follows
   progress indicator and a `Still loading...` state for slower starts.
 
 ### Changed
+- Replaced the 53.7 MB blocking experimental texture bundle with eight
+  lazy-loaded part files injected on idle or before the first `[EXP]`
+  preset, cutting startup transfer by about 54 MB; a legacy single-file
+  bundle still loads if present.
+- Losslessly recompressed the 1,230 embedded experimental textures
+  (JPEG via jpegtran, BMP and static GIF to PNG, PNG via optipng),
+  saving 6.9 MB with pixel-identical output.
+- Added `defer` to all page scripts so parsing no longer blocks on
+  script execution order.
+- Extended Caddy cache headers to preset chunks and app js/css, and
+  removed `immutable` from `/vendor/*` because curation rewrites those
+  files in place; documented the rules in the local hosting guide.
+- Documented the texture part layout and lazy-loading invariants in the
+  agent instruction files and README.
 - Curated 2,991 additional presets from a supplied removal list (580 further
   requested names were already removed by this pass) and recorded the exact
   removals in the inventory and durable removal ledger.

@@ -58,7 +58,7 @@ butterchurn-visualizer/
 |   +-- vendor/                  # vendored butterchurn + preset/texture packs
 |   |   +-- butterchurn.min.js
 |   |   +-- butterchurnExtraImages.min.js
-|   |   +-- butterchurnExtraImagesExp.js
+|   |   +-- butterchurnExtraImagesExp-part-N.js  # lazy-loaded texture parts
 |   |   +-- butterchurnPresets.min.js
 |   |   +-- butterchurnPresetsExtra.min.js
 |   |   +-- butterchurnPresetsExtra2.min.js
@@ -92,6 +92,13 @@ The experimental import pipeline accepts supplied NestDrop ZIP archives and
 converts their raw `.milk` files into the same Butterchurn preset shape used
 by the mainline lazy-loaded collection. Experimental runtime names receive a
 reserved `[EXP] ` prefix so they are visually distinct.
+
+Experimental textures ship as generated
+`src/vendor/butterchurnExtraImagesExp-part-N.js` files (losslessly
+optimized). They are not loaded at startup: `visualizer-core.js` injects the
+parts as `<script>` tags on idle, and `ensureExperimentalImages()` awaits
+them before the first `[EXP]` preset loads. Regenerate the parts only with
+`python3 tools/split-extra-images.py` or the NestDrop importer.
 
 Mainline logical chunk IDs remain contiguous and low. Experimental physical
 chunk files begin at `chunk-9000.js` and are referenced through the optional
