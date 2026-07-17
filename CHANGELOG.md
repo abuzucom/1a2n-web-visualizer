@@ -30,6 +30,16 @@ All notable changes to this project are documented here. Format loosely follows
   progress indicator and a `Still loading...` state for slower starts.
 
 ### Changed
+- Deduplicated the experimental collection against the mainline lazy-loaded
+  presets: removed 15,739 `[EXP]` presets whose source presets already ship in
+  the mainline collection (exact import-time content matches plus approved
+  normalized-name matches) and 247 intra-experimental exact duplicate copies,
+  shrinking `src/presets-extra/` from about 276 MB to about 209 MB.
+- Pruned 38 stale index entries whose preset data was missing from their chunk
+  files, which previously surfaced as unavailable presets at runtime.
+- Added `tools/reconcile_preset_inventory.py` and restored 2,046 missing
+  `preset-inventory.csv` rows so the inventory matches the shipped presets
+  exactly; corrected README preset counts to the reconciled totals.
 - Removed 575 presets whose names contained slurs, hate ideology, sexual
   violence, or explicit sexual content, identified by a full audit of all
   preset names (including obfuscated spellings) and recorded in the inventory
