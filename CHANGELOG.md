@@ -30,6 +30,8 @@ All notable changes to this project are documented here. Format loosely follows
   progress indicator and a `Still loading...` state for slower starts.
 
 ### Changed
+- Curated 301 additional presets from the shipped collections and recorded the
+  exact removals in the inventory and durable removal ledger.
 - Synced the AI agent instruction files from the authoritative `abuzucom/agents`
   template while preserving this repo's Commands, Do not touch, Architecture,
   Gotchas, and Read before touching orientation.

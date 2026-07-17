@@ -3,10 +3,10 @@
 MilkDrop-style audio visualizer pages built with
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
 **OBS browser source** or a **standalone fullscreen visualizer** in any modern
-browser. Includes 65,378 deduplicated presets: 376 from the four
-butterchurn preset packs, 22,286 mainline lazy-loaded presets from the
+browser. Includes 62,645 deduplicated presets: 376 from the four
+butterchurn preset packs, 21,736 mainline lazy-loaded presets from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
-collection, and 42,716 experimental NestDrop presets; the latter two
+collection, and 40,533 experimental NestDrop presets; the latter two
 collections are lazy-loaded in chunks - fully self-hosted (no CDN).
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html` and `/fullscreen.html`). GitHub Actions deploys it from the `develop` branch.
@@ -54,7 +54,7 @@ butterchurn-visualizer/
 |   |   +-- butterchurnPresetsExtra.min.js
 |   |   +-- butterchurnPresetsExtra2.min.js
 |   |   +-- butterchurnPresetsMD1.min.js
-|   +-- presets-extra/           # ~65k lazy-loaded presets (generated, committed)
+|   +-- presets-extra/           # ~60k lazy-loaded presets (generated, committed)
 |       +-- index.js             # preset name -> chunk mapping
 |       +-- chunk-NNN.js         # generated logical/physical chunks
 +-- tools/
@@ -266,23 +266,22 @@ imports need the native converter; local serving does not. Use
 `npm ci --ignore-scripts` for serving and follow `tools/convert-milk-presets.js`
 to build the converter.
 
-## Extra Presets (~65k total)
+## Extra Presets (~62k total)
 
-`src/presets-extra/` holds 22,352 mainline index names from
+`src/presets-extra/` holds 21,736 mainline index names from
 [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn),
 packed into 184 logical chunks that load lazily through injected `<script>` tags
 when a user first selects one of their presets (works from `file://` and
 under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
-The 66 presets that duplicate a vendored pack name are skipped at startup -
-vendored packs win - for 22,286 unique mainline presets. If the folder is
+The mainline index contains 21,736 unique presets. If the folder is
 missing, the app silently falls back to the 376 vendored presets.
 
-The experimental NestDrop import adds 42,716 `[EXP] ` presets in 377 physical
+The experimental NestDrop import adds 40,533 `[EXP] ` presets in 377 physical
 files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs
 after the mainline chunks, so the combined index currently contains 561 logical
 chunks. The physical filename range is only a file namespace; the loader uses
 the logical ID from `index.js` when registering each chunk. Together with the
-376 vendored presets and 22,286 mainline presets, the current total is 65,378.
+376 vendored presets and 21,736 mainline presets, the current total is 62,645.
 
 The folder contains generated, committed output. After an upstream update,
 refresh it with the curation-preserving script (see
