@@ -30,6 +30,9 @@ All notable changes to this project are documented here. Format loosely follows
   progress indicator and a `Still loading...` state for slower starts.
 
 ### Changed
+- Curated 2,991 additional presets from a supplied removal list (580 further
+  requested names were already removed by this pass) and recorded the exact
+  removals in the inventory and durable removal ledger.
 - Deduplicated the experimental collection against the mainline lazy-loaded
   presets: removed 15,739 `[EXP]` presets whose source presets already ship in
   the mainline collection (exact import-time content matches plus approved
