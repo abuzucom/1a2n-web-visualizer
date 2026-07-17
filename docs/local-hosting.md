@@ -2,7 +2,7 @@
 
 The primary deployment uses GitHub Pages (<https://visualizer.1a2n.net/>), but
 the site does not depend on it. The repository includes every library and
-preset, including about 67,000 presets, so the site runs offline the same way.
+preset, including about 60,000 presets, so the site runs offline the same way.
 Use one of three local modes:
 
 ## 1. Open directly in a browser (`file://`)
