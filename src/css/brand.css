@@ -1,0 +1,25 @@
+:root {
+  --brand-pitch: #0b0b0b;
+  --brand-paper: #eae7e1;
+  --brand-charcoal: #242424;
+  --brand-concrete: #a6a39d;
+  --brand-silver: #74777a;
+  --type-display: "Libre Franklin", Helvetica, "Neue Haas Grotesk", Arial, sans-serif;
+  --type-editorial: "Libre Franklin", Helvetica, "Neue Haas Grotesk", Arial, sans-serif;
+  --type-utility: "Cousine", "IBM Plex Mono", "Courier New", monospace;
+  --weight-display: 900;
+  --weight-editorial: 500;
+  --weight-utility: 400;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-paper);
+  outline-offset: 3px;
+}
