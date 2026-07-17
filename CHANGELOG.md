@@ -33,6 +33,8 @@ All notable changes to this project are documented here. Format loosely follows
 - Synced the AI agent instruction files from the authoritative `abuzucom/agents`
   template while preserving this repo's Commands, Do not touch, Architecture,
   Gotchas, and Read before touching orientation.
+- Curated 2,498 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger.
 - Curated 1,625 additional presets from the shipped collections and recorded
   the exact removals in the inventory and durable removal ledger.
 - Made preset curation recoverable after partial writes and Windows file-lock
