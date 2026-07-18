@@ -34,6 +34,8 @@ All notable changes to this project are documented here. Format loosely follows
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Changed
+- Curated 62 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger.
 - Curated 2,959 additional presets from the supplied removal list and recorded
   the exact removals in the inventory and durable removal ledger.
 - Replaced the 53.7 MB blocking experimental texture bundle with eight
