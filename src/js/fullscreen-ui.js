@@ -30,7 +30,7 @@
 
   const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true, randomFirst: true });
   const hyperspeed = window.BCHyperspeed.create({
-    shuffle: function () { if (viz.isStarted()) viz.random(); },
+    shuffle: function () { if (viz.isStarted() && !viz.isChunkLoading()) viz.random(); },
     intervalMs: 100,
     visibilityTarget: document,
     onChange: function (enabled) {
