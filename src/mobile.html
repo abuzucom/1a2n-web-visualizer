@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-eval';
+                   style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;
+                   object-src 'none'; base-uri 'none'">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0b0b0b">
+    <title>Butterchurn &mdash; Mobile</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="css/brand.css">
+    <link rel="stylesheet" href="css/mobile.css">
+  </head>
+  <body>
+    <canvas id="viz" aria-label="Audio visualizer"></canvas>
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <div id="help">
+      <div class="box">
+        <p class="eyebrow">Butterchurn / Mobile</p>
+        <h1>Audio visualizer</h1>
+        <p>Touch controls for a browser-sized visualizer.</p>
+        <div class="go" id="startPrompt">Tap to start &rarr;</div>
+        <div id="startupStatus" role="status" aria-live="polite" hidden>
+          Loading visualizer...
+        </div>
+      </div>
+    </div>
+
+    <nav id="controls" aria-label="Visualizer controls">
+      <button id="shuffleBtn" type="button">Shuffle</button>
+      <button id="backBtn" type="button" disabled>Back</button>
+      <button id="intervalBtn" type="button" aria-label="Change preset interval. Current 30 seconds">
+        <span>Interval</span>
+        <strong id="intervalValue">30s</strong>
+      </button>
+      <button id="hyperspeedBtn" type="button" aria-pressed="false">
+        <span>Hyperspeed</span>
+        <strong id="hyperspeedValue">Off</strong>
+      </button>
+    </nav>
+
+    <script defer src="vendor/butterchurn.min.js"></script>
+    <script defer src="vendor/butterchurnExtraImages.min.js"></script>
+    <script defer src="vendor/butterchurnPresets.min.js"></script>
+    <script defer src="vendor/butterchurnPresetsExtra.min.js"></script>
+    <script defer src="vendor/butterchurnPresetsExtra2.min.js"></script>
+    <script defer src="vendor/butterchurnPresetsMD1.min.js"></script>
+    <!-- Optional lazy-loaded extra presets and experimental textures. -->
+    <script defer src="presets-extra/index.js"></script>
+    <script defer src="js/visualizer-core.js"></script>
+    <script defer src="js/hyperspeed.js"></script>
+    <script defer src="js/mobile-state.js"></script>
+    <script defer src="js/mobile-ui.js"></script>
+  </body>
+</html>

@@ -48,7 +48,7 @@ p.sub {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -67,6 +67,11 @@ a.card {
 
 a.card:nth-child(2) {
   background: var(--brand-charcoal);
+}
+
+a.card.mobile-card {
+  background: var(--brand-concrete);
+  color: var(--brand-pitch);
 }
 
 a.card:hover {
@@ -94,6 +99,10 @@ a.card span {
 
 a.card:hover span { color: var(--brand-pitch); }
 
+a.card.mobile-card span { color: var(--brand-charcoal); }
+
+a.card.mobile-card:hover { background: var(--brand-paper); }
+
 footer {
   margin-top: 34px;
   color: var(--brand-silver);
@@ -105,6 +114,10 @@ footer {
 footer a {
   color: var(--brand-pitch);
   font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {

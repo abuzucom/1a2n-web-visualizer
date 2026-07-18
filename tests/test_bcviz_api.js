@@ -45,6 +45,7 @@ function createHarness(presets, initialWebglErrors) {
   canvas.getContext = function () { return webgl; };
   const loadCalls = [];
   let chunkLoads = 0;
+  let imagePartLoads = 0;
   const window = {
     BCExtraPresetIndex: { chunks: [['lazy']], files: ['chunk-000.js'] },
     butterchurnPresets: presets ? { getPresets: function () { return presets; } } : null,
@@ -81,7 +82,12 @@ function createHarness(presets, initialWebglErrors) {
   };
   const document = {
     createElement: function () { return {}; },
-    head: { appendChild: function () { chunkLoads += 1; } },
+    head: {
+      appendChild: function (script) {
+        if (script.src && script.src.indexOf('presets-extra/') === 0) chunkLoads += 1;
+        if (script.src && script.src.indexOf('vendor/butterchurnExtraImagesExp-part-') === 0) imagePartLoads += 1;
+      },
+    },
   };
   vm.runInNewContext(source, {
     window: window,
@@ -96,7 +102,13 @@ function createHarness(presets, initialWebglErrors) {
     setTimeout: schedule,
     clearTimeout: clearTimeout,
   });
-  return { canvas: canvas, window: window, loadCalls: loadCalls, chunkLoads: function () { return chunkLoads; } };
+  return {
+    canvas: canvas,
+    window: window,
+    loadCalls: loadCalls,
+    chunkLoads: function () { return chunkLoads; },
+    imagePartLoads: function () { return imagePartLoads; },
+  };
 }
 
 test('create exposes the controller API and caps canvas pixel ratio', function () {
@@ -128,6 +140,7 @@ test('startup selects a resident preset without loading a lazy chunk', async fun
 
   assert.equal(viz.currentName(), 'vendor');
   assert.equal(harness.chunkLoads(), 0);
+  assert.equal(harness.imagePartLoads(), 1);
 });
 
 test('accepts a valid equation without a trailing semicolon', async function () {

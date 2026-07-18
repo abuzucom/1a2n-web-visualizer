@@ -2,22 +2,25 @@
 
 MilkDrop-style audio visualizer pages built with
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
-**OBS browser source** or a **standalone fullscreen visualizer** in any modern
-browser. Includes 37,743 deduplicated presets: 374 from the four
+**OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first
+mobile browser experience. Includes 37,743 deduplicated presets: 374 from the four
 butterchurn preset packs, 19,733 mainline lazy-loaded presets from the
 [tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
 collection, and 17,636 experimental NestDrop presets; the latter two
 collections are lazy-loaded in chunks - fully self-hosted (no CDN).
 
-**Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html` and `/fullscreen.html`). GitHub Actions deploys it from the `develop` branch.
+**Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
+`/fullscreen.html`, and `/mobile.html`). GitHub Actions deploys it from the
+`develop` branch.
 
-Both entry points share one controller module:
+All entry points share one controller module:
 
 - `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel.
 - `src/fullscreen.html`: Provides a keyboard-controlled interface with no visible UI. It shows a five-second startup indicator, selects a random resident vendored preset, hides the cursor, and shuffles presets by default. Use it for window capture or secondary displays.
+- `src/mobile.html`: Provides a touch-first browser interface with shuffle, visit history, interval, and hyperspeed controls. It does not request browser fullscreen or expose curation controls.
 
-The UI follows the brand visual system across the landing page, OBS panel, and
-fullscreen overlays. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`),
+The UI follows the brand visual system across the landing page, OBS panel,
+fullscreen overlays, and mobile controls. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`),
 Charcoal (`#242424`), Concrete (`#A6A39D`), and Dull Silver (`#74777A`).
 Libre Franklin is used for display and editorial text, with Helvetica, Neue Haas
 Grotesk, and Arial fallbacks. Cousine is used for utility text, with IBM Plex
@@ -46,15 +49,20 @@ butterchurn-visualizer/
 |   +-- index.html          # Landing page
 |   +-- obs.html            # OBS browser source entry point
 |   +-- fullscreen.html     # Standalone fullscreen entry point
+|   +-- mobile.html         # Touch-first browser entry point
 |   +-- css/
 |   |   +-- brand.css            # shared brand palette and typography tokens
 |   |   +-- landing.css          # landing page presentation
 |   |   +-- panel.css
 |   |   +-- fullscreen.css
+|   |   +-- mobile.css
 |   +-- js/
 |   |   +-- visualizer-core.js   # shared BCViz controller (the brains)
 |   |   +-- obs-ui.js            # panel wiring
 |   |   +-- fullscreen-ui.js     # keyboard wiring
+|   |   +-- mobile-ui.js         # touch wiring
+|   |   +-- mobile-state.js      # in-memory mobile history and intervals
+|   |   +-- hyperspeed.js        # shared hyperspeed scheduler
 |   +-- vendor/                  # vendored butterchurn + preset/texture packs
 |   |   +-- butterchurn.min.js
 |   |   +-- butterchurnExtraImages.min.js
@@ -175,7 +183,8 @@ npm start             # Serves ./src via the pinned `serve` package
 python3 -m http.server --directory src 8000
 ```
 
-Open <http://localhost:8000/fullscreen.html> or <http://localhost:8000/obs.html>.
+Open <http://localhost:8000/fullscreen.html>, <http://localhost:8000/mobile.html>,
+or <http://localhost:8000/obs.html>.
 
 **OBS Integration:** See [`docs/obs-setup.md`](docs/obs-setup.md) for setup instructions.
 
@@ -186,6 +195,7 @@ The production environment is hosted via GitHub Pages at **`visualizer.1a2n.net`
 ```text
 https://visualizer.1a2n.net/obs.html
 https://visualizer.1a2n.net/fullscreen.html
+https://visualizer.1a2n.net/mobile.html
 ```
 
 On every push to `develop`, `.github/workflows/deploy.yml` publishes `src/`.
@@ -248,6 +258,7 @@ workflow and deployment linking behavior.
 | <kbd>[</kbd> / <kbd>]</kbd> | Adjust cycle interval (1s increments up to 10s, 5s increments above 10s) |
 | <kbd>D</kbd> | Switch audio input device |
 | <kbd>F</kbd> | Toggle fullscreen mode |
+| <kbd>T</kbd> | Toggle hyperspeed shuffle at 100ms intervals |
 | <kbd>X</kbd> | Remove current preset from this session's shuffle |
 | <kbd>L</kbd> | Show presets excluded this session |
 | <kbd>Escape</kbd> | Close the excluded-presets panel |
@@ -256,6 +267,12 @@ workflow and deployment linking behavior.
 ### OBS Panel (`obs.html`)
 
 Use the on-screen graphical controls. Press <kbd>H</kbd> to toggle the control panel's visibility.
+
+### Mobile (`mobile.html`)
+
+Use the touch dock to shuffle, return to the previous displayed preset, cycle
+through the `15s`, `30s`, and `1m` intervals, or toggle hyperspeed shuffle. The
+mobile page keeps visit history in memory for the current session only.
 
 ## Audio Configuration
 

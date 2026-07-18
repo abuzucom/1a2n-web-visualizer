@@ -1,0 +1,213 @@
+:root { color-scheme: dark; }
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--brand-pitch);
+  font-family: var(--type-editorial);
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+#viz {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  touch-action: manipulation;
+}
+
+#toast {
+  position: fixed;
+  z-index: 10;
+  bottom: calc(126px + env(safe-area-inset-bottom));
+  left: 50%;
+  max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  transform: translateX(-50%);
+  overflow: hidden;
+  background: rgba(36, 36, 36, 0.94);
+  border: 1px solid var(--brand-concrete);
+  color: var(--brand-paper);
+  font-family: var(--type-utility);
+  font-size: 11px;
+  opacity: 0;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transition: opacity 0.25s ease;
+  white-space: nowrap;
+}
+
+#toast.show { opacity: 1; }
+
+#controls {
+  position: fixed;
+  z-index: 10;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  left: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border-left: 5px solid var(--brand-concrete);
+  background: rgba(234, 231, 225, 0.96);
+  box-shadow: 8px 8px 0 rgba(116, 119, 122, 0.45);
+  color: var(--brand-pitch);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+body.running #controls {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+body.controls-idle #controls {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+}
+
+#controls button {
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-pitch);
+  border-radius: 0;
+  background: transparent;
+  color: var(--brand-pitch);
+  cursor: pointer;
+  font-family: var(--type-utility);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+#controls button span,
+#controls button strong {
+  display: block;
+}
+
+#controls button strong {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+#controls button:active,
+#controls button:focus-visible {
+  background: var(--brand-pitch);
+  color: var(--brand-paper);
+}
+
+#controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+body.hyperspeed #hyperspeedBtn {
+  background: var(--brand-pitch);
+  color: var(--brand-paper);
+}
+
+#help {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(11, 11, 11, 0.88);
+  color: var(--brand-paper);
+  text-align: center;
+  transition: opacity 0.4s ease;
+}
+
+#help.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#help .box {
+  width: min(100%, 440px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: clamp(24px, 8vw, 42px);
+  border-left: 6px solid var(--brand-concrete);
+  background: var(--brand-paper);
+  box-shadow: 8px 8px 0 rgba(116, 119, 122, 0.45);
+  color: var(--brand-pitch);
+}
+
+#help .eyebrow {
+  margin: 0 0 18px;
+  color: var(--brand-charcoal);
+  font-family: var(--type-utility);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+#help h1 {
+  margin: 0;
+  font-family: var(--type-display);
+  font-size: clamp(2.4rem, 13vw, 4rem);
+  font-weight: var(--weight-display);
+  letter-spacing: -0.07em;
+  line-height: 0.9;
+}
+
+#help p {
+  margin: 16px 0 28px;
+  color: var(--brand-charcoal);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#help .go,
+#startupStatus {
+  color: var(--brand-pitch);
+  font-family: var(--type-utility);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (min-width: 640px) {
+  #controls {
+    right: auto;
+    left: 50%;
+    width: min(640px, calc(100vw - 24px));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    transform: translate(-50%, 12px);
+  }
+
+  body.running #controls { transform: translate(-50%, 0); }
+  body.controls-idle #controls { transform: translate(-50%, 12px); }
+}
+
+@media (max-height: 440px) {
+  #controls { padding: 6px; }
+  #controls button { min-height: 44px; }
+  #controls button strong { display: inline; margin: 0 0 0 4px; }
+  #toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #controls,
+  #toast,
+  #help { transition: none; }
+}
