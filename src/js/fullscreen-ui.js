@@ -29,6 +29,15 @@
   }
 
   const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true, randomFirst: true });
+  const hyperspeed = window.BCHyperspeed.create({
+    shuffle: function () { if (viz.isStarted()) viz.random(); },
+    intervalMs: 100,
+    visibilityTarget: document,
+    onChange: function (enabled) {
+      document.body.classList.toggle('hyperspeed', enabled);
+      say('Hyperspeed ' + (enabled ? 'on' : 'off'));
+    },
+  });
 
   function updateStartupStatus(secondsRemaining) {
     if (secondsRemaining > 0) {
@@ -163,6 +172,10 @@
         viz.nextDevice().catch(function (error) { say('Audio device error: ' + error.message); });
         break;
       case 'f': case 'F': toggleFullscreen(); break;
+      case 't': case 'T':
+        if (!e.repeat) hyperspeed.toggle();
+        e.preventDefault();
+        break;
       case 'x': case 'X': removeCurrent(); break;
       case 'l': case 'L': showExcludedPanel(); break;
       case 'Escape': hideExcludedPanel(); break;

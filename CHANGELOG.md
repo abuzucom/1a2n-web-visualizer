@@ -10,6 +10,9 @@ All notable changes to this project are documented here. Format loosely follows
 - `tools/split-extra-images.py` - splits the experimental texture bundle
   into deterministic lazy-loaded part files and losslessly optimizes the
   embedded images, verifying every optimized variant pixel-for-pixel.
+- Added a touch-first mobile visualizer entry point with branded controls for
+  shuffling, preset history, cycle intervals, and hyperspeed mode.
+- Added the `T` fullscreen shortcut for toggling 100ms hyperspeed shuffle.
 
 ### Fixed
 - Randomized the initial fullscreen preset across the resident vendored
@@ -29,10 +32,6 @@ All notable changes to this project are documented here. Format loosely follows
   finish, so the first frame does not wait on audio input setup.
 - Fixed equation validation for valid statements without trailing semicolons.
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
-
-### Added
-- Added a visible five-second fullscreen startup countdown with an accessible
-  progress indicator and a `Still loading...` state for slower starts.
 
 ### Changed
 - Replaced the 53.7 MB blocking experimental texture bundle with eight
@@ -69,6 +68,8 @@ All notable changes to this project are documented here. Format loosely follows
   post-curation totals.
 - Curated 2,706 additional presets from the shipped collections and recorded
   the exact removals in the inventory and durable removal ledger.
+- Added the mobile visualizer to the landing-page navigation and documented its
+  browser-viewport behavior without curation controls or browser fullscreen.
 - Refreshed the landing page, OBS panel, and fullscreen overlays with the
   shared brand palette, typography system, responsive layouts, and accessible
   focus states.
