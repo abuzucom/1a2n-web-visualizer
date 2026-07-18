@@ -1,4 +1,4 @@
-# Butterchurn Visualizer
+# 1a2n Visualizer
 
 Milkdrop-style audio visualizer pages built on
 [butterchurn](https://github.com/jberg/butterchurn), intended for use as an
