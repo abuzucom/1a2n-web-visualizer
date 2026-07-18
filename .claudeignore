@@ -1,0 +1,19 @@
+node_modules/
+.git/
+dist/
+.next/
+*.log
+coverage/
+.env*
+!.env.example
+__pycache__/
+
+# Local source archives and temporary curation artifacts
+*.zip
+experimental-approved-*.json
+experimental-duplicate-report.json
+experimental-final-*.txt
+experimental-invalid-equations.json
+experimental-normalized-name-matches.txt
+experimental-sensitive-language-matches.txt
+tools/import-mdpresets-batches.sh

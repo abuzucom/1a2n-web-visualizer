@@ -1,0 +1,59 @@
+name: Checks
+
+# Keeps AGENTS.md-derived docs and code quality enforced on every change.
+# Separate from deploy.yml (Pages publishing has different
+# triggers/permissions and isn't relevant here).
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  agents-md-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check AGENTS.md copies are in sync
+        run: python3 scripts/sync.py --check
+
+      - name: Check GitHub Actions are pinned
+        run: python3 scripts/check_action_pins.py
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS dependencies
+        # --ignore-scripts: milkdrop-shader-converter's own "install" script
+        # (a native C++ compile) would otherwise run before our postinstall
+        # patches it, and fail against Node 22 -- lint doesn't need that
+        # addon built, only the JS/Python source to exist. See
+        # tools/convert-milk-presets.js's header for the real build steps.
+        run: npm ci --ignore-scripts
+
+      - name: ESLint
+        run: npx eslint .
+
+      - name: Install ruff
+        # Pinned to a commit rather than a mutable release tag.
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+
+      - name: ruff check
+        run: ruff check tools/

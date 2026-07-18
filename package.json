@@ -1,11 +1,14 @@
 {
   "name": "butterchurn-visualizer",
-  "version": "1.6.0",
+  "version": "1.7.2",
   "description": "Milkdrop (butterchurn) audio visualizer pages for OBS and standalone browser use.",
   "private": true,
   "scripts": {
-    "start": "npx --yes serve src",
-    "dev": "python3 -m http.server --directory src 8000"
+    "start": "serve src",
+    "dev": "python3 -m http.server --directory src 8000",
+    "lint": "eslint . && python -m ruff check tools/",
+    "validate:presets": "node tools/validate-preset-chunks.js",
+    "postinstall": "patch-package"
   },
   "keywords": [
     "butterchurn",
@@ -15,5 +18,18 @@
     "browser-source",
     "webgl"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "lodash": ">=4.17.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "acorn": "^8.17.0",
+    "eslint": "^10.7.0",
+    "milkdrop-eel-parser": "^0.0.4",
+    "milkdrop-preset-utils": "^0.2.1",
+    "milkdrop-shader-converter": "^0.0.8",
+    "patch-package": "^8.0.1",
+    "serve": "14.2.6"
+  }
 }

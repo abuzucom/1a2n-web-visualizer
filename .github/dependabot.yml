@@ -2,13 +2,12 @@
 # https://docs.github.com/en/code-security/dependabot
 #
 # Two update surfaces in this repo:
-#   - JavaScript deps in package.json + bun.lock  (Bun)
+#   - JavaScript deps in package.json + package-lock.json (npm)
 #   - Actions pinned in .github/workflows/*        (github-actions)
 version: 2
 updates:
-  # JavaScript / TypeScript dependencies (Bun).
-  # Uses the text-based bun.lock; requires Bun >= 1.1.39.
-  - package-ecosystem: "bun"
+  # JavaScript / TypeScript dependencies (npm).
+  - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"

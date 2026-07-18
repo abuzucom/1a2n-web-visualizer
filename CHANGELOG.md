@@ -4,15 +4,233 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `tools/split-extra-images.py` - splits the experimental texture bundle
+  into deterministic lazy-loaded part files and losslessly optimizes the
+  embedded images, verifying every optimized variant pixel-for-pixel.
+- Added a touch-first mobile visualizer entry point with branded controls for
+  shuffling, preset history, cycle intervals, and hyperspeed mode.
+- Added the `T` fullscreen shortcut for toggling 100ms hyperspeed shuffle.
+
+### Fixed
+- Randomized the initial fullscreen preset across the resident vendored
+  collection while leaving the OBS startup behavior unchanged.
+- Normalized equation strings with a trailing newline before load, so presets
+  whose final statement lacks a semicolon compile in butterchurn's
+  space-separated equation wrapper instead of being skipped.
+- Detected warp/comp shader link failures during preset load and skipped the
+  preset instead of rendering every frame with an unlinked program.
+- Added runtime-detected broken presets (bad equations or shader link
+  failures) to the exportable excluded-presets list for later curation.
+- Reduced fullscreen startup blocking by selecting the initial vendored preset
+  from a resident index and deferring experimental image loading until idle or
+  lazy-preset selection.
+- Stopped treating post-load WebGL error state as proof that a preset failed.
+- Started the visualizer before microphone permission and device enumeration
+  finish, so the first frame does not wait on audio input setup.
+- Fixed equation validation for valid statements without trailing semicolons.
+- Hardened workflow checkouts by disabling persisted GitHub credentials.
+
+### Changed
+- Curated 62 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Curated 2,959 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Replaced the 53.7 MB blocking experimental texture bundle with eight
+  lazy-loaded part files injected on idle or before the first `[EXP]`
+  preset, cutting startup transfer by about 54 MB; a legacy single-file
+  bundle still loads if present.
+- Losslessly recompressed the 1,230 embedded experimental textures
+  (JPEG via jpegtran, BMP and static GIF to PNG, PNG via optipng),
+  saving 6.9 MB with pixel-identical output.
+- Added `defer` to all page scripts so parsing no longer blocks on
+  script execution order.
+- Extended Caddy cache headers to preset chunks and app js/css, and
+  removed `immutable` from `/vendor/*` because curation rewrites those
+  files in place; documented the rules in the local hosting guide.
+- Documented the texture part layout and lazy-loading invariants in the
+  agent instruction files and README.
+- Curated 2,991 additional presets from a supplied removal list (580 further
+  requested names were already removed by this pass) and recorded the exact
+  removals in the inventory and durable removal ledger.
+- Deduplicated the experimental collection against the mainline lazy-loaded
+  presets: removed 15,739 `[EXP]` presets whose source presets already ship in
+  the mainline collection (exact import-time content matches plus approved
+  normalized-name matches) and 247 intra-experimental exact duplicate copies,
+  shrinking `src/presets-extra/` from about 276 MB to about 209 MB.
+- Pruned 38 stale index entries whose preset data was missing from their chunk
+  files, which previously surfaced as unavailable presets at runtime.
+- Added `tools/reconcile_preset_inventory.py` and restored 2,046 missing
+  `preset-inventory.csv` rows so the inventory matches the shipped presets
+  exactly; corrected README preset counts to the reconciled totals.
+- Removed 575 presets whose names contained slurs, hate ideology, sexual
+  violence, or explicit sexual content, identified by a full audit of all
+  preset names (including obfuscated spellings) and recorded in the inventory
+  and durable removal ledger; corrected the README preset counts to the
+  post-curation totals.
+- Curated 2,706 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Added the mobile visualizer to the landing-page navigation and documented its
+  browser-viewport behavior without curation controls or browser fullscreen.
+- Refreshed the landing page, OBS panel, and fullscreen overlays with the
+  shared brand palette, typography system, responsive layouts, and accessible
+  focus states.
+- Curated 2,606 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Curated 301 additional presets from the shipped collections and recorded the
+  exact removals in the inventory and durable removal ledger.
+- Synced the AI agent instruction files from the authoritative `abuzucom/agents`
+  template while preserving this repo's Commands, Do not touch, Architecture,
+  Gotchas, and Read before touching orientation.
+- Curated 2,498 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Curated 1,625 additional presets from the shipped collections and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Made preset curation recoverable after partial writes and Windows file-lock
+  replacement failures, while resolving generated chunks from the authoritative
+  index instead of stale inventory metadata.
+
+## [1.7.1] - 2026-07-16
+
+### Fixed
+- Drained queued WebGL errors after failed shader loads so one invalid preset
+  does not poison subsequent fallback presets.
+- Loaded the initial preset during audio startup instead of waiting for later
+  navigation or auto-cycle activity.
+
+## [1.7.0] - 2026-07-15
+
+### Added
+- Jira Cloud synchronization for approved pull requests and successful GitHub
+  Pages deployments. The integration links `VID-*` issues and can create a
+  `Task` only when maintainers apply the `jira-create` label.
+- Protected-file review checks for agent instructions, GitHub Actions,
+  automation scripts, dependencies, deployment configuration, runtime code, and
+  vendored code. See [`docs/protected-file-review.md`](docs/protected-file-review.md).
+- Current-commit approval enforcement for protected files changed by agents,
+  while owner-authored pull requests avoid the impossible self-approval case.
+- GitHub Actions pin, instruction synchronization, lint, and protected-file
+  checks as documented repository gates.
+
+### Changed
+- Renamed the README heading to `1a2n Web Visualizer` to match the repository
+  name.
+- Made curation output writes atomic and guarded audio-device recovery against
+  asynchronous failures and leaked resources.
+- Split the BCViz controller responsibilities and hardened preset loading,
+  rendering, WebGL context recovery, and render-loop failure handling.
+- Added favicon links to the visualizer pages.
+- Added known-good preset recovery and random fallback behavior when a preset
+  fails to compile or render.
+- Added bounded protected-file pagination and trusted-default-branch execution
+  for review checks and Jira workflows.
+- Removed 131 invalid generated presets and kept generated indexes, chunks,
+  inventories, and removal ledgers consistent.
+
+### Security
+- Jira secrets are used only by trusted `pull_request_target` and deployment
+  workflows; fork pull requests skip cleanly when secrets are unavailable.
+- Protected-file workflows never execute code from the pull request branch.
+- Documented the single-maintainer branch protection model without requiring
+  global GitHub Code Owner approval.
+
+## [1.6.6] - 2026-07-15
+
+### Changed
+- Audited and simplified the README and local-hosting guide. Corrected current
+  preset counts, commands, controls, tooling, security notes, and provenance.
+
+## [1.6.5] - 2026-07-15
+
+### Fixed
+- Prevented Butterchurn equation compilation failures caused by missing empty
+  equation fields in imported EXP presets.
+- Added parser-based validation for generated equation JavaScript and removed
+  250 malformed EXP presets from the shipped collection, with corresponding
+  exclusion, inventory, and removal-ledger records.
+- Added runtime diagnostics for broken preset loads, including the preset name,
+  logical chunk ID, physical chunk file, and caught exception.
+
+## [1.6.4] - 2026-07-15
+
+### Security
+- Added a lodash version override of `>=4.17.12` to prevent the known
+  prototype-pollution vulnerability in the dependency tree.
+
+### Fixed
+- Corrected the logical IDs passed by all 377 experimental NestDrop preset
+  chunks. Mainline chunk insertion had shifted the generated `index.js`
+  mapping without updating the chunks' registration callbacks, causing valid
+  `[EXP]` presets to be reported as unavailable at runtime.
+
+## [1.6.3] - 2026-07-11
+
+### Added
+- `tools/remove_presets.js` - removes a given list of exact preset names
+  from `src/presets-extra/index.js`, their backing chunk files, any
+  vendored `.min.js` pack that contains them, and the matching
+  `preset-inventory.csv` rows, with a pre-flight existence check (aborts
+  with nothing written if any name isn't found) and a post-edit
+  consistency check. Productionizes the manual curation procedure so it
+  doesn't need to be reconstructed for each batch.
+- `tools/analyze_curation_history.js` - reconstructs the full history of
+  presets curated out of this repo from `git log` and prints neutral word
+  /bigram/contributor-prefix frequency statistics over their names, with
+  no built-in notion of "risky" content, so anyone using this repo can
+  review the same data and make their own curation calls.
+
+### Removed
+- 186 more presets curated out for photosensitivity/seizure-risk content:
+  185 via `tools/remove_presets.js` (21 self-labeled "epileptic", 14
+  "strobe", 3 "flicker", 28 in the `recursion frustum`/"Ananda_Flash_Remix"
+  series, 2 "eyepain", 9 "serpent", 44 "rainbow bubble", 56 in the "escape
+  the worm"/"Worms 2003" series, and 8 individually named) plus 1
+  presets-extra entry that duplicated an already-removed vendored-pack
+  name (dead/shadowed data cleaned up alongside it). Spans
+  `src/presets-extra/` (38 chunk files) and the vendored
+  `butterchurnPresetsExtra`/`butterchurnPresetsExtra2` packs, with the
+  matching `preset-inventory.csv` rows dropped. Same intentional editorial
+  curation as prior batches - see the *Curation* section in the README.
+  Ships 14,770 deduplicated presets now (378 vendored + 14,392
+  lazy-loaded from 14,458 index names minus 66 that duplicate a vendored
+  name).
+
+## [1.6.2] - 2026-07-11
+
+### Removed
+- 32 more presets curated out of `src/presets-extra/` (removed from
+  `index.js` and their backing chunk files, with the matching
+  `preset-inventory.csv` rows dropped): 4 individually named presets
+  (`Hampton GER - Randomnity (Adjustable Mix)`, `Shifter-openthelight`,
+  `Eo.S. + Redi Jedi _Phat_Mexican_Insanity_Pepper_Crazy_mix(1.04) Eo.S.
+  edit colors2`, `Optiks - Nerve`), plus every preset whose name contains
+  "seizure" or "sezure" (28 presets, mostly `Eo.S. + Phat` /
+  `Bdrv`/`beta106`/`bdrv + al` "recursion frustum" and "Let_go_Wana_Sezure"
+  variants). Same intentional editorial curation as prior batches - see the
+  *Curation* section in the README. Ships 14,954 deduplicated presets now
+  (381 vendored + 14,573 lazy-loaded from 14,640 index names minus 67 that
+  duplicate a vendored name).
+
+## [1.6.1] - 2026-07-10
+
+### Security
+- The Docker + Caddy self-hosting container now also sends a
+  `Strict-Transport-Security` header (`max-age=31536000; includeSubDomains`)
+  alongside the existing OWASP header set, so the header is already in
+  place if that Caddyfile is ever put behind TLS termination instead of
+  served as plain HTTP on `localhost`.
+
 ## [1.6.0] - 2026-07-07
 
 ### Added
-- `preset-inventory.csv` — a full inventory of every preset name and the pack
+- `preset-inventory.csv` - a full inventory of every preset name and the pack
   that provides it (a vendored pack, or the lazy-loaded `presets-extra`
   collection with its chunk id), generated with the same dedup/precedence
   rules `visualizer-core.js` applies at runtime. Reflects the curated set
-  (14,986 rows).
-- `tools/fetch-extra-presets-curated.py` — regenerates `src/presets-extra/`
+  (14,770 rows).
+- `tools/fetch-extra-presets-curated.py` - regenerates `src/presets-extra/`
   like `fetch-extra-presets.py`, but diffs a fresh upstream pull against the
   currently committed `index.js` and re-excludes anything present upstream
   but missing from the current tree, so running it preserves curation
@@ -31,7 +249,7 @@ All notable changes to this project are documented here. Format loosely follows
   `butterchurnPresetsMD1`), with the matching `preset-inventory.csv` rows
   removed. These removals are an **intentional content-curation choice for
   this deployment**, independent of the upstream collection and the butterchurn
-  libraries — not an upstream change. `tools/fetch-extra-presets-curated.py`
+  libraries - not an upstream change. `tools/fetch-extra-presets-curated.py`
   (above) now re-applies this curation automatically on regeneration; the
   plain `fetch-extra-presets.py` still rebuilds `src/presets-extra/` from
   upstream verbatim and will reintroduce these presets (see the *Curation*
@@ -39,9 +257,9 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Fixed
 - Corrected the documented preset counts to match the current curated packs:
-  14,986 deduplicated presets total — 381 vendored (100 base + 138 new from
-  Extra + 117 new from Extra2 + 26 new from MD1, after merge-order dedup)
-  plus 14,605 lazy-loaded (14,672 index names minus 67 that duplicate a
+  14,770 deduplicated presets total - 378 vendored (100 base + 135 new from
+  Extra + 116 new from Extra2 + 27 new from MD1, after merge-order dedup)
+  plus 14,392 lazy-loaded (14,458 index names minus 66 that duplicate a
   vendored name). Replaces the stale 15,330 / 15,264 totals and 387 / 385
   vendored figures, which no longer matched the regenerated and curated
   `Extra`/`Extra2`/`MD1` packs.
@@ -63,7 +281,7 @@ All notable changes to this project are documented here. Format loosely follows
   offline, and under the strict CSP; an in-memory LRU keeps at most 16
   chunks resident. If the folder is removed the app falls back to the 387
   vendored presets.
-- `tools/fetch-extra-presets.py` — stdlib-only generator that downloads the
+- `tools/fetch-extra-presets.py` - stdlib-only generator that downloads the
   pinned, sha256-verified upstream zip and regenerates `src/presets-extra/`,
   excluding presets that reference custom textures the app can't supply
   (`tools/butterchurn-image-names.json` lists the vendored textures).
@@ -147,8 +365,8 @@ All notable changes to this project are documented here. Format loosely follows
 ### Added
 - Shared `visualizer-core.js` controller (`window.BCViz`) holding all butterchurn
   setup, preset cycling, and audio-device handling.
-- `obs.html` — OBS browser-source page with a hideable control panel.
-- `fullscreen.html` — standalone keyboard-only fullscreen page.
+- `obs.html` - OBS browser-source page with a hideable control panel.
+- `fullscreen.html` - standalone keyboard-only fullscreen page.
 - Per-page CSS (`panel.css`, `fullscreen.css`) and UI wiring
   (`obs-ui.js`, `fullscreen-ui.js`).
 - Docs: OBS setup and audio-routing guides.
