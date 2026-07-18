@@ -36,6 +36,8 @@ All notable changes to this project are documented here. Format loosely follows
 ### Changed
 - Curated 15,458 additional presets from the supplied removal list and recorded
   the exact removals in the inventory and durable removal ledger.
+- Curated 280 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger.
 - Curated 62 additional presets from the supplied removal list and recorded
   the exact removals in the inventory and durable removal ledger.
 - Curated 2,959 additional presets from the supplied removal list and recorded
