@@ -135,6 +135,34 @@
     settleChunk(state, cid, false);
   }
 
+  const CHUNK_MAX_RETRIES = 2;
+  const CHUNK_RETRY_BASE_MS = 500;
+
+  function requestChunk(state, cid, attempt) {
+    const timer = setTimeout(function () { failChunk(state, cid); }, 10000);
+    const script = document.createElement('script');
+    const filename = state.extraIndex.files && state.extraIndex.files[cid]
+      ? state.extraIndex.files[cid]
+      : 'chunk-' + String(cid).padStart(3, '0') + '.js';
+    script.src = 'presets-extra/' + filename;
+    script.onerror = function () {
+      clearTimeout(timer);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      // A load failure (e.g. transient 503 from the CDN) is retried with
+      // backoff before the chunk is given up on as permanently missing.
+      if (attempt < CHUNK_MAX_RETRIES) {
+        setTimeout(function () {
+          if (state.status[cid] === 'loading') requestChunk(state, cid, attempt + 1);
+        }, CHUNK_RETRY_BASE_MS * Math.pow(2, attempt));
+        return;
+      }
+      failChunk(state, cid);
+    };
+    script.onload = function () { clearTimeout(timer); failChunk(state, cid); };
+    state.scripts[cid] = script;
+    document.head.appendChild(script);
+  }
+
   function ensureChunk(state, cid) {
     if (state.status[cid] === 'loaded') {
       touchChunk(state, cid);
@@ -145,16 +173,7 @@
       (state.waiters[cid] = state.waiters[cid] || []).push(resolve);
       if (state.status[cid] === 'loading') return;
       state.status[cid] = 'loading';
-      const timer = setTimeout(function () { failChunk(state, cid); }, 10000);
-      const script = document.createElement('script');
-      const filename = state.extraIndex.files && state.extraIndex.files[cid]
-        ? state.extraIndex.files[cid]
-        : 'chunk-' + String(cid).padStart(3, '0') + '.js';
-      script.src = 'presets-extra/' + filename;
-      script.onerror = function () { clearTimeout(timer); failChunk(state, cid); };
-      script.onload = function () { clearTimeout(timer); failChunk(state, cid); };
-      state.scripts[cid] = script;
-      document.head.appendChild(script);
+      requestChunk(state, cid, 0);
     });
   }
 
@@ -273,12 +292,14 @@
 
   function loadMissingPreset(controller, index, blend, announce, seq, mode) {
     const name = controller.store.keys[index];
+    controller.pendingChunkLoads++;
     const ready = controller.ensureExperimentalImages
       ? controller.ensureExperimentalImages()
       : Promise.resolve();
     ready.then(function () {
       return ensureChunk(controller.store.state, controller.store.state.extraChunkOf[name]);
     }).then(function (ok) {
+      controller.pendingChunkLoads--;
       if (seq !== controller.loadSeq) return;
       if (!ok || !(name in controller.store.presets)) {
         controller.onToast('\u26A0 preset unavailable, skipping: ' + name);
@@ -372,6 +393,7 @@
       lastGoodName: '',
       renderFrame: null,
       rendering: false,
+      pendingChunkLoads: 0,
     };
   }
 
@@ -705,6 +727,7 @@
       currentIndex: function () { return playback.idx; },
       currentName: function () { return store.keys[playback.idx] || ''; },
       isStarted: function () { return audio.started; },
+      isChunkLoading: function () { return playback.pendingChunkLoads > 0; },
       resize: function () { sizeCanvas(audio); },
     };
   }
