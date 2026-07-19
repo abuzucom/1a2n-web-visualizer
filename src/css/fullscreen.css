@@ -181,6 +181,14 @@ kbd {
 
 #help.loading .go { display: none; }
 
+#help .go .pulse {
+  animation: go-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes go-pulse {
+  50% { opacity: 0.4; }
+}
+
 #help .startup-status {
   margin-top: 26px;
   color: var(--brand-pitch);
@@ -267,4 +275,5 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   #help .startup-progress > div { animation: none; transition: none; }
+  #help .go .pulse { animation: none; }
 }
