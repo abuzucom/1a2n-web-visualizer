@@ -181,7 +181,7 @@ kbd {
 
 #help.loading .go { display: none; }
 
-#help .go .pulse {
+#help .go.pulse {
   animation: go-pulse 1.6s ease-in-out infinite;
 }
 
@@ -275,5 +275,5 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   #help .startup-progress > div { animation: none; transition: none; }
-  #help .go .pulse { animation: none; }
+  #help .go.pulse { animation: none; }
 }
