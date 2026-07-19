@@ -34,6 +34,11 @@ All notable changes to this project are documented here. Format loosely follows
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Changed
+- Curated 661 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger; one further
+  requested name (`Rovastar + Loadus + Geiss - FractalDrop (Triple Mix)`) lives
+  in a vendored preset pack whose format the curation tool cannot auto-edit
+  and was left in place.
 - Curated 211 additional presets from the supplied removal list and recorded
   the exact removals in the inventory and durable removal ledger.
 - Curated 15,458 additional presets from the supplied removal list and recorded
