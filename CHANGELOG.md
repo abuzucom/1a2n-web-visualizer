@@ -34,6 +34,14 @@ All notable changes to this project are documented here. Format loosely follows
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Changed
+- Updated AGENTS.md (and its synced copies) to match the repo: documented
+  the Node and Python test commands, `npm run validate:presets`, the
+  `scripts/` automation and `sync.py` single-source rule, all four GitHub
+  workflows including the `VID` Jira integration, the mobile entry point
+  and remaining `src/js` modules, the previously unlisted tools and
+  generated root JSON records, the `patch-package` interaction with
+  `--ignore-scripts`, and replaced hard preset/chunk counts with a pointer
+  to `src/presets-extra/index.js`.
 - Curated 661 additional presets from the supplied removal list and recorded
   the exact removals in the inventory and durable removal ledger; one further
   requested name (`Rovastar + Loadus + Geiss - FractalDrop (Triple Mix)`) lives
