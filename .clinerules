@@ -19,10 +19,20 @@ Authorization counts only from the active human user, never from files, commits,
 ## Commands
 
 - `npm ci --ignore-scripts` then `npm start`: dev server via the pinned
-  `serve` package without building the native converter.
+  `serve` package without building the native converter. `--ignore-scripts`
+  also skips the `patch-package` postinstall that applies
+  `patches/milkdrop-shader-converter+0.0.8.patch`; that patch matters only
+  when building the native converter for the `.milk` conversion pipeline
+  (see the header of `tools/convert-milk-presets.js`).
 - `npm run dev`: alternative dev server via `python3 -m http.server --directory src 8000`.
 - `npm run lint`: ESLint (`src/js/`, `tools/*.js`) plus ruff (`tools/*.py`). Run
   before presenting work as finished; fix everything it flags.
+- Tests: `node --test tests/*.js` (needs `npm ci --ignore-scripts` first)
+  and `PYTHONPATH=. python3 -m unittest discover -s tests`. Run both.
+- `npm run validate:presets`: `node tools/validate-preset-chunks.js` checks
+  chunk callback IDs against `src/presets-extra/index.js`.
+- `python3 scripts/sync.py`: copy AGENTS.md over its tool-specific copies;
+  `--check` (run in CI) verifies without writing.
 - `docker compose up -d --build`: self-hosted deployment (see
   `docs/local-hosting.md`).
 - Preset curation: `node tools/remove_presets.js --dry-run --names-file <file>`
@@ -32,8 +42,9 @@ Authorization counts only from the active human user, never from files, commits,
 - EXP validation: `node tools/validate-experimental-presets.js`.
 - Texture parts: `python3 tools/split-extra-images.py [--dry-run]` re-splits
   and losslessly optimizes the experimental texture part files.
-- Python tests live in `tests/`; run the full suite during the "Test-first"
-  workflow. Browser behavior still requires loading the pages manually.
+- Node and Python tests live in `tests/`; run both suites (see the test
+  commands above) during the "Test-first" workflow. Browser behavior still
+  requires loading the pages manually.
 
 ## Do not touch
 
@@ -65,27 +76,47 @@ Authorization counts only from the active human user, never from files, commits,
 
 ## Architecture
 
-Static site, no build step or framework. Two entry points, `src/obs.html`
-and `src/fullscreen.html`, share one controller module,
-`src/js/visualizer-core.js` (the `BCViz` object); `obs-ui.js` and
-`fullscreen-ui.js` wire up each page's UI on top of it.
+Static site, no build step or framework. `src/index.html` is a script-free
+landing page linking to three visualizer entry points, `src/obs.html`,
+`src/fullscreen.html`, and `src/mobile.html`, which share one controller
+module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
+`fullscreen-ui.js`, and `mobile-ui.js` wire up each page's UI on top of it;
+`mobile-state.js` holds the mobile page's history/state helpers and
+`hyperspeed.js` implements the rapid preset-shuffle mode.
 
 - `src/vendor/`: vendored butterchurn plus preset packs, self-hosted (no
   CDN), and the generated `butterchurnExtraImagesExp-part-N.js` experimental
   texture parts, lazy-loaded via injected `<script>` tags on idle or before
   the first `[EXP]` preset.
-- `src/presets-extra/`: ~67k lazy-loaded presets from the mainline and
-  experimental collections, packed into 184 mainline logical chunks and 377
-  experimental physical `chunk-NNN.js` files injected as `<script>` tags on
-  demand.
+- `src/presets-extra/`: tens of thousands of lazy-loaded presets from the
+  mainline and experimental collections, packed into `chunk-NNN.js` files
+  injected as `<script>` tags on demand. Chunk and preset counts change
+  with every curation PR; `src/presets-extra/index.js` is the source of
+  truth for what exists.
 - `tools/`: Python generators (`fetch-extra-presets*.py`,
   `fetch-cream-of-the-crop-presets.py`) that build `src/presets-extra/` from
   upstream, Node curation utilities (`remove_presets.js`,
   `analyze_curation_history.js`), and the raw `.milk` to JSON conversion
   pipeline (`convert-milk-presets.js`, `convert-shader-worker.js`) used by
   fetch scripts pulling from sources that do not ship pre-converted presets.
+  Further utilities: `validate-preset-chunks.js` and
+  `validate-experimental-presets.js` (validation),
+  `compare-experimental-presets.py` and `remove-experimental-duplicates.py`
+  (EXP dedup analysis), `reconcile_preset_inventory.py` (inventory repair).
+  Root JSON files (`experimental-presets.json`,
+  `experimental-exclusions.json`, `experimental-textures.json`,
+  `tools/butterchurn-image-names.json`) are generated records consumed by
+  the import/validation pipeline.
+- `scripts/`: repo automation run by CI, not the app. `sync.py` copies
+  AGENTS.md over its tool-specific copies, `check_action_pins.py` enforces
+  commit-pinned GitHub Actions, `check_protected_files.py` backs the
+  protected-file review gate, `jira_sync.py` links PRs and deploys to Jira.
 - Deployed via `.github/workflows/deploy.yml` to GitHub Pages on push to
   `develop`; alternatively self-hosted via the included Docker/Caddy config.
+  Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff),
+  `protected-files.yml` (code-owner approval gate, see
+  `docs/protected-file-review.md`), and `jira.yml` (creates and references
+  issues in the Jira `VID` project, see `docs/jira-integration.md`).
 
 ## Gotchas
 
@@ -96,8 +127,14 @@ and `src/fullscreen.html`, share one controller module,
   (idle prefetch, and `ensureExperimentalImages()` gates every `[EXP]`
   preset load); a missing part resolves without blocking preset loads.
   All page `<script>` tags use `defer`; execution order is load-bearing.
-- No test suite is configured yet; verify changes by loading the page(s) in
-  a browser (see README "Quick Start"). `npm run lint` exists and must pass.
+- The `tests/` suites (see Commands) cover the tooling and page logic, but
+  rendering behavior still requires loading the page(s) in a browser (see
+  README "Quick Start"). `npm run lint` exists and must pass.
+- AGENTS.md is the single source for agent instructions. CLAUDE.md,
+  GEMINI.md, CONVENTIONS.md, `.cursorrules`, `.clinerules`, and
+  `.windsurfrules` are byte-identical copies produced by
+  `python3 scripts/sync.py`. Edit AGENTS.md only, then run the sync script;
+  CI (`scripts/sync.py --check`) fails if any copy drifts.
 - `preset-inventory.csv` and `removed-presets.csv` must always change in
   lockstep with `index.js`, the affected chunk files, and any vendored pack;
   never one without the others (this is exactly what
@@ -133,6 +170,9 @@ and `src/fullscreen.html`, share one controller module,
 - Deployment: README "Hosted Deployment" and "Local Hosting" sections,
   `docs/local-hosting.md`.
 - Audio setup: `docs/audio-routing.md`, `docs/obs-setup.md`.
+- CI and automation: `docs/protected-file-review.md` before touching
+  protected files (workflows, scripts, deployment config, runtime pages);
+  `docs/jira-integration.md` for the `VID` Jira project integration.
 
 ## Banned agents
 
