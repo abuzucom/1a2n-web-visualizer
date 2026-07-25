@@ -34,6 +34,15 @@ All notable changes to this project are documented here. Format loosely follows
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Changed
+- Pinned devDependencies in `package.json` to exact versions instead of caret
+  ranges, matching the current `package-lock.json` resolutions and the
+  pin-all-versions policy in AGENTS.md.
+- Curated 53 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Curated 12 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger.
+- Curated 153 additional presets from the supplied removal list and recorded
+  the exact removals in the inventory and durable removal ledger.
 - Updated AGENTS.md (and its synced copies) to match the repo: documented
   the Node and Python test commands, `npm run validate:presets`, the
   `scripts/` automation and `sync.py` single-source rule, all four GitHub
