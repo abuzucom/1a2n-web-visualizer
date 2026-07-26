@@ -18,6 +18,8 @@
     <div id="toast"></div>
     <button id="removeBtn" title="Remove current preset from shuffle (this session)">&#128683;</button>
     <button id="excludedBtn" title="View presets excluded this session">&#128203;</button>
+    <button id="favoriteBtn" title="Favorite current preset (this session)">&#11088;</button>
+    <button id="favoritesBtn" title="View favorited presets this session">&#128214;</button>
     <div id="help">
       <div class="box">
         <p class="eyebrow">1a2n Visualizer</p>
@@ -35,6 +37,8 @@
           <tr><td class="k"><kbd>T</kbd></td><td>Toggle hyperspeed shuffle</td></tr>
           <tr><td class="k"><kbd>X</kbd></td><td>Remove current preset from shuffle</td></tr>
           <tr><td class="k"><kbd>L</kbd></td><td>View presets excluded this session</td></tr>
+          <tr><td class="k"><kbd>M</kbd></td><td>Favorite the current preset</td></tr>
+          <tr><td class="k"><kbd>K</kbd></td><td>View presets favorited this session</td></tr>
           <tr><td class="k"><kbd>?</kbd></td><td>Show this help</td></tr>
         </table>
         <div class="go pulse" id="startPrompt">Click or press any key to start</div>
@@ -55,6 +59,17 @@
         <div class="actions">
           <button id="copyExcludedBtn">Copy</button>
           <button id="closeExcludedBtn">Close</button>
+        </div>
+      </div>
+    </div>
+    <div id="favoritesPanel" class="hidden">
+      <div class="box">
+        <h1>Favorites this session</h1>
+        <p>Copy this list to build a setlist for a future performance.</p>
+        <textarea id="favoritesListText" readonly rows="10"></textarea>
+        <div class="actions">
+          <button id="copyFavoritesBtn">Copy</button>
+          <button id="closeFavoritesBtn">Close</button>
         </div>
       </div>
     </div>

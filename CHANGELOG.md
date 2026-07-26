@@ -13,6 +13,9 @@ All notable changes to this project are documented here. Format loosely follows
 - Added a touch-first mobile visualizer entry point with branded controls for
   shuffling, preset history, cycle intervals, and hyperspeed mode.
 - Added the `T` fullscreen shortcut for toggling 100ms hyperspeed shuffle.
+- Added `M`/`K` fullscreen shortcuts for favoriting the current preset and
+  viewing/copying the session's favorites list, mirroring the excluded-
+  presets workflow, for building a setlist during a live performance.
 
 ### Fixed
 - Randomized the initial fullscreen preset across the resident vendored

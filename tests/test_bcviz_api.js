@@ -46,6 +46,13 @@ function createHarness(presets, initialWebglErrors) {
   const loadCalls = [];
   let chunkLoads = 0;
   let imagePartLoads = 0;
+  let intervalCalls = 0;
+  const trackedSetInterval = function (callback, delay) {
+    intervalCalls += 1;
+    const timer = setInterval(callback, delay);
+    timer.unref();
+    return timer;
+  };
   const window = {
     BCExtraPresetIndex: { chunks: [['lazy']], files: ['chunk-000.js'] },
     butterchurnPresets: presets ? { getPresets: function () { return presets; } } : null,
@@ -101,6 +108,8 @@ function createHarness(presets, initialWebglErrors) {
     console: console,
     setTimeout: schedule,
     clearTimeout: clearTimeout,
+    setInterval: trackedSetInterval,
+    clearInterval: clearInterval,
   });
   return {
     canvas: canvas,
@@ -108,6 +117,7 @@ function createHarness(presets, initialWebglErrors) {
     loadCalls: loadCalls,
     chunkLoads: function () { return chunkLoads; },
     imagePartLoads: function () { return imagePartLoads; },
+    intervalCalls: function () { return intervalCalls; },
   };
 }
 
@@ -247,4 +257,44 @@ test('runtime-broken presets are added to the exportable excluded list', async f
   viz.goto(0);
 
   assert.equal(viz.excludedList().includes('bad'), true);
+});
+
+test('favoriting the current preset returns and records its name', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} }, bbb: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  const name = viz.favoriteCurrentPreset();
+
+  assert.equal(name, viz.currentName());
+  assert.equal(viz.favoritesList().includes(name), true);
+});
+
+test('favoriting the same preset twice does not duplicate it', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  viz.favoriteCurrentPreset();
+  viz.favoriteCurrentPreset();
+
+  assert.equal(viz.favoritesList().length, 1);
+});
+
+test('favoriting the current preset never advances playback or restarts the cycle timer', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} }, bbb: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: true, cycleSecs: 5 });
+
+  await viz.start();
+  const indexBefore = viz.currentIndex();
+  const loadCallsBefore = harness.loadCalls.length;
+  const cycleSecsBefore = viz.getCycleSecs();
+  const intervalCallsBefore = harness.intervalCalls();
+
+  viz.favoriteCurrentPreset();
+
+  assert.equal(viz.currentIndex(), indexBefore);
+  assert.equal(harness.loadCalls.length, loadCallsBefore);
+  assert.equal(viz.getCycleSecs(), cycleSecsBefore);
+  assert.equal(harness.intervalCalls(), intervalCallsBefore);
 });

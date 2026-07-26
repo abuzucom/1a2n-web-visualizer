@@ -371,6 +371,13 @@
     return removed;
   }
 
+  function favoriteCurrent(controller) {
+    if (!controller.store.keys.length) return null;
+    const name = controller.store.keys[controller.idx];
+    controller.favorites.add(name);
+    return name;
+  }
+
   function createPlaybackController(store, opts, onToast, onPreset, canvas) {
     return {
       store: store,
@@ -381,6 +388,7 @@
       visualizer: null,
       idx: 0,
       excluded: new Set(),
+      favorites: new Set(),
       loadSeq: 0,
       cycleOn: opts.cycleOn !== false,
       shuffleOn: opts.shuffle === true,
@@ -711,6 +719,8 @@
       isShuffling: function () { return playback.shuffleOn; },
       removeCurrentFromShuffle: function () { return removeCurrent(playback); },
       excludedList: function () { return Array.from(playback.excluded); },
+      favoriteCurrentPreset: function () { return favoriteCurrent(playback); },
+      favoritesList: function () { return Array.from(playback.favorites); },
       setCycleSecs: function (seconds) {
         playback.cycleSecs = Math.max(3, seconds | 0);
         restartCycle(playback);
