@@ -262,7 +262,9 @@ workflow and deployment linking behavior.
 | <kbd>T</kbd> | Toggle hyperspeed shuffle at 100ms intervals |
 | <kbd>X</kbd> | Remove current preset from this session's shuffle |
 | <kbd>L</kbd> | Show presets excluded this session |
-| <kbd>Escape</kbd> | Close the excluded-presets panel |
+| <kbd>M</kbd> | Favorite the current preset this session |
+| <kbd>K</kbd> | Show presets favorited this session |
+| <kbd>Escape</kbd> | Close the excluded-presets or favorites panel |
 | <kbd>?</kbd> | Show/hide the help menu |
 
 ### OBS Panel (`obs.html`)

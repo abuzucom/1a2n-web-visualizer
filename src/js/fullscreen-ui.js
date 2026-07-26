@@ -15,6 +15,12 @@
   const excludedList   = document.getElementById('excludedList');
   const copyExcludedBtn  = document.getElementById('copyExcludedBtn');
   const closeExcludedBtn = document.getElementById('closeExcludedBtn');
+  const favoriteBtn       = document.getElementById('favoriteBtn');
+  const favoritesBtn      = document.getElementById('favoritesBtn');
+  const favoritesPanel    = document.getElementById('favoritesPanel');
+  const favoritesTextEl   = document.getElementById('favoritesListText');
+  const copyFavoritesBtn  = document.getElementById('copyFavoritesBtn');
+  const closeFavoritesBtn = document.getElementById('closeFavoritesBtn');
 
   let toastTimer = null;
   let startupPending = false;
@@ -120,6 +126,40 @@
     }
   }
 
+  function favoriteCurrent() {
+    if (!viz.isStarted()) return;
+    const favorited = viz.favoriteCurrentPreset();
+    if (favorited) say('\u2b50 Favorited: ' + favorited);
+  }
+
+  function showFavoritesPanel() {
+    if (!viz.isStarted()) return;
+    const list = viz.favoritesList();
+    favoritesTextEl.value = list.length ? list.join('\n') : '(none favorited yet)';
+    favoritesPanel.classList.remove('hidden');
+    favoritesTextEl.focus();
+    favoritesTextEl.select();
+  }
+
+  function hideFavoritesPanel() {
+    favoritesPanel.classList.add('hidden');
+  }
+
+  function copyFavoritesList() {
+    const list = viz.favoritesList();
+    const text = list.join('\n');
+    favoritesTextEl.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        say('Copied ' + list.length + ' preset name(s)');
+      }, function () {
+        say('Copy failed \u2014 text is selected, use Ctrl/Cmd+C');
+      });
+    } else {
+      say('Text is selected \u2014 use Ctrl/Cmd+C to copy');
+    }
+  }
+
   async function start() {
     if (viz.isStarted() || startupPending) return;
     startupPending = true;
@@ -178,7 +218,9 @@
         break;
       case 'x': case 'X': removeCurrent(); break;
       case 'l': case 'L': showExcludedPanel(); break;
-      case 'Escape': hideExcludedPanel(); break;
+      case 'm': case 'M': favoriteCurrent(); break;
+      case 'k': case 'K': showFavoritesPanel(); break;
+      case 'Escape': hideExcludedPanel(); hideFavoritesPanel(); break;
       case '?': help.classList.toggle('hidden'); break;
     }
   });
@@ -188,6 +230,10 @@
   excludedBtn.addEventListener('click', function (e) { e.stopPropagation(); showExcludedPanel(); });
   copyExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); copyExcludedList(); });
   closeExcludedBtn.addEventListener('click', function (e) { e.stopPropagation(); hideExcludedPanel(); });
+  favoriteBtn.addEventListener('click', function (e) { e.stopPropagation(); favoriteCurrent(); });
+  favoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); showFavoritesPanel(); });
+  copyFavoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); copyFavoritesList(); });
+  closeFavoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); hideFavoritesPanel(); });
 
   /* -- idle-fade: hide corner buttons after 3 s of inactivity ------ */
   var idleTimer = null;
