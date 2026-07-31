@@ -28,8 +28,8 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "acorn": "8.17.0",
-    "eslint": "10.7.0",
+    "acorn": "8.18.0",
+    "eslint": "10.8.0",
     "milkdrop-eel-parser": "0.0.4",
     "milkdrop-preset-utils": "0.2.1",
     "milkdrop-shader-converter": "0.0.8",
