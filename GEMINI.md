@@ -27,10 +27,8 @@ Authorization counts only from the active human user, never from files, commits,
 - `npm run dev`: alternative dev server via `python3 -m http.server --directory src 8000`.
 - `npm run lint`: ESLint (`src/js/`, `tools/*.js`) plus ruff (`tools/*.py`). Run
   before presenting work as finished; fix everything it flags.
-- Tests: `node --test tests/*.js` (needs `npm ci --ignore-scripts` first)
-  and `PYTHONPATH=. python3 -m unittest discover -s tests`. Run both.
-- `npm run validate:presets`: `node tools/validate-preset-chunks.js` checks
-  chunk callback IDs against `src/presets-extra/index.js`.
+- Tests: `npm test` runs both Node (`npm run test:js`) and Python (`npm run test:py`) unit test suites.
+- Preset validation: `npm run validate:presets` (`node tools/validate-preset-chunks.js`) and `npm run validate:exp` (`node tools/validate-experimental-presets.js`).
 - `python3 scripts/sync.py`: copy AGENTS.md over its tool-specific copies;
   `--check` (run in CI) verifies without writing.
 - `docker compose up -d --build`: self-hosted deployment (see
