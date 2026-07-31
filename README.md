@@ -229,8 +229,10 @@ Use the Docker/Caddy configuration only for internal deployment. Docker binds
 it to `127.0.0.1:8080`; do not expose it to a network or the public internet.
 
 Dependency security is reinforced with a lodash version override in
-`package.json`. Pull requests also run `scripts/sync.py --check`, the pinned
-GitHub Actions check, ESLint, and Ruff through `.github/workflows/checks.yml`.
+`package.json`. Pull requests and pushes to `develop` run `scripts/sync.py --check`,
+pinned GitHub Actions checks, ESLint, Ruff, Node & Python unit tests (`npm test`),
+and preset chunk & experimental preset validation (`npm run validate:presets`, `npm run validate:exp`)
+through `.github/workflows/checks.yml`.
 
 Protected-file review runs from the trusted default branch through
 `.github/workflows/protected-files.yml`. It covers agent instructions,
