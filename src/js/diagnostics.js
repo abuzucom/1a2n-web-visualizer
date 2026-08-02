@@ -23,15 +23,21 @@
     { key: 'Recoveries', read: function (s) { return String(s.recoveries || 0); } },
   ];
 
-  /** True for ?name, ?name=1, ?name=true. Anything else is off. */
+  /** True for ?name, ?name=1, ?name=true. Anything else is off.
+   * Compares key names literally rather than building a RegExp around the
+   * caller's name, so metacharacters in it cannot alter the match or throw. */
   function hasFlag(search, name) {
-    if (typeof search !== 'string' || !search) return false;
-    const pattern = new RegExp('[?&]' + name + '(=([^&]*))?(&|$)');
-    const match = pattern.exec(search);
-    if (!match) return false;
-    const value = match[2];
-    if (value === undefined || value === '') return true;
-    return value === '1' || value.toLowerCase() === 'true';
+    if (typeof search !== 'string' || !search || !name) return false;
+    const query = search.charAt(0) === '?' ? search.slice(1) : search;
+    const parts = query.split('&');
+    for (let i = 0; i < parts.length; i += 1) {
+      const separator = parts[i].indexOf('=');
+      const key = separator === -1 ? parts[i] : parts[i].slice(0, separator);
+      if (key !== name) continue;
+      const value = separator === -1 ? '' : parts[i].slice(separator + 1);
+      return value === '' || value === '1' || value.toLowerCase() === 'true';
+    }
+    return false;
   }
 
   function addRow(state, key) {

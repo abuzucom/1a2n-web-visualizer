@@ -719,11 +719,22 @@
     });
   }
 
+  /* The watchdog fires this when ticks have stopped arriving while the driver
+   * still believes it is running, so go through stop() first: driver.start()
+   * is a no-op in that state and would heal nothing. Deliberately not
+   * startRenderLoop, which would also reset the preset cycle timer and make
+   * every recovery restart the countdown to the next preset. */
+  function restartDriver(audio, playback) {
+    if (!audio.started) return;
+    playback.driver.stop();
+    playback.driver.start(audio.audioCtx);
+  }
+
   function createWatchdog(audio, playback) {
     return global.BCWatchdog.create({
       window: global,
       getDriverStats: function () { return playback.driver.stats(); },
-      restartDriver: function () { if (audio.started) startRenderLoop(audio, playback, false); },
+      restartDriver: restartDriver.bind(null, audio, playback),
       recoverVisualizer: function () { if (audio.started) recoverVisualizer(audio, playback); },
       getAudioContext: function () { return audio.audioCtx; },
       getTrack: function () { return currentTrack(audio); },

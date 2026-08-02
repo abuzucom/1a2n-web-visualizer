@@ -248,10 +248,60 @@ test('driver stop tears down frames, timers, worklet node and wake lock', async 
   assert.equal(harness.wakeLocks[0].released, true);
 
   const before = harness.tickCount();
-  node.port.onmessage({ data: 9 });
+  // The port handler is detached outright, so a message already in flight from
+  // the audio thread has nothing to land on.
+  assert.equal(node.port.onmessage, null, 'worklet port handler is detached');
   harness.runFrame();
   harness.runTimeout();
   assert.equal(harness.tickCount(), before, 'no tick source survives stop');
+});
+
+test('restarting on the same context rebuilds a live worklet tick source', async function () {
+  const harness = createHarness();
+  const context = createAudioContext();
+  harness.driver.start(context);
+  await flushMicrotasks();
+  await harness.setHidden(true);
+  const firstNode = context.nodes[0];
+
+  // A watchdog stall recovery is exactly this: stop, then start again on the
+  // context the page still holds. The node torn down above is disconnected and
+  // no longer pulled by the graph, so reusing it would leave the hidden page
+  // with no tick source at all.
+  harness.driver.stop();
+  await flushMicrotasks();
+  harness.driver.start(context);
+  await flushMicrotasks();
+
+  assert.equal(context.nodes.length, 2, 'a fresh worklet node is built');
+  const secondNode = context.nodes[1];
+  assert.notEqual(secondNode, firstNode);
+  assert.deepEqual(secondNode.connected, [context.destination]);
+  assert.equal(harness.driver.stats().tickSource, 'worklet');
+
+  const before = harness.tickCount();
+  secondNode.port.onmessage({ data: 1 });
+  assert.equal(harness.tickCount(), before + 1, 'the rebuilt node drives ticks');
+});
+
+/* Pins the invariant the watchdog's recovery path depends on: start() alone
+ * cannot heal a stalled-but-running driver, so restartDriver in
+ * visualizer-core.js must stop() first. */
+test('start on an already running driver is a no-op', async function () {
+  const harness = createHarness();
+  const context = createAudioContext();
+  harness.driver.start(context);
+  await flushMicrotasks();
+  harness.runFrame();
+  const framesBefore = harness.driver.stats().frames;
+  const pendingBefore = harness.pendingFrames();
+
+  harness.driver.start(context);
+  await flushMicrotasks();
+
+  assert.equal(harness.pendingFrames(), pendingBefore, 'no second rAF chain starts');
+  assert.equal(harness.driver.stats().frames, framesBefore);
+  assert.equal(harness.wakeLocks.length, 1, 'no duplicate wake lock request');
 });
 
 test('driver acquires a screen wake lock and re-acquires it on return to visible', async function () {

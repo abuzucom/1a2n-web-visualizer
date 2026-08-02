@@ -220,10 +220,19 @@
     };
   }
 
+  /* Drop the cached node along with disconnecting it. A disconnected node is
+   * no longer pulled by the graph, so its process() never runs and it posts no
+   * ticks. Keeping it cached would make a later start() hand that dead node
+   * back out of ensureWorklet and leave the hidden page with no tick source. */
   function releaseWorkletNode(state) {
-    if (!state.workletNode) return;
+    const node = state.workletNode;
+    state.workletNode = null;
+    state.workletPending = null;
+    state.workletContext = null;
+    if (!node) return;
+    if (node.port) node.port.onmessage = null;
     try {
-      state.workletNode.disconnect();
+      node.disconnect();
     } catch (error) {
       logOnce(state, 'worklet node disconnect failed', error);
     }

@@ -156,6 +156,22 @@ test('query flag parsing accepts the documented forms only', function () {
   assert.equal(hasFlag(undefined, 'diag'), false);
 });
 
+test('query flag names are matched literally, not as patterns', function () {
+  const window = { setInterval: function () {}, clearInterval: function () {} };
+  loadScript('src/js/diagnostics.js', window);
+  const hasFlag = window.BCDiagnostics.hasFlag;
+
+  // hasFlag is exported, so a name carrying regex metacharacters must neither
+  // widen the match nor throw on an unparseable pattern.
+  assert.equal(hasFlag('?diag=1', 'd.ag'), false);
+  assert.equal(hasFlag('?dxag=1', 'd.ag'), false);
+  assert.equal(hasFlag('?d.ag=1', 'd.ag'), true);
+  assert.equal(hasFlag('?diag=1', 'di|guard'), false);
+  assert.equal(hasFlag('?diag=1', '('), false);
+  assert.equal(hasFlag('?diag=1', 'diag*'), false);
+  assert.equal(hasFlag('?diag=1', ''), false);
+});
+
 test('diagnostics overlay tolerates missing stats', function () {
   const harness = createHarness(null);
   harness.overlay.show();
