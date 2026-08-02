@@ -38,12 +38,24 @@
   const hyperspeed = window.BCHyperspeed.create({
     shuffle: function () { if (viz.isStarted() && !viz.isChunkLoading()) viz.random(); },
     intervalMs: 100,
-    visibilityTarget: document,
     onChange: function (enabled) {
       document.body.classList.toggle('hyperspeed', enabled);
       say('Hyperspeed ' + (enabled ? 'on' : 'off'));
     },
   });
+  const diagnostics = window.BCDiagnostics.create({
+    window: window,
+    document: document,
+    getStats: function () { return viz.diagnostics(); },
+  });
+  if (window.BCDiagnostics.hasFlag(location.search, 'diag')) diagnostics.show();
+  if (window.BCDiagnostics.hasFlag(location.search, 'guard')) viz.setAudioGuard(true);
+
+  function toggleAudioGuard() {
+    say(viz.toggleAudioGuard()
+      ? '🛡 Audio guard armed'
+      : '⚠ Audio guard disarmed');
+  }
 
   function updateStartupStatus(secondsRemaining) {
     if (secondsRemaining > 0) {
@@ -220,6 +232,8 @@
       case 'l': case 'L': showExcludedPanel(); break;
       case 'm': case 'M': favoriteCurrent(); break;
       case 'k': case 'K': showFavoritesPanel(); break;
+      case 'a': case 'A': toggleAudioGuard(); break;
+      case 'i': case 'I': diagnostics.toggle(); break;
       case 'Escape': hideExcludedPanel(); hideFavoritesPanel(); break;
       case '?': help.classList.toggle('hidden'); break;
     }

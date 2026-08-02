@@ -37,7 +37,13 @@ module.exports = [
         requestAnimationFrame: 'readonly',
         AudioContext: 'readonly',
         localStorage: 'readonly',
+        location: 'readonly',
         fetch: 'readonly',
+        // AudioWorklet globals, available only inside render-tick-processor.js,
+        // which the browser loads through audioWorklet.addModule.
+        AudioWorkletProcessor: 'readonly',
+        registerProcessor: 'readonly',
+        sampleRate: 'readonly',
       },
     },
     rules: {
