@@ -129,8 +129,12 @@
       viz.useDeviceById(deviceEl.value)
         .then(function () { deviceEl.value = viz.currentDeviceId(); })
         .catch(function (error) {
-          // A failed switch already released the old stream, so reflect the
-          // device that is actually connected rather than the one requested.
+          // deviceIdx is only committed on a successful switch, so this is
+          // the previously selected device, not one that is actually
+          // connected: the failed attempt already released that stream.
+          // Reverting the dropdown to it, rather than leaving it on the
+          // device that failed to open, keeps the UI from claiming a switch
+          // that did not happen.
           deviceEl.value = viz.currentDeviceId();
           reportDeviceError(error);
         });
