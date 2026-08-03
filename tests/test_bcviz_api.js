@@ -33,7 +33,56 @@ function compilePresetEquations(preset) {
   });
 }
 
-function createHarness(presets, initialWebglErrors) {
+/** Fakes navigator.mediaDevices, tracking how many open (unstopped) streams
+ * exist per deviceId so a test can prove the code never attempts a second
+ * concurrent getUserMedia against a device it already has open. Throws a
+ * NotReadableError-shaped error in exactly that situation, matching the
+ * real browser's behavior against an exclusive-mode WDM device. */
+function createFakeMediaDevices(devices, options) {
+  const opts = options || {};
+  const list = devices || [{ kind: 'audioinput', deviceId: 'default', label: 'Voicemeeter Out B1' }];
+  const openCounts = new Map();
+  const calls = [];
+  function notReadable() {
+    const err = new Error('Could not start audio source');
+    err.name = 'NotReadableError';
+    return err;
+  }
+  function makeTrack(device) {
+    const track = {
+      kind: 'audio', label: device.label, readyState: 'live', muted: false,
+      getSettings: function () { return { deviceId: device.deviceId }; },
+      stop: function () {
+        if (track.readyState === 'ended') return;
+        track.readyState = 'ended';
+        openCounts.set(device.deviceId, Math.max(0, (openCounts.get(device.deviceId) || 0) - 1));
+      },
+    };
+    return track;
+  }
+  return {
+    calls: calls,
+    openCountFor: function (deviceId) { return openCounts.get(deviceId) || 0; },
+    enumerateDevices: async function () { return list.slice(); },
+    getUserMedia: async function (constraints) {
+      const wanted = constraints && constraints.audio && constraints.audio.deviceId
+        ? constraints.audio.deviceId.exact : (opts.defaultDeviceId || null);
+      calls.push(wanted);
+      const device = wanted ? list.find(function (d) { return d.deviceId === wanted; }) : list[0];
+      if (!device) {
+        const err = new Error('Requested device unavailable');
+        err.name = 'OverconstrainedError';
+        throw err;
+      }
+      if ((openCounts.get(device.deviceId) || 0) > 0) throw notReadable();
+      openCounts.set(device.deviceId, 1);
+      const track = makeTrack(device);
+      return { getTracks: function () { return [track]; }, getAudioTracks: function () { return [track]; } };
+    },
+  };
+}
+
+function createHarness(presets, initialWebglErrors, deviceOpts) {
   const canvas = {};
   const schedule = function (callback, delay) {
     const timer = setTimeout(callback, delay);
@@ -93,6 +142,12 @@ function createHarness(presets, initialWebglErrors) {
     this.resume = async function () {};
     this.close = async function () {};
     this.createMediaStreamSource = function () { return {}; };
+    // Only exercised when the keepalive actually engages, i.e. a non-loopback
+    // device label; present so that path doesn't warn on an incomplete fake.
+    this.createOscillator = function () {
+      return { frequency: { value: 0 }, connect: function () {}, start: function () {} };
+    };
+    this.createGain = function () { return { gain: { value: 0 }, connect: function () {} }; };
   };
   let renderCount = 0;
   window.butterchurn = {
@@ -129,21 +184,12 @@ function createHarness(presets, initialWebglErrors) {
   SUPPORT_SCRIPTS.forEach(function (path) {
     vm.runInNewContext(fs.readFileSync(path, 'utf8'), { window: window, console: console });
   });
+  const mediaDevices = (deviceOpts && deviceOpts.fakeMediaDevices)
+    || createFakeMediaDevices(deviceOpts && deviceOpts.devices, deviceOpts);
   vm.runInNewContext(source, {
     window: window,
     document: document,
-    navigator: {
-      mediaDevices: {
-        enumerateDevices: async function () {
-          return [{ kind: 'audioinput', deviceId: 'default', label: 'Voicemeeter Out B1' }];
-        },
-        getUserMedia: async function () {
-          const track = { kind: 'audio', label: 'Voicemeeter Out B1', readyState: 'live', muted: false,
-            stop: function () { track.readyState = 'ended'; } };
-          return { getTracks: function () { return [track]; }, getAudioTracks: function () { return [track]; } };
-        },
-      },
-    },
+    navigator: { mediaDevices: mediaDevices },
     console: console,
     setTimeout: schedule,
     clearTimeout: clearTimeout,
@@ -153,6 +199,7 @@ function createHarness(presets, initialWebglErrors) {
   return {
     canvas: canvas,
     window: window,
+    mediaDevices: mediaDevices,
     loadCalls: loadCalls,
     chunkLoads: function () { return chunkLoads; },
     imagePartLoads: function () { return imagePartLoads; },
@@ -424,4 +471,157 @@ test('diagnostics report the live input and suppressed keepalive', async functio
   // A Voicemeeter input is a loopback, so the keepalive must stay quiet rather
   // than feed its own tone back into the analysis graph.
   assert.match(stats.keepalive, /suppressed: loopback/);
+});
+
+/* Some virtual/pro-audio WDM devices (e.g. Voicemeeter's outputs registered
+ * as Windows recording devices, with exclusive-mode control enabled) allow
+ * only one open client stream at a time. Cycling to the device already in
+ * use, which is guaranteed whenever there is only one input device, must
+ * never attempt a second concurrent open against it. */
+test('cycling to the only device is a no-op, not a conflicting reopen', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  await sleep(5);
+  const openCallsBefore = harness.mediaDevices.calls.length;
+
+  await viz.nextDevice();
+
+  assert.equal(harness.mediaDevices.calls.length, openCallsBefore,
+    'no second getUserMedia call is made for the device already open');
+  assert.equal(viz.diagnostics().trackState, 'live');
+});
+
+test('switching to a genuinely different device connects cleanly', async function () {
+  const devices = [
+    { kind: 'audioinput', deviceId: 'dev-a', label: 'Voicemeeter Out B1' },
+    { kind: 'audioinput', deviceId: 'dev-b', label: 'Physical Mic' },
+  ];
+  const harness = createHarness({ aaa: { baseVals: {} } }, undefined, { devices: devices });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  await sleep(5);
+  assert.equal(viz.currentDeviceId(), 'dev-a');
+
+  await viz.useDeviceById('dev-b');
+
+  assert.equal(viz.currentDeviceId(), 'dev-b');
+  assert.equal(viz.diagnostics().device, 'Physical Mic');
+  assert.equal(viz.diagnostics().trackState, 'live');
+});
+
+/* A Windows exclusive-mode WDM driver can be slow to actually free a handle
+ * after track.stop(); one bounded retry absorbs that. Only NotReadableError
+ * qualifies. */
+test('a NotReadableError on switch retries once and recovers', async function () {
+  const deviceA = { kind: 'audioinput', deviceId: 'dev-a', label: 'Voicemeeter Out B1' };
+  const deviceB = { kind: 'audioinput', deviceId: 'dev-b', label: 'Physical Mic' };
+  const openCounts = new Map();
+  let deviceBAttempts = 0;
+  function makeTrack(device) {
+    const track = {
+      kind: 'audio', label: device.label, readyState: 'live', muted: false,
+      getSettings: function () { return { deviceId: device.deviceId }; },
+      stop: function () {
+        if (track.readyState === 'ended') return;
+        track.readyState = 'ended';
+        openCounts.set(device.deviceId, Math.max(0, (openCounts.get(device.deviceId) || 0) - 1));
+      },
+    };
+    return track;
+  }
+  const fakeMediaDevices = {
+    enumerateDevices: async function () { return [deviceA, deviceB]; },
+    getUserMedia: async function (constraints) {
+      const wanted = constraints.audio.deviceId ? constraints.audio.deviceId.exact : deviceA.deviceId;
+      const device = wanted === deviceB.deviceId ? deviceB : deviceA;
+      if (device.deviceId === deviceB.deviceId) {
+        deviceBAttempts += 1;
+        if (deviceBAttempts === 1) {
+          const err = new Error('Could not start audio source');
+          err.name = 'NotReadableError';
+          throw err;
+        }
+      }
+      if ((openCounts.get(device.deviceId) || 0) > 0) throw new Error('unexpected concurrent open in test fake');
+      openCounts.set(device.deviceId, 1);
+      const track = makeTrack(device);
+      return { getTracks: function () { return [track]; }, getAudioTracks: function () { return [track]; } };
+    },
+  };
+  const harness = createHarness({ aaa: { baseVals: {} } }, undefined, { fakeMediaDevices: fakeMediaDevices });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  await sleep(5);
+
+  // The retry delay is scheduled on an unref'd timer (so a leaked one can
+  // never keep a real page alive), so this test needs its own real-time wait
+  // to give that timer a chance to fire before asserting on it.
+  const switchPromise = viz.useDeviceById('dev-b');
+  await sleep(300);
+  await switchPromise;
+
+  assert.equal(deviceBAttempts, 2, 'the NotReadableError was retried exactly once');
+  assert.equal(viz.currentDeviceId(), 'dev-b');
+  assert.equal(viz.diagnostics().trackState, 'live');
+});
+
+test('a non-retryable device error on switch rejects immediately without retrying', async function () {
+  const deviceA = { kind: 'audioinput', deviceId: 'dev-a', label: 'Voicemeeter Out B1' };
+  const deviceB = { kind: 'audioinput', deviceId: 'dev-b', label: 'Physical Mic' };
+  let deviceBCalls = 0;
+  function makeTrack(device) {
+    const track = {
+      kind: 'audio', label: device.label, readyState: 'live', muted: false,
+      getSettings: function () { return { deviceId: device.deviceId }; },
+      stop: function () { track.readyState = 'ended'; },
+    };
+    return track;
+  }
+  const fakeMediaDevices = {
+    enumerateDevices: async function () { return [deviceA, deviceB]; },
+    getUserMedia: async function (constraints) {
+      const wanted = constraints.audio.deviceId ? constraints.audio.deviceId.exact : deviceA.deviceId;
+      if (wanted === deviceB.deviceId) {
+        deviceBCalls += 1;
+        const err = new Error('Requested device unavailable');
+        err.name = 'NotFoundError';
+        throw err;
+      }
+      return { getTracks: function () { return [makeTrack(deviceA)]; },
+        getAudioTracks: function () { return [makeTrack(deviceA)]; } };
+    },
+  };
+  const harness = createHarness({ aaa: { baseVals: {} } }, undefined, { fakeMediaDevices: fakeMediaDevices });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  await sleep(5);
+
+  await assert.rejects(viz.useDeviceById('dev-b'), function (error) { return error.name === 'NotFoundError'; });
+
+  assert.equal(deviceBCalls, 1, 'no retry attempted for a non-NotReadableError failure');
+  // The old stream was already released before the failed switch, so the
+  // visualizer is honestly silent rather than misreporting the old device as
+  // still connected.
+  assert.equal(viz.diagnostics().trackState, 'none');
+});
+
+test('deviceIdx syncs to whichever device the initial default connect resolved to', async function () {
+  const deviceA = { kind: 'audioinput', deviceId: 'dev-a', label: 'Built-in Mic' };
+  const deviceB = { kind: 'audioinput', deviceId: 'dev-b', label: 'Voicemeeter Out B1' };
+  const fakeMediaDevices = createFakeMediaDevices([deviceA, deviceB], { defaultDeviceId: 'dev-b' });
+  const harness = createHarness({ aaa: { baseVals: {} } }, undefined, { fakeMediaDevices: fakeMediaDevices });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  await sleep(5);
+
+  // The unconstrained startup connect resolved to deviceB (index 1), not the
+  // first enumerated device; deviceIdx must reflect the device that actually
+  // connected, not stay at its initial 0.
+  assert.equal(viz.currentDeviceId(), 'dev-b');
 });

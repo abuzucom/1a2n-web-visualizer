@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.1]
+
+### Fixed
+- Fixed switching the audio input device throwing `NotReadableError: Could not
+  start audio source`. The device switch (`D` in `fullscreen.html`, the input
+  dropdown in `obs.html`) requested the new device's stream before releasing
+  the old one, which self-conflicted whenever the target device was already
+  the active one, guaranteed whenever there is only one input device. It now
+  releases the current stream first, skips the reopen entirely when the
+  requested device is already active, and retries once on `NotReadableError`
+  to absorb a driver that is briefly slow to free an exclusive-mode handle.
+  See the new "Exclusive-mode devices (Windows)" section in
+  `docs/unattended-operation.md`.
+
 ## [1.8.0]
 
 ### Added
