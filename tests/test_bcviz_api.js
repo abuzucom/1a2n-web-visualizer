@@ -5,6 +5,14 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync('src/js/visualizer-core.js', 'utf8');
 
+// visualizer-core.js reads these off `window`, exactly as the pages load them
+// with their own <script defer> tags ahead of it.
+const SUPPORT_SCRIPTS = [
+  'src/js/render-driver.js',
+  'src/js/audible-keepalive.js',
+  'src/js/audio-watchdog.js',
+];
+
 // Mimic the vendored bundle's equation compilation: a SPACE before
 // "return a;", so unterminated final statements throw at load time.
 function compileEquation(equationSource) {
@@ -47,6 +55,8 @@ function createHarness(presets, initialWebglErrors) {
   let chunkLoads = 0;
   let imagePartLoads = 0;
   let intervalCalls = 0;
+  const frameCallbacks = new Map();
+  let nextFrameHandle = 0;
   const trackedSetInterval = function (callback, delay) {
     intervalCalls += 1;
     const timer = setInterval(callback, delay);
@@ -60,17 +70,31 @@ function createHarness(presets, initialWebglErrors) {
     innerWidth: 100,
     innerHeight: 50,
     addEventListener: function () {},
-    requestAnimationFrame: function () { return 1; },
-    cancelAnimationFrame: function () {},
+    requestAnimationFrame: function (callback) {
+      nextFrameHandle += 1;
+      frameCallbacks.set(nextFrameHandle, callback);
+      return nextFrameHandle;
+    },
+    // Real cancellation, so a cancelled frame cannot be run by a later test step.
+    cancelAnimationFrame: function (handle) { frameCallbacks.delete(handle); },
     requestIdleCallback: function (callback) { callback(); },
     setTimeout: schedule,
     clearTimeout: clearTimeout,
+    // Untracked on purpose: intervalCalls() must keep counting only the preset
+    // cycle timer, not the watchdog's health sweep.
+    setInterval: function (callback, delay) {
+      const timer = setInterval(callback, delay);
+      timer.unref();
+      return timer;
+    },
+    clearInterval: clearInterval,
   };
   window.AudioContext = function () {
     this.resume = async function () {};
     this.close = async function () {};
     this.createMediaStreamSource = function () { return {}; };
   };
+  let renderCount = 0;
   window.butterchurn = {
     createVisualizer: function () {
       return {
@@ -81,13 +105,19 @@ function createHarness(presets, initialWebglErrors) {
           webgl.linkProgram(preset);
           loadCalls.push(preset);
         },
-        render: function () {},
+        render: function () { renderCount += 1; },
         connectAudio: function () {},
         disconnectAudio: function () {},
       };
     },
   };
+  const visibilityHandlers = [];
   const document = {
+    visibilityState: 'visible',
+    hidden: false,
+    addEventListener: function (event, callback) {
+      if (event === 'visibilitychange') visibilityHandlers.push(callback);
+    },
     createElement: function () { return {}; },
     head: {
       appendChild: function (script) {
@@ -96,13 +126,22 @@ function createHarness(presets, initialWebglErrors) {
       },
     },
   };
+  SUPPORT_SCRIPTS.forEach(function (path) {
+    vm.runInNewContext(fs.readFileSync(path, 'utf8'), { window: window, console: console });
+  });
   vm.runInNewContext(source, {
     window: window,
     document: document,
     navigator: {
       mediaDevices: {
-        enumerateDevices: async function () { return [{ kind: 'audioinput', deviceId: 'default' }]; },
-        getUserMedia: async function () { return { getTracks: function () { return []; } }; },
+        enumerateDevices: async function () {
+          return [{ kind: 'audioinput', deviceId: 'default', label: 'Voicemeeter Out B1' }];
+        },
+        getUserMedia: async function () {
+          const track = { kind: 'audio', label: 'Voicemeeter Out B1', readyState: 'live', muted: false,
+            stop: function () { track.readyState = 'ended'; } };
+          return { getTracks: function () { return [track]; }, getAudioTracks: function () { return [track]; } };
+        },
       },
     },
     console: console,
@@ -118,7 +157,25 @@ function createHarness(presets, initialWebglErrors) {
     chunkLoads: function () { return chunkLoads; },
     imagePartLoads: function () { return imagePartLoads; },
     intervalCalls: function () { return intervalCalls; },
+    renderCount: function () { return renderCount; },
+    runFrame: function () {
+      const next = frameCallbacks.keys().next();
+      if (next.done) return false;
+      const callback = frameCallbacks.get(next.value);
+      frameCallbacks.delete(next.value);
+      callback();
+      return true;
+    },
+    setHidden: function (hidden) {
+      document.hidden = hidden;
+      document.visibilityState = hidden ? 'hidden' : 'visible';
+      visibilityHandlers.forEach(function (handler) { handler(); });
+    },
   };
+}
+
+function sleep(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
 }
 
 test('create exposes the controller API and caps canvas pixel ratio', function () {
@@ -297,4 +354,74 @@ test('favoriting the current preset never advances playback or restarts the cycl
   assert.equal(harness.loadCalls.length, loadCallsBefore);
   assert.equal(viz.getCycleSecs(), cycleSecsBefore);
   assert.equal(harness.intervalCalls(), intervalCallsBefore);
+});
+
+test('rendering keeps running after the page is hidden', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  harness.runFrame();
+  assert.ok(harness.renderCount() > 0, 'renders through requestAnimationFrame while visible');
+  assert.equal(viz.diagnostics().tickSource, 'raf');
+
+  harness.setHidden(true);
+  await sleep(10);
+  const hiddenBaseline = harness.renderCount();
+  assert.equal(viz.diagnostics().hidden, true);
+  assert.equal(viz.diagnostics().tickSource, 'timeout', 'no AudioWorklet here, so timers carry it');
+
+  // The whole point: frames keep being produced with no rAF in sight.
+  await sleep(80);
+  assert.ok(harness.renderCount() > hiddenBaseline, 'frames continue while hidden');
+
+  harness.setHidden(false);
+  const visibleBaseline = harness.renderCount();
+  harness.runFrame();
+  assert.ok(harness.renderCount() > visibleBaseline, 'requestAnimationFrame takes back over');
+});
+
+test('a visibility round trip leaks no cycle timers', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} }, bbb: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: true, cycleSecs: 5 });
+
+  await viz.start();
+  const intervalCallsBefore = harness.intervalCalls();
+
+  harness.setHidden(true);
+  await sleep(20);
+  harness.setHidden(false);
+
+  assert.equal(harness.intervalCalls(), intervalCallsBefore, 'no duplicate cycle timer');
+  assert.equal(viz.isCycling(), true);
+});
+
+test('the audio guard is disarmed until it is explicitly armed', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  assert.equal(viz.isAudioGuardArmed(), false);
+  assert.equal(viz.diagnostics().armed, false);
+
+  assert.equal(viz.toggleAudioGuard(), true);
+  assert.equal(viz.diagnostics().armed, true);
+  assert.equal(viz.toggleAudioGuard(), false);
+});
+
+test('diagnostics report the live input and suppressed keepalive', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await viz.start();
+  // start() resolves before connectInitialStream has finished opening the
+  // stream, so let that settle before reading the input back.
+  await sleep(5);
+  const stats = viz.diagnostics();
+
+  assert.equal(stats.device, 'Voicemeeter Out B1');
+  assert.equal(stats.trackState, 'live');
+  // A Voicemeeter input is a loopback, so the keepalive must stay quiet rather
+  // than feed its own tone back into the analysis graph.
+  assert.match(stats.keepalive, /suppressed: loopback/);
 });

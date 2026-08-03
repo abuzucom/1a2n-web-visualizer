@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.0]
+
+### Added
+- Kept the visualizer rendering while its window is covered, minimized, or in a
+  background tab. A render driver (`src/js/render-driver.js`) drives frames from
+  `requestAnimationFrame` while visible and from an `AudioWorkletProcessor`
+  (`src/js/render-tick-processor.js`) while hidden, since the audio thread is
+  not subject to page visibility throttling. A `setTimeout` clock is the
+  fallback where the worklet is unavailable, such as on `file://` origins.
+- Requested a screen wake lock so the display does not sleep under a visible but
+  unfocused visualizer, re-acquiring it on return to visible.
+- Added an audible-tab keepalive (`src/js/audible-keepalive.js`) that marks the
+  tab audible to exempt it from background timer throttling. It runs on its own
+  `AudioContext` and suppresses itself when the capture device looks like a
+  loopback or monitor, so it can never feed back into the analysis input.
+- Added a watchdog (`src/js/audio-watchdog.js`) that restarts a stalled render
+  loop and resumes a suspended `AudioContext`. Both checks are always on.
+- Added an opt-in audio guard that reconnects a lost capture device after a
+  20 second grace window, ranking candidates Voicemeeter-first and never falling
+  back to a physical microphone. It starts disarmed, arms with `A` or the OBS
+  checkbox or `?guard=1`, and never treats silence as a lost input.
+- Added a diagnostics overlay (`src/js/diagnostics.js`) showing frame rate, tick
+  source, visibility, wake lock, keepalive, input device, track state, and
+  watchdog counters. Toggles with `I` or `?diag=1`.
+- Added `docs/background-rendering.md` and `docs/unattended-operation.md`.
+
+### Changed
+- Stopped hyperspeed switching itself off when the page is hidden. The old
+  behavior is still available through the new `pauseWhenHidden` option.
+
 ## [Unreleased]
 
 ### Added

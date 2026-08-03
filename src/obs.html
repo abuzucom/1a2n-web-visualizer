@@ -12,6 +12,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="css/brand.css">
     <link rel="stylesheet" href="css/panel.css">
+    <link rel="stylesheet" href="css/diagnostics.css">
 
   </head>
   <body>
@@ -35,7 +36,15 @@
         <label class="cycle-label" for="cycle">Auto-cycle every</label>
         <input class="cycle-secs" type="number" id="cycleSecs" value="20" min="3"> s
       </div>
+      <div class="check">
+        <input type="checkbox" id="audioGuard">
+        <label class="cycle-label" for="audioGuard">Audio guard (reconnect a lost input)</label>
+      </div>
       <div id="status"></div>
+      <div class="hint">
+        Arm the audio guard (<code>A</code>) once the set is running, not during opening dead air:
+        while armed, an input that stays gone for 20 seconds is reconnected automatically.
+      </div>
       <div class="hint">
         Press <code>H</code> to hide/show this panel. To visualize music (not your mic),
         route audio through a virtual cable (VB-Cable / BlackHole / PipeWire loopback)
@@ -52,6 +61,10 @@
          tools/fetch-extra-presets.py). A missing file 404s harmlessly.
          Experimental textures load lazily; see ensureExperimentalImages. -->
     <script defer src="presets-extra/index.js"></script>
+    <script defer src="js/render-driver.js"></script>
+    <script defer src="js/audible-keepalive.js"></script>
+    <script defer src="js/audio-watchdog.js"></script>
+    <script defer src="js/diagnostics.js"></script>
     <script defer src="js/visualizer-core.js"></script>
     <script defer src="js/obs-ui.js"></script>
   </body>

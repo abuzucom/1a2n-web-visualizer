@@ -399,7 +399,7 @@
       lastGoodPreset: null,
       lastGoodBlend: 0,
       lastGoodName: '',
-      renderFrame: null,
+      driver: null,
       rendering: false,
       pendingChunkLoads: 0,
     };
@@ -407,10 +407,7 @@
 
   function stopRenderLoop(controller) {
     controller.rendering = false;
-    if (controller.renderFrame != null) {
-      global.cancelAnimationFrame(controller.renderFrame);
-      controller.renderFrame = null;
-    }
+    if (controller.driver) controller.driver.stop();
   }
 
   function sizeCanvas(audio) {
@@ -431,14 +428,38 @@
     return audio.inputDevices;
   }
 
+  function currentTrack(audio) {
+    const stream = audio.micStream;
+    if (!stream) return null;
+    const tracks = typeof stream.getAudioTracks === 'function'
+      ? stream.getAudioTracks() : stream.getTracks();
+    return tracks[0] || null;
+  }
+
+  function currentDeviceLabel(audio) {
+    const track = currentTrack(audio);
+    if (track && track.label) return track.label;
+    const device = audio.inputDevices[audio.deviceIdx];
+    return device ? (device.label || '') : '';
+  }
+
+  function currentDeviceId(audio) {
+    const device = audio.inputDevices[audio.deviceIdx];
+    return device ? device.deviceId : '';
+  }
+
   function connectStream(audio, stream) {
     if (audio.micStream && audio.micStream !== stream) {
       audio.micStream.getTracks().forEach(function (track) { track.stop(); });
     }
     if (audio.sourceNode) audio.visualizer.disconnectAudio(audio.sourceNode);
     audio.micStream = stream;
+    audio.hadStream = true;
     audio.sourceNode = audio.audioCtx.createMediaStreamSource(stream);
     audio.visualizer.connectAudio(audio.sourceNode);
+    // The keepalive must go quiet whenever the input becomes a loopback device,
+    // otherwise its tone is captured straight back into the analysis graph.
+    if (audio.keepalive) audio.keepalive.setInputLabel(currentDeviceLabel(audio));
   }
 
   function openStream(deviceId) {
@@ -612,23 +633,20 @@
   function startRenderLoop(audio, playback, loadInitial) {
     if (loadInitial && !loadInitialPreset(audio, playback, true)) return;
     playback.rendering = true;
-    scheduleRender(audio, playback);
+    playback.driver.start(audio.audioCtx);
     restartCycle(playback);
   }
 
-  function scheduleRender(audio, playback) {
-    (function render() {
-      if (!playback.rendering) return;
-      try {
-        audio.visualizer.render();
-      } catch (error) {
-        console.error('Visualizer render failed:', error);
-        stopRenderLoop(playback);
-        audio.onToast('\u26A0 visualizer render failed');
-        return;
-      }
-      playback.renderFrame = global.requestAnimationFrame(render);
-    }());
+  /** One frame, called by whichever tick source the render driver has live. */
+  function renderOnce(audio, playback) {
+    if (!playback.rendering) return;
+    try {
+      audio.visualizer.render();
+    } catch (error) {
+      console.error('Visualizer render failed:', error);
+      stopRenderLoop(playback);
+      audio.onToast('\u26A0 visualizer render failed');
+    }
   }
 
   function recoverVisualizer(audio, playback) {
@@ -656,6 +674,9 @@
       await initializeAudio(audio, playback, deviceId);
       audio.started = true;
       startRenderLoop(audio, playback, false);
+      audio.keepalive.setInputLabel(currentDeviceLabel(audio));
+      audio.keepalive.start();
+      audio.watchdog.start();
     } catch (error) {
       stopRenderLoop(playback);
       if (audio.audioCtx) { audio.audioCtx.close(); audio.audioCtx = null; }
@@ -681,8 +702,98 @@
       started: false,
       starting: false,
       prepared: false,
+      hadStream: false,
+      keepalive: null,
+      watchdog: null,
       experimentalImagesLoading: null,
     };
+  }
+
+  function createRenderDriver(audio, playback) {
+    return global.BCRenderDriver.create({
+      window: global,
+      document: document,
+      navigator: navigator,
+      workletUrl: 'js/render-tick-processor.js',
+      onTick: function () { renderOnce(audio, playback); },
+    });
+  }
+
+  /* The watchdog fires this when ticks have stopped arriving while the driver
+   * still believes it is running, so go through stop() first: driver.start()
+   * is a no-op in that state and would heal nothing. Deliberately not
+   * startRenderLoop, which would also reset the preset cycle timer and make
+   * every recovery restart the countdown to the next preset. */
+  function restartDriver(audio, playback) {
+    if (!audio.started) return;
+    playback.driver.stop();
+    playback.driver.start(audio.audioCtx);
+  }
+
+  function createWatchdog(audio, playback) {
+    return global.BCWatchdog.create({
+      window: global,
+      getDriverStats: function () { return playback.driver.stats(); },
+      restartDriver: restartDriver.bind(null, audio, playback),
+      recoverVisualizer: function () { if (audio.started) recoverVisualizer(audio, playback); },
+      getAudioContext: function () { return audio.audioCtx; },
+      getTrack: function () { return currentTrack(audio); },
+      // Without a stream there is no input to lose, so do not report one gone.
+      isMonitoring: function () { return audio.hadStream; },
+      getDeviceId: function () { return currentDeviceId(audio); },
+      getDeviceLabel: function () { return currentDeviceLabel(audio); },
+      listDevices: function () { return getDevices(audio); },
+      reconnect: function (deviceId) { return useDeviceById(audio, deviceId); },
+      onToast: audio.onToast,
+    });
+  }
+
+  function collectDiagnostics(audio, playback) {
+    const driver = playback.driver.stats();
+    const keepalive = audio.keepalive.stats();
+    const watchdog = audio.watchdog.stats();
+    const track = currentTrack(audio);
+    return {
+      fps: driver.fps,
+      tickSource: driver.tickSource,
+      hidden: driver.hidden,
+      wakeLock: driver.wakeLock,
+      frames: driver.frames,
+      keepalive: keepalive.active ? 'active' : (keepalive.reason || 'off'),
+      device: currentDeviceLabel(audio) || 'none',
+      trackState: track ? (track.muted ? 'muted' : track.readyState) : 'none',
+      armed: watchdog.armed,
+      audioLost: watchdog.audioLost,
+      recoverInSecs: watchdog.recoverInSecs,
+      recoveries: watchdog.recoveries,
+      restarts: watchdog.restarts,
+      reason: watchdog.reason,
+    };
+  }
+
+  /* Chromium can suspend the context while the page is hidden, and nothing
+   * else ever resumes it: initializeAudio resumes exactly once at startup. */
+  function resumeOnVisible(audio) {
+    if (document.visibilityState === 'hidden' || !audio.audioCtx) return;
+    if (audio.audioCtx.state !== 'suspended') return;
+    audio.audioCtx.resume().catch(function (error) {
+      console.warn('Audio context resume failed:', error);
+    });
+  }
+
+  function attachLifecycle(audio, playback, canvas) {
+    global.addEventListener('resize', function () { sizeCanvas(audio); });
+    if (document.addEventListener) {
+      document.addEventListener('visibilitychange', function () { resumeOnVisible(audio); });
+    }
+    canvas.addEventListener('webglcontextlost', function (event) {
+      event.preventDefault();
+      stopRenderLoop(playback);
+      console.warn('WebGL context lost');
+    });
+    canvas.addEventListener('webglcontextrestored', function () {
+      if (audio.started) recoverVisualizer(audio, playback);
+    });
   }
 
   function create(canvas, opts) {
@@ -693,15 +804,10 @@
     const store = createPresetStore(opts, function () { return playback.idx; });
     playback = createPlaybackController(store, opts, onToast, onPreset, canvas);
     const audio = createAudioController(canvas, opts, onToast);
-    global.addEventListener('resize', function () { sizeCanvas(audio); });
-    canvas.addEventListener('webglcontextlost', function (event) {
-      event.preventDefault();
-      stopRenderLoop(playback);
-      console.warn('WebGL context lost');
-    });
-    canvas.addEventListener('webglcontextrestored', function () {
-      if (audio.started) recoverVisualizer(audio, playback);
-    });
+    playback.driver = createRenderDriver(audio, playback);
+    audio.keepalive = global.BCKeepalive.create({ window: global });
+    audio.watchdog = createWatchdog(audio, playback);
+    attachLifecycle(audio, playback, canvas);
     sizeCanvas(audio);
 
     return {
@@ -739,6 +845,10 @@
       isStarted: function () { return audio.started; },
       isChunkLoading: function () { return playback.pendingChunkLoads > 0; },
       resize: function () { sizeCanvas(audio); },
+      diagnostics: function () { return collectDiagnostics(audio, playback); },
+      toggleAudioGuard: function () { return audio.watchdog.setArmed(!audio.watchdog.isArmed()); },
+      setAudioGuard: function (armed) { return audio.watchdog.setArmed(armed); },
+      isAudioGuardArmed: function () { return audio.watchdog.isArmed(); },
     };
   }
 

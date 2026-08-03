@@ -32,7 +32,11 @@
       return enabled;
     }
 
-    if (visibilityTarget && visibilityTarget.addEventListener) {
+    /* Hyperspeed used to switch itself off whenever the page was hidden,
+     * because rendering stopped there anyway. The render driver now keeps
+     * frames coming while hidden, so the default is to keep shuffling. Callers
+     * that still want the old behavior opt in with pauseWhenHidden. */
+    if (opts.pauseWhenHidden && visibilityTarget && visibilityTarget.addEventListener) {
       visibilityTarget.addEventListener('visibilitychange', function () {
         if (visibilityTarget.hidden) setEnabled(false);
       });
