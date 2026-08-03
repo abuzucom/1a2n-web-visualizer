@@ -448,11 +448,26 @@
     return device ? device.deviceId : '';
   }
 
-  function connectStream(audio, stream) {
-    if (audio.micStream && audio.micStream !== stream) {
-      audio.micStream.getTracks().forEach(function (track) { track.stop(); });
+  function stopStream(stream) {
+    if (!stream) return;
+    stream.getTracks().forEach(function (track) { track.stop(); });
+  }
+
+  /** Tear down whatever is currently attached, if anything. Idempotent, so it
+   * is safe to call unconditionally: once before useDevice requests a new
+   * device's stream, and again here as a defense-in-depth backstop for any
+   * other caller of connectStream. */
+  function releaseCurrentStream(audio) {
+    stopStream(audio.micStream);
+    audio.micStream = null;
+    if (audio.sourceNode) {
+      audio.visualizer.disconnectAudio(audio.sourceNode);
+      audio.sourceNode = null;
     }
-    if (audio.sourceNode) audio.visualizer.disconnectAudio(audio.sourceNode);
+  }
+
+  function connectStream(audio, stream) {
+    releaseCurrentStream(audio);
     audio.micStream = stream;
     audio.hadStream = true;
     audio.sourceNode = audio.audioCtx.createMediaStreamSource(stream);
@@ -468,19 +483,49 @@
     return navigator.mediaDevices.getUserMedia({ audio: constraints });
   }
 
+  const NOT_READABLE_RETRY_MS = 250;
+
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  /* A Windows exclusive-mode WDM driver can be slow to actually free a handle
+   * after track.stop(); one short retry absorbs that without a general retry
+   * loop. Only NotReadableError qualifies: NotFoundError, OverconstrainedError,
+   * and a permission denial are real failures that must surface immediately. */
+  function openStreamWithRetry(deviceId) {
+    return openStream(deviceId).catch(function (error) {
+      if (!error || error.name !== 'NotReadableError') throw error;
+      return delay(NOT_READABLE_RETRY_MS).then(function () { return openStream(deviceId); });
+    });
+  }
+
+  function isSameActiveDevice(audio, index) {
+    return Boolean(audio.micStream) && index === audio.deviceIdx;
+  }
+
   async function useDevice(audio, index) {
     const requestSeq = ++audio.deviceRequestSeq;
     if (!audio.inputDevices.length) await getDevices(audio);
-    if (!audio.inputDevices.length) return null;
-    audio.deviceIdx = (index + audio.inputDevices.length) % audio.inputDevices.length;
-    const device = audio.inputDevices[audio.deviceIdx];
-    const stream = await openStream(device.deviceId);
+    if (requestSeq !== audio.deviceRequestSeq || !audio.inputDevices.length) return null;
+    const nextIdx = (index + audio.inputDevices.length) % audio.inputDevices.length;
+    const device = audio.inputDevices[nextIdx];
+    // Some virtual/pro-audio WDM devices allow only one open client stream at
+    // a time, so reopening the device already active (guaranteed whenever
+    // there is only one input device) would self-conflict. Skip it entirely.
+    if (isSameActiveDevice(audio, nextIdx)) {
+      audio.onToast('\uD83C\uDF99 ' + (device.label || ('Input ' + (nextIdx + 1))));
+      return device;
+    }
+    releaseCurrentStream(audio);
+    const stream = await openStreamWithRetry(device.deviceId);
     if (requestSeq !== audio.deviceRequestSeq) {
-      stream.getTracks().forEach(function (track) { track.stop(); });
+      stopStream(stream);
       return null;
     }
+    audio.deviceIdx = nextIdx;
     connectStream(audio, stream);
-    audio.onToast('\uD83C\uDF99 ' + (device.label || ('Input ' + (audio.deviceIdx + 1))));
+    audio.onToast('\uD83C\uDF99 ' + (device.label || ('Input ' + (nextIdx + 1))));
     return device;
   }
 
@@ -553,12 +598,31 @@
     }
   }
 
+  function matchDeviceIndex(devices, deviceId) {
+    return devices.findIndex(function (device) { return device.deviceId === deviceId; });
+  }
+
+  /* The initial connect has no device index of its own to record, since it is
+   * driven by a plain default-constraint getUserMedia call. Without this,
+   * audio.deviceIdx stays at its initial 0, which may not be the device that
+   * actually connected, making later cycling incoherent with reality. */
+  function syncDeviceIdxFromStream(audio, stream) {
+    const tracks = typeof stream.getAudioTracks === 'function' ? stream.getAudioTracks() : stream.getTracks();
+    const track = tracks[0];
+    const settings = track && typeof track.getSettings === 'function' ? track.getSettings() : null;
+    const actualId = settings && settings.deviceId;
+    if (!actualId) return;
+    const index = matchDeviceIndex(audio.inputDevices, actualId);
+    if (index >= 0) audio.deviceIdx = index;
+  }
+
   async function connectInitialStream(audio, deviceId) {
     try {
       const stream = await openStream(deviceId);
       await getDevices(audio);
-      if (audio.started) connectStream(audio, stream);
-      else stream.getTracks().forEach(function (track) { track.stop(); });
+      if (!audio.started) { stopStream(stream); return; }
+      syncDeviceIdxFromStream(audio, stream);
+      connectStream(audio, stream);
     } catch (error) {
       console.warn('Audio input unavailable; visualizer will continue:', error);
       audio.onToast('Audio input unavailable; visualizer is running');
@@ -839,6 +903,7 @@
       useDeviceById: function (id) { return useDeviceById(audio, id); },
       getDevices: function () { return getDevices(audio); },
       listDevices: function () { return audio.inputDevices.slice(); },
+      currentDeviceId: function () { return currentDeviceId(audio); },
       keys: function () { return store.keys.slice(); },
       currentIndex: function () { return playback.idx; },
       currentName: function () { return store.keys[playback.idx] || ''; },

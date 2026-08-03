@@ -13,8 +13,25 @@
 
   function setStatus(msg) { statusEl.textContent = msg; }
 
+  /** Turns a getUserMedia error into a short, actionable hint keyed on name,
+   * so "Could not start audio source" points at the fix instead of just the
+   * symptom. See docs/unattended-operation.md for the full explanation. */
+  function describeDeviceError(error) {
+    const name = error && error.name;
+    const message = (error && error.message) || String(error);
+    let hint = '';
+    if (name === 'NotReadableError' || name === 'AbortError') {
+      hint = ' (device may be exclusively locked by another app)';
+    } else if (name === 'NotFoundError') {
+      hint = ' (device appears to be unplugged or disabled)';
+    } else if (name === 'OverconstrainedError') {
+      hint = ' (device id no longer valid; re-select an input)';
+    }
+    return (name ? name + ': ' : '') + message + hint;
+  }
+
   function reportDeviceError(error) {
-    setStatus('Audio device error: ' + error.message);
+    setStatus('Audio device error: ' + describeDeviceError(error));
   }
 
   const viz = BCViz.create(canvas, {
@@ -109,7 +126,18 @@
   presetEl.addEventListener('change', function () { viz.goto(parseInt(presetEl.value, 10)); });
   deviceEl.addEventListener('change', function () {
     if (viz.isStarted() && deviceEl.value) {
-      viz.useDeviceById(deviceEl.value).catch(reportDeviceError);
+      viz.useDeviceById(deviceEl.value)
+        .then(function () { deviceEl.value = viz.currentDeviceId(); })
+        .catch(function (error) {
+          // deviceIdx is only committed on a successful switch, so this is
+          // the previously selected device, not one that is actually
+          // connected: the failed attempt already released that stream.
+          // Reverting the dropdown to it, rather than leaving it on the
+          // device that failed to open, keeps the UI from claiming a switch
+          // that did not happen.
+          deviceEl.value = viz.currentDeviceId();
+          reportDeviceError(error);
+        });
     }
   });
   cycleEl.addEventListener('change', function () {

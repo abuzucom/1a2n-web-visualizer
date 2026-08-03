@@ -77,6 +77,9 @@ If you route through Voicemeeter, expect the overlay to read
 `suppressed: loopback input`. That is correct. You lose the timer-throttling
 exemption and keep the AudioWorklet tick, which is the layer doing the real work.
 
+If switching inputs ever reports `Could not start audio source`, see
+[Exclusive-mode devices (Windows)](unattended-operation.md#exclusive-mode-devices-windows).
+
 ## Reading the overlay
 
 Add `?diag=1` to any page URL, or press <kbd>I</kbd> on `fullscreen.html` and

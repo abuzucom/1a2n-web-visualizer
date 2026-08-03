@@ -118,6 +118,27 @@ the current device, reports `no usable audio input found`, and toasts. It will
 not fall back to a built-in microphone, because a visualizer that goes quiet is
 recoverable and a stream that starts broadcasting the room is not.
 
+## Exclusive-mode devices (Windows)
+
+Some virtual and pro-audio devices, including Voicemeeter's outputs registered
+as Windows recording devices, allow only one open client stream at a time when
+Windows' "Allow applications to take exclusive control of this device" is
+enabled on that device (a common recommendation for lower latency). If a
+second stream tries to open the same device while one is already open, the
+browser rejects it with `NotReadableError: Could not start audio source`.
+
+This app always fully releases the current device, stopping its track, before
+requesting a new one, specifically to avoid asking for a second stream on a
+device it already has open itself. Switching back to the device already active
+(guaranteed whenever there is only one input device) is a no-op rather than a
+reopen. A single short retry also absorbs a driver that is briefly slow to free
+the handle after release.
+
+If you still see `Could not start audio source` when switching inputs, another
+app or browser tab has that device open. Either uncheck exclusive mode for the
+device in Windows Sound Control Panel -> the device -> Advanced tab, or close
+whatever else is holding it, then try again.
+
 ## Reading repeated recoveries
 
 The overlay's `Recoveries` counter is the health signal to check when you come
@@ -128,6 +149,7 @@ back.
 | Recoveries climbing steadily | The input device is flapping. Check the interface connection, or the Voicemeeter engine for repeated restarts. |
 | `Recoveries: 0` but a dead scene | The input is live and silent. The watchdog is behaving correctly; the problem is upstream at the mixer. |
 | `no usable audio input found` | The preferred device never came back. Reselect the input by hand. |
+| "Could not start audio source" / `NotReadableError` | Another app or tab has the device open in exclusive mode. See [Exclusive-mode devices (Windows)](#exclusive-mode-devices-windows) above. |
 | Restarts climbing, recoveries at 0 | The render loop is stalling, not the audio. Check GPU load and see [background-rendering.md](background-rendering.md). |
 
 A recovery count of 1 or 2 across a long set is unremarkable. A count in the
