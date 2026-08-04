@@ -166,13 +166,13 @@ def pr_sync(event: dict[str, Any]) -> None:
         if not JIRA_ALLOW_CREATE:
             print(f"No Jira key found for PR #{number}; jira-create label is absent.")
             return
-        existing = find_existing_pull_request_issue(pull_request_url)
-        keys = {existing or create_issue(pull_request_url, pull_request.get("title", "Untitled PR"), pull_request["head"]["ref"])}
+        existing = find_existing_pr_issue(pull_request)
+        keys = {existing or create_issue(pull_request)}
     state = "merged" if pull_request.get("merged") else action
     for key in sorted(keys):
-        add_remote_link(key, pull_request_url, f"GitHub PR #{number}: {pull_request.get('title', 'Untitled PR')}")
+        add_remote_link(key, f"GitHub PR #{number}: {pull_request.get('title', 'Untitled PR')}", pull_request_url)
         add_comment(key, f"[github-pull_request:{repository}#{number}:{action}]", f"PR status: {state}\n{pull_request_url}")
-    pull_requestint(f"Linked PR #{number} to {', '.join(sorted(keys))}")
+    print(f"Linked PR #{number} to {', '.join(sorted(keys))}")
 
 
 def deployment_sync(event: dict[str, Any]) -> None:

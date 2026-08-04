@@ -85,7 +85,7 @@ def main() -> int:
     if not approved or any(not name.startswith(EXP_PREFIX) for name in approved):
         raise SystemExit("every approved target must be a non-empty [EXP] runtime name")
 
-    data, files = read_index()
+    data, files = read_index(INDEX_PATH)
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     records = {item["displayName"]: item for item in manifest.get("presets", [])}
     missing = sorted(approved - records.keys())
@@ -121,7 +121,7 @@ def main() -> int:
         by_chunk.setdefault(item["logicalChunk"], []).append(item["displayName"])
 
     for cid, names in by_chunk.items():
-        path, prefix, chunk = read_chunk(cid, files[cid])
+        path, prefix, chunk = read_chunk(OUT_DIR / files[cid], cid)
         for name in names:
             if name not in data["chunks"][cid]:
                 raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")

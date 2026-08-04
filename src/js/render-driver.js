@@ -20,6 +20,7 @@
   const TICK_HZ = 60;
   const FPS_WINDOW_MS = 1000;
   const DEFAULT_WORKLET_URL = 'js/render-tick-processor.js';
+  const MS_PER_SEC = 1000;
 
   function logOnce(state, key, error) {
     if (state.logged[key]) return;
@@ -38,7 +39,7 @@
     const now = Date.now();
     const elapsed = now - state.fpsWindowStart;
     if (elapsed >= FPS_WINDOW_MS) {
-      state.fps = Math.round((state.fpsWindowFrames * 1000) / elapsed);
+      state.fps = Math.round((state.fpsWindowFrames * MS_PER_SEC) / elapsed);
       state.fpsWindowStart = now;
       state.fpsWindowFrames = 0;
     }

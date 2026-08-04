@@ -430,9 +430,7 @@ function removeFromVendorPackValidated(pack, targets, alreadyRemoved) {
   const activeTargets = targets.filter((name) => beforeNames.has(name));
   const missing = targets.filter((name) => !beforeNames.has(name) && !alreadyRemoved.has(name));
   if (missing.length > 0) {
-    throw new Error(
-      `missing chunks file for presets-extra/index.js; missing paths: ${Array.from(missing).join(', ')}`
-    );
+    throw new Error(`could not locate these presets in ${pack}: ${missing.map((n) => JSON.stringify(n)).join(', ')}`);
   }
   if (activeTargets.length === 0) return null;
 
