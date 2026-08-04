@@ -177,6 +177,14 @@ or <http://localhost:8000/obs.html>.
 
 **OBS Integration:** See [`docs/obs-setup.md`](docs/obs-setup.md) for setup instructions.
 
+**Background rendering:** The visualizer keeps rendering when its window is
+covered, minimized, or in a background tab. See
+[`docs/background-rendering.md`](docs/background-rendering.md), and
+[`docs/unattended-operation.md`](docs/unattended-operation.md) for running a set
+you are not watching. Serve over HTTP for the full behavior; a `file://` origin
+cannot use the AudioWorklet frame clock and falls back to about 1 fps while
+hidden.
+
 ## Hosted Deployment (GitHub Pages)
 
 GitHub Pages hosts the production environment at **`visualizer.1a2n.net`**:
@@ -248,12 +256,16 @@ workflow and deployment linking behavior.
 | <kbd>L</kbd> | Show presets excluded this session |
 | <kbd>M</kbd> | Favorite the current preset this session |
 | <kbd>K</kbd> | Show presets favorited this session |
+| <kbd>A</kbd> | Arm/disarm the audio guard (reconnects a lost input; see [`docs/unattended-operation.md`](docs/unattended-operation.md)) |
+| <kbd>I</kbd> | Show/hide the diagnostics overlay (also `?diag=1`) |
 | <kbd>Escape</kbd> | Close the excluded-presets or favorites panel |
 | <kbd>?</kbd> | Show/hide the help menu |
 
 ### OBS Panel (`obs.html`)
 
 Use the on-screen graphical controls. Press <kbd>H</kbd> to toggle the control panel's visibility.
+Press <kbd>A</kbd>, or use the "Audio guard" checkbox, to arm the audio guard.
+Press <kbd>I</kbd> for the diagnostics overlay.
 
 ### Mobile (`mobile.html`)
 

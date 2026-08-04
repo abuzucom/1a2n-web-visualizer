@@ -103,9 +103,17 @@
   const hyperspeed = window.BCHyperspeed.create({
     shuffle: shufflePreset,
     intervalMs: 100,
-    visibilityTarget: document,
     onChange: updateHyperspeed,
   });
+  // No button for these: the control grid is full and a phone is not the
+  // unattended-stream case. The query flags cover the kiosk setup.
+  const diagnostics = window.BCDiagnostics.create({
+    window: window,
+    document: document,
+    getStats: function () { return viz.diagnostics(); },
+  });
+  if (window.BCDiagnostics.hasFlag(location.search, 'diag')) diagnostics.show();
+  if (window.BCDiagnostics.hasFlag(location.search, 'guard')) viz.setAudioGuard(true);
 
   async function start() {
     if (viz.isStarted() || startupPending) return;

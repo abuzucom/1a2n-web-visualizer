@@ -39,12 +39,26 @@ module.exports = [
         requestAnimationFrame: 'readonly',
         AudioContext: 'readonly',
         localStorage: 'readonly',
+        location: 'readonly',
         fetch: 'readonly',
       },
     },
     rules: {
       ...eslintJs.configs.recommended.rules,
       ...codeQualityRules,
+    },
+  },
+  {
+    // Audio thread scope. These globals exist only inside the worklet module
+    // the browser loads through audioWorklet.addModule, so keep them off the
+    // page scripts: referencing one there is a bug ESLint should still catch.
+    files: ['src/js/render-tick-processor.js'],
+    languageOptions: {
+      globals: {
+        AudioWorkletProcessor: 'readonly',
+        registerProcessor: 'readonly',
+        sampleRate: 'readonly',
+      },
     },
   },
   {

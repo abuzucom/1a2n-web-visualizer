@@ -1,0 +1,58 @@
+/* Operator diagnostics overlay, shown with ?diag=1 or the I key. */
+
+.diag-overlay {
+  position: fixed;
+  z-index: 20;
+  right: 16px;
+  bottom: 16px;
+  min-width: 240px;
+  padding: 12px 14px;
+  border: 1px solid var(--brand-concrete);
+  border-top: 4px solid var(--brand-paper);
+  background: rgba(11, 11, 11, 0.92);
+  color: var(--brand-paper);
+  font-family: var(--type-utility);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.diag-overlay[hidden] {
+  display: none;
+}
+
+.diag-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.diag-key {
+  color: var(--brand-silver);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.diag-value {
+  text-align: right;
+  word-break: break-word;
+}
+
+.diag-guard {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--brand-charcoal);
+  font-weight: 700;
+}
+
+.diag-guard.is-armed .diag-value {
+  color: #7bd88f;
+}
+
+.diag-guard.is-disarmed .diag-value {
+  color: #f0c674;
+}
+
+.diag-countdown .diag-value {
+  color: #f0c674;
+}

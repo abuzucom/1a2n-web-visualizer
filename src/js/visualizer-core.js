@@ -421,7 +421,7 @@
       lastGoodPreset: null,
       lastGoodBlend: 0,
       lastGoodName: '',
-      renderFrame: null,
+      driver: null,
       rendering: false,
       pendingChunkLoads: 0,
     };
@@ -432,10 +432,7 @@
    */
   function stopRenderLoop(controller) {
     controller.rendering = false;
-    if (controller.renderFrame != null) {
-      global.cancelAnimationFrame(controller.renderFrame);
-      controller.renderFrame = null;
-    }
+    if (controller.driver) controller.driver.stop();
   }
 
   /**
@@ -462,17 +459,56 @@
     return audio.inputDevices;
   }
 
+  function currentTrack(audio) {
+    const stream = audio.micStream;
+    if (!stream) return null;
+    const tracks = typeof stream.getAudioTracks === 'function'
+      ? stream.getAudioTracks() : stream.getTracks();
+    return tracks[0] || null;
+  }
+
+  function currentDeviceLabel(audio) {
+    const track = currentTrack(audio);
+    if (track && track.label) return track.label;
+    const device = audio.inputDevices[audio.deviceIdx];
+    return device ? (device.label || '') : '';
+  }
+
+  function currentDeviceId(audio) {
+    const device = audio.inputDevices[audio.deviceIdx];
+    return device ? device.deviceId : '';
+  }
+
+  function stopStream(stream) {
+    if (!stream) return;
+    stream.getTracks().forEach(function (track) { track.stop(); });
+  }
+
+  /** Tear down whatever is currently attached, if anything. Idempotent, so it
+   * is safe to call unconditionally: once before useDevice requests a new
+   * device's stream, and again here as a defense-in-depth backstop for any
+   * other caller of connectStream. */
+  function releaseCurrentStream(audio) {
+    stopStream(audio.micStream);
+    audio.micStream = null;
+    if (audio.sourceNode) {
+      audio.visualizer.disconnectAudio(audio.sourceNode);
+      audio.sourceNode = null;
+    }
+  }
+
   /**
    * Connect an active MediaStream to the visualizer's audio analyzer.
    */
   function connectStream(audio, stream) {
-    if (audio.micStream && audio.micStream !== stream) {
-      audio.micStream.getTracks().forEach(function (track) { track.stop(); });
-    }
-    if (audio.sourceNode) audio.visualizer.disconnectAudio(audio.sourceNode);
+    releaseCurrentStream(audio);
     audio.micStream = stream;
+    audio.hadStream = true;
     audio.sourceNode = audio.audioCtx.createMediaStreamSource(stream);
     audio.visualizer.connectAudio(audio.sourceNode);
+    // The keepalive must go quiet whenever the input becomes a loopback device,
+    // otherwise its tone is captured straight back into the analysis graph.
+    if (audio.keepalive) audio.keepalive.setInputLabel(currentDeviceLabel(audio));
   }
 
   /**
@@ -484,22 +520,52 @@
     return navigator.mediaDevices.getUserMedia({ audio: constraints });
   }
 
+  const NOT_READABLE_RETRY_MS = 250;
+
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  /* A Windows exclusive-mode WDM driver can be slow to actually free a handle
+   * after track.stop(); one short retry absorbs that without a general retry
+   * loop. Only NotReadableError qualifies: NotFoundError, OverconstrainedError,
+   * and a permission denial are real failures that must surface immediately. */
+  function openStreamWithRetry(deviceId) {
+    return openStream(deviceId).catch(function (error) {
+      if (!error || error.name !== 'NotReadableError') throw error;
+      return delay(NOT_READABLE_RETRY_MS).then(function () { return openStream(deviceId); });
+    });
+  }
+
+  function isSameActiveDevice(audio, index) {
+    return Boolean(audio.micStream) && index === audio.deviceIdx;
+  }
+
   /**
    * Switch the visualizer's audio input to the specified device.
    */
   async function useDevice(audio, index) {
     const requestSeq = ++audio.deviceRequestSeq;
     if (!audio.inputDevices.length) await getDevices(audio);
-    if (!audio.inputDevices.length) return null;
-    audio.deviceIdx = (index + audio.inputDevices.length) % audio.inputDevices.length;
-    const device = audio.inputDevices[audio.deviceIdx];
-    const stream = await openStream(device.deviceId);
+    if (requestSeq !== audio.deviceRequestSeq || !audio.inputDevices.length) return null;
+    const nextIdx = (index + audio.inputDevices.length) % audio.inputDevices.length;
+    const device = audio.inputDevices[nextIdx];
+    // Some virtual/pro-audio WDM devices allow only one open client stream at
+    // a time, so reopening the device already active (guaranteed whenever
+    // there is only one input device) would self-conflict. Skip it entirely.
+    if (isSameActiveDevice(audio, nextIdx)) {
+      audio.onToast('\uD83C\uDF99 ' + (device.label || ('Input ' + (nextIdx + 1))));
+      return device;
+    }
+    releaseCurrentStream(audio);
+    const stream = await openStreamWithRetry(device.deviceId);
     if (requestSeq !== audio.deviceRequestSeq) {
-      stream.getTracks().forEach(function (track) { track.stop(); });
+      stopStream(stream);
       return null;
     }
+    audio.deviceIdx = nextIdx;
     connectStream(audio, stream);
-    audio.onToast('\uD83C\uDF99 ' + (device.label || ('Input ' + (audio.deviceIdx + 1))));
+    audio.onToast('\uD83C\uDF99 ' + (device.label || ('Input ' + (nextIdx + 1))));
     return device;
   }
 
@@ -587,6 +653,24 @@
     }
   }
 
+  function matchDeviceIndex(devices, deviceId) {
+    return devices.findIndex(function (device) { return device.deviceId === deviceId; });
+  }
+
+  /* The initial connect has no device index of its own to record, since it is
+   * driven by a plain default-constraint getUserMedia call. Without this,
+   * audio.deviceIdx stays at its initial 0, which may not be the device that
+   * actually connected, making later cycling incoherent with reality. */
+  function syncDeviceIdxFromStream(audio, stream) {
+    const tracks = typeof stream.getAudioTracks === 'function' ? stream.getAudioTracks() : stream.getTracks();
+    const track = tracks[0];
+    const settings = track && typeof track.getSettings === 'function' ? track.getSettings() : null;
+    const actualId = settings && settings.deviceId;
+    if (!actualId) return;
+    const index = matchDeviceIndex(audio.inputDevices, actualId);
+    if (index >= 0) audio.deviceIdx = index;
+  }
+
   /**
    * Establish the initial audio stream connection when the visualizer starts.
    */
@@ -594,8 +678,9 @@
     try {
       const stream = await openStream(deviceId);
       await getDevices(audio);
-      if (audio.started) connectStream(audio, stream);
-      else stream.getTracks().forEach(function (track) { track.stop(); });
+      if (!audio.started) { stopStream(stream); return; }
+      syncDeviceIdxFromStream(audio, stream);
+      connectStream(audio, stream);
     } catch (error) {
       console.warn('Audio input unavailable; visualizer will continue:', error);
       audio.onToast('Audio input unavailable; visualizer is running');
@@ -682,26 +767,22 @@
   function startRenderLoop(audio, playback, loadInitial) {
     if (loadInitial && !loadInitialPreset(audio, playback, true)) return;
     playback.rendering = true;
-    scheduleRender(audio, playback);
+    playback.driver.start(audio.audioCtx);
     restartCycle(playback);
   }
 
   /**
-   * Schedule and execute the next frame in the render loop.
+   * One frame, called by whichever tick source the render driver has live.
    */
-  function scheduleRender(audio, playback) {
-    (function render() {
-      if (!playback.rendering) return;
-      try {
-        audio.visualizer.render();
-      } catch (error) {
-        console.error('Visualizer render failed:', error);
-        stopRenderLoop(playback);
-        audio.onToast('\u26A0 visualizer render failed');
-        return;
-      }
-      playback.renderFrame = global.requestAnimationFrame(render);
-    }());
+  function renderOnce(audio, playback) {
+    if (!playback.rendering) return;
+    try {
+      audio.visualizer.render();
+    } catch (error) {
+      console.error('Visualizer render failed:', error);
+      stopRenderLoop(playback);
+      audio.onToast('\u26A0 visualizer render failed');
+    }
   }
 
   /**
@@ -735,6 +816,9 @@
       await initializeAudio(audio, playback, deviceId);
       audio.started = true;
       startRenderLoop(audio, playback, false);
+      audio.keepalive.setInputLabel(currentDeviceLabel(audio));
+      audio.keepalive.start();
+      audio.watchdog.start();
     } catch (error) {
       stopRenderLoop(playback);
       if (audio.audioCtx) { audio.audioCtx.close(); audio.audioCtx = null; }
@@ -763,8 +847,98 @@
       started: false,
       starting: false,
       prepared: false,
+      hadStream: false,
+      keepalive: null,
+      watchdog: null,
       experimentalImagesLoading: null,
     };
+  }
+
+  function createRenderDriver(audio, playback) {
+    return global.BCRenderDriver.create({
+      window: global,
+      document: document,
+      navigator: navigator,
+      workletUrl: 'js/render-tick-processor.js',
+      onTick: function () { renderOnce(audio, playback); },
+    });
+  }
+
+  /* The watchdog fires this when ticks have stopped arriving while the driver
+   * still believes it is running, so go through stop() first: driver.start()
+   * is a no-op in that state and would heal nothing. Deliberately not
+   * startRenderLoop, which would also reset the preset cycle timer and make
+   * every recovery restart the countdown to the next preset. */
+  function restartDriver(audio, playback) {
+    if (!audio.started) return;
+    playback.driver.stop();
+    playback.driver.start(audio.audioCtx);
+  }
+
+  function createWatchdog(audio, playback) {
+    return global.BCWatchdog.create({
+      window: global,
+      getDriverStats: function () { return playback.driver.stats(); },
+      restartDriver: restartDriver.bind(null, audio, playback),
+      recoverVisualizer: function () { if (audio.started) recoverVisualizer(audio, playback); },
+      getAudioContext: function () { return audio.audioCtx; },
+      getTrack: function () { return currentTrack(audio); },
+      // Without a stream there is no input to lose, so do not report one gone.
+      handleLostInput: function () { if (audio.hadStream) audio.onToast('\u26A0 audio input lost'); },
+      getDeviceId: function () { return currentDeviceId(audio); },
+      getDeviceLabel: function () { return currentDeviceLabel(audio); },
+      listDevices: function () { return getDevices(audio); },
+      reconnect: function (deviceId) { return useDeviceById(audio, deviceId); },
+      onToast: audio.onToast,
+    });
+  }
+
+  function collectDiagnostics(audio, playback) {
+    const driver = playback.driver.stats();
+    const keepalive = audio.keepalive.stats();
+    const watchdog = audio.watchdog.stats();
+    const track = currentTrack(audio);
+    return {
+      fps: driver.fps,
+      tickSource: driver.tickSource,
+      hidden: driver.hidden,
+      wakeLock: driver.wakeLock,
+      frames: driver.frames,
+      keepalive: keepalive.active ? 'active' : (keepalive.reason || 'off'),
+      device: currentDeviceLabel(audio) || 'none',
+      trackState: track ? (track.muted ? 'muted' : track.readyState) : 'none',
+      armed: watchdog.armed,
+      audioLost: watchdog.audioLost,
+      recoverInSecs: watchdog.recoverInSecs,
+      recoveries: watchdog.recoveries,
+      restarts: watchdog.restarts,
+      reason: watchdog.reason,
+    };
+  }
+
+  /* Chromium can suspend the context while the page is hidden, and nothing
+   * else ever resumes it: initializeAudio resumes exactly once at startup. */
+  function resumeOnVisible(audio) {
+    if (document.visibilityState === 'hidden' || !audio.audioCtx) return;
+    if (audio.audioCtx.state !== 'suspended') return;
+    audio.audioCtx.resume().catch(function (error) {
+      console.warn('Audio context resume failed:', error);
+    });
+  }
+
+  function attachLifecycle(audio, playback, canvas) {
+    global.addEventListener('resize', function () { sizeCanvas(audio); });
+    if (document.addEventListener) {
+      document.addEventListener('visibilitychange', function () { resumeOnVisible(audio); });
+    }
+    canvas.addEventListener('webglcontextlost', function (event) {
+      event.preventDefault();
+      stopRenderLoop(playback);
+      console.warn('WebGL context lost');
+    });
+    canvas.addEventListener('webglcontextrestored', function () {
+      if (audio.started) recoverVisualizer(audio, playback);
+    });
   }
 
   /**
@@ -778,15 +952,10 @@
     const store = createPresetStore(opts, function () { return playback.idx; });
     playback = createPlaybackController(store, opts, onToast, onPreset, canvas);
     const audio = createAudioController(canvas, opts, onToast);
-    global.addEventListener('resize', function () { sizeCanvas(audio); });
-    canvas.addEventListener('webglcontextlost', function (event) {
-      event.preventDefault();
-      stopRenderLoop(playback);
-      console.warn('WebGL context lost');
-    });
-    canvas.addEventListener('webglcontextrestored', function () {
-      if (audio.started) recoverVisualizer(audio, playback);
-    });
+    playback.driver = createRenderDriver(audio, playback);
+    audio.keepalive = global.BCKeepalive.create({ window: global });
+    audio.watchdog = createWatchdog(audio, playback);
+    attachLifecycle(audio, playback, canvas);
     sizeCanvas(audio);
 
     return {
@@ -818,12 +987,17 @@
       useDeviceById: function (id) { return useDeviceById(audio, id); },
       getDevices: function () { return getDevices(audio); },
       listDevices: function () { return audio.inputDevices.slice(); },
+      currentDeviceId: function () { return currentDeviceId(audio); },
       keys: function () { return store.keys.slice(); },
       currentIndex: function () { return playback.idx; },
       currentName: function () { return store.keys[playback.idx] || ''; },
       isStarted: function () { return audio.started; },
       isChunkLoading: function () { return playback.pendingChunkLoads > 0; },
       resize: function () { sizeCanvas(audio); },
+      diagnostics: function () { return collectDiagnostics(audio, playback); },
+      toggleAudioGuard: function () { return audio.watchdog.setArmed(!audio.watchdog.isArmed()); },
+      setAudioGuard: function (armed) { return audio.watchdog.setArmed(armed); },
+      isAudioGuardArmed: function () { return audio.watchdog.isArmed(); },
     };
   }
 

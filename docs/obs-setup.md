@@ -33,8 +33,13 @@
 - Press <kbd>H</kbd> to hide the control panel before going live.
 - For the keyboard-only build, use `src/fullscreen.html` in a separate browser
   window and add a **Window Capture** instead.
-- If the visualizer pauses when not visible, that is expected behavior for
-  background browser sources; keep it on an active scene.
+- The visualizer keeps rendering on an inactive scene, so it no longer has to
+  stay on an active one. Uncheck "Shutdown source when not visible" and "Refresh
+  browser when scene becomes active" in the source properties, or OBS tears the
+  page down on a scene change regardless. See
+  [background-rendering.md](background-rendering.md).
+- For an unattended stream, arm the audio guard once the set is running. See
+  [unattended-operation.md](unattended-operation.md).
 
 ## Notes / gotchas
 
