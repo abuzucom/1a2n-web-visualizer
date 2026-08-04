@@ -1,14 +1,7 @@
 # 1a2n Web Visualizer
 
 
-MilkDrop-style audio visualizer pages built with
-[butterchurn](https://github.com/jberg/butterchurn), intended for use as an
-**OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first
-mobile browser experience. Includes 18,013 deduplicated presets: 373 from the four
-butterchurn preset packs, 14,408 mainline lazy-loaded presets from the
-[tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn)
-collection, and 3,232 experimental NestDrop presets; the latter two
-collections are lazy-loaded in chunks - fully self-hosted (no CDN).
+MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 18,013 deduplicated presets: 373 from four butterchurn preset packs, 14,408 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, and 3,232 experimental NestDrop presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
 `/fullscreen.html`, and `/mobile.html`). GitHub Actions deploys it from the
@@ -20,12 +13,7 @@ All entry points share one controller module:
 - `src/fullscreen.html`: Provides a keyboard-controlled interface with no visible UI. It shows a five-second startup indicator, selects a random resident vendored preset, hides the cursor, and shuffles presets by default. Use it for window capture or secondary displays.
 - `src/mobile.html`: Provides a touch-first browser interface with shuffle, visit history, interval, and hyperspeed controls. It does not request browser fullscreen or expose curation controls.
 
-The UI follows the brand visual system across the landing page, OBS panel,
-fullscreen overlays, and mobile controls. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`),
-Charcoal (`#242424`), Concrete (`#A6A39D`), and Dull Silver (`#74777A`).
-Libre Franklin is used for display and editorial text, with Helvetica, Neue Haas
-Grotesk, and Arial fallbacks. Cousine is used for utility text, with IBM Plex
-Mono and Courier New fallbacks.
+The UI follows the brand visual system across all entry points. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`), Charcoal (`#242424`), Concrete (`#A6A39D`), and Dull Silver (`#74777A`). Libre Franklin provides display and editorial text, with Helvetica, Neue Haas Grotesk, and Arial fallbacks. Cousine provides utility text, with IBM Plex Mono and Courier New fallbacks.
 
 ## Repository Structure
 
@@ -191,7 +179,7 @@ or <http://localhost:8000/obs.html>.
 
 ## Hosted Deployment (GitHub Pages)
 
-The production environment is hosted via GitHub Pages at **`visualizer.1a2n.net`**:
+GitHub Pages hosts the production environment at **`visualizer.1a2n.net`**:
 
 ```text
 https://visualizer.1a2n.net/obs.html
@@ -217,13 +205,7 @@ The application runs at `http://localhost:8080`. See [`docs/local-hosting.md`](d
 
 ## Security Model
 
-ButterChurn dynamically compiles its audited MilkDrop preset equations, so the
-Content Security Policy intentionally allows `'unsafe-eval'`. Removing this
-directive breaks the visualizer. The ansorre collection is
-pinned and SHA-256 verified; supplied archives record their digests, while the
-Cream of the Crop source is pinned to a commit but its ZIP checksum is not yet
-verified. The project reviews all shipped presets as executable content and
-never fetches them from users or remote sources at runtime.
+ButterChurn dynamically compiles its audited MilkDrop preset equations. The Content Security Policy intentionally allows `'unsafe-eval'`. Removing this directive breaks the visualizer. The ansorre collection is pinned and SHA-256 verified. Supplied archives record their digests. The Cream of the Crop source is pinned to a commit; verify its ZIP checksum before full trust. The project reviews all shipped presets as executable content and never fetches them from remote sources at runtime.
 
 Use the Docker/Caddy configuration only for internal deployment. Docker binds
 it to `127.0.0.1:8080`; do not expose it to a network or the public internet.
@@ -288,15 +270,7 @@ for platform-specific instructions.
 
 ## Dependencies
 
-The project vendors butterchurn (`butterchurn@2.6.7`) and its presets
-(`butterchurn-presets@2.4.7`) in `src/vendor/` and serves them from the site;
-it uses no CDN. The application loads four preset packs (base, Extra, Extra2,
-and MD1) plus the extra-images texture pack; `visualizer-core.js` merges them at
-startup, skipping any preset whose name already exists in an earlier pack
-(374 unique presets). To upgrade, replace the `.min.js` files with the
-corresponding `lib/` builds from the npm packages. This deployment intentionally
-curates some vendored presets; see [Curation](#curation). The bundles therefore
-differ slightly from the stock npm builds.
+The project vendors butterchurn (`butterchurn@2.6.7`) and its presets (`butterchurn-presets@2.4.7`) in `src/vendor/`. It uses no CDN. `visualizer-core.js` merges four preset packs (base, Extra, Extra2, MD1) and the extra-images pack at startup. It skips duplicate names to yield 373 unique presets. To upgrade, replace the `.min.js` files with the `lib/` builds from the npm packages. This deployment intentionally curates vendored presets (see [Curation](#curation)). The bundles differ slightly from stock npm builds.
 
 Development tools include `serve`, `patch-package`, `acorn`, the MilkDrop
 EEL/preset parsers, and the native `milkdrop-shader-converter`. Raw `.milk`
@@ -304,22 +278,21 @@ imports need the native converter; local serving does not. Use
 `npm ci --ignore-scripts` for serving and follow `tools/convert-milk-presets.js`
 to build the converter.
 
+### Preset Converter Architecture
+
+The `.milk` to JSON pipeline (`tools/convert-milk-presets.js`) prioritizes stability, correctness, and batch safety.
+
+- **Isolated Shader Compilation:** The native `milkdrop-shader-converter` (HLSL to GLSL) can hang on malformed inputs. The pipeline dispatches shader translation to a child process (`tools/convert-shader-worker.js`). A strict timeout kills stuck shaders and yields an empty shader instead of halting the batch.
+- **Strict Equation Validation:** The pipeline checks all generated JavaScript equations using `acorn.parse()`. This guarantees valid math equations before writing to disk and prevents runtime browser errors.
+- **Graceful Degradation:** If EEL equations for a wave or shape fail to translate, the converter retains the static `baseVals` instead of discarding the preset.
+- **Correctness Over Minification:** The pipeline ships the generated JavaScript exactly as emitted. It avoids JS minifiers, which can rename dynamic global state variables like `time` or `bass`. Browser JIT compilers optimize these loops automatically.
+- **Robust Batching:** The pipeline recursively walks source directories, detects duplicate basenames, and outputs a unified JSON dictionary to `stdout`. It routes warnings and errors to `stderr`.
+
 ## Extra Presets (~19k total)
 
-`src/presets-extra/` holds 14,411 mainline index names from
-[ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn),
-packed into 184 logical chunks that load lazily through injected `<script>` tags
-when a user first selects one of their presets (works from `file://` and
-under the strict CSP; a small in-memory LRU keeps at most 16 chunks resident).
-The mainline index contains 14,408 unique presets. If the folder is
-missing, the app silently falls back to the 373 vendored presets.
+`src/presets-extra/` holds 14,411 mainline index names from [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn). These pack into 184 logical chunks that load lazily through injected `<script>` tags when selected. This works from `file://` under the strict CSP. An in-memory LRU keeps at most 16 chunks resident. The mainline index contains 14,408 unique presets. If the folder is missing, the app falls back to the 373 vendored presets.
 
-The experimental NestDrop import adds 3,232 `[EXP] ` presets in 377 physical
-files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs
-after the mainline chunks, so the combined index currently contains 561 logical
-chunks. The physical filename range is only a file namespace; the loader uses
-the logical ID from `index.js` when registering each chunk. Together with the
-373 vendored presets and 14,408 mainline presets, the current total is 18,013.
+The experimental NestDrop import adds 3,232 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 561 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 18,013 presets.
 
 The folder contains generated, committed output. After an upstream update,
 refresh it with the curation-preserving script (see
@@ -331,15 +304,7 @@ python3 tools/fetch-extra-presets-curated.py --zip P   # use an already-download
 python3 tools/fetch-extra-presets-curated.py --dry-run # preview the diff, write nothing
 ```
 
-`tools/fetch-extra-presets.py` is the same generator without curation -
-useful for a clean reset from upstream, or as the one both scripts import
-their fetch/filter/write logic from. Both pin the upstream commit and verify
-the zip's sha256 (constants at the top of `fetch-extra-presets.py` - bump
-them when upstream grows), and exclude any preset referencing custom
-textures that neither butterchurn nor the vendored extra-images pack can
-supply. The upstream collection has
-**no license file**; the presets are community-created MilkDrop content
-redistributed as-is.
+`tools/fetch-extra-presets.py` runs the same generator without curation. Use it for a clean reset from upstream. Both scripts pin the upstream commit and verify the zip's SHA-256 (update the constants in `fetch-extra-presets.py` when upstream grows). They exclude presets referencing missing custom textures. The upstream collection has **no license file**; it redistributes community-created MilkDrop content as-is.
 
 `tools/fetch-cream-of-the-crop-presets.py` is a separate additive importer for
 raw `.milk` files from the pinned Cream of the Crop commit. Its upstream ZIP
@@ -360,41 +325,15 @@ including their pack, chunk, and known removal commit, date, and subject. Like
 `tools/remove_presets.js` for vendored/mainline curation; experimental tools
 also update it for EXP decisions.
 
-Three things to know if you're regenerating presets:
+Follow these rules when regenerating presets:
 
-- **`presets-extra` regeneration is curation-safe by default.**
-  `tools/fetch-extra-presets-curated.py` diffs a fresh upstream pull against
-  the currently committed `index.js` *and* against `removed-presets.csv`,
-  excluding anything caught by either check - so running it preserves this
-  curation instead of undoing it. Its plain counterpart,
-  `tools/fetch-extra-presets.py`, has no such memory: it rebuilds
-  `src/presets-extra/` verbatim from the pinned upstream zip and will
-  reintroduce every curated-out preset, so only use it for a clean reset.
-  Neither script touches the vendored `.min.js` packs - replacing one with a
-  stock npm build restores the presets removed from that pack, and that
-  curation has to be re-applied by hand.
-- **The removal lists come from the app.** The `fullscreen.html` interface can
-  remove the current preset from rotation and export the list of presets
-  excluded during a session (the &#128683; / &#128203; controls), which is the
-  source of the names curated out of the codebase here. Presets that fail at
-  runtime - broken equations or shader link failures - are added to that
-  exported list automatically when the app skips them.
-- **New upstream sources should consult `removed-presets.csv` too.** A fetch
-  script pulling presets from a different collection should exclude names
-  present in the ledger, the same way `fetch-extra-presets-curated.py` does -
-  not just names absent from the current `index.js` snapshot, since a
-  different source could coincidentally share a name with something removed
-  from an entirely different collection.
+- **`presets-extra` regeneration is curation-safe by default.** `tools/fetch-extra-presets-curated.py` diffs a fresh upstream pull against the committed `index.js` and `removed-presets.csv`. It excludes presets caught by either check, preserving curation. Its plain counterpart, `tools/fetch-extra-presets.py`, has no memory. It rebuilds `src/presets-extra/` verbatim from the upstream zip and reintroduces every curated-out preset. Use it only for a clean reset. Neither script touches the vendored `.min.js` packs. Replacing a pack with a stock npm build restores removed presets; reapply curation manually.
+- **The removal lists come from the app.** The `fullscreen.html` interface can remove the current preset from rotation and export the list of excluded presets. This exported list supplies the names curated out of the codebase. The app automatically adds presets that fail at runtime (due to broken equations or shader link failures) to the exported list.
+- **New upstream sources must consult `removed-presets.csv`.** A fetch script pulling presets from a different collection must exclude names present in the ledger, exactly as `fetch-extra-presets-curated.py` does. Do not merely rely on names absent from `index.js`; a different source might coincidentally share a name with a preset removed from another collection.
 
 ### Removing presets
 
-`tools/remove_presets.js` removes exact preset names from
-`src/presets-extra/index.js`, their
-owning `chunk-NNN.js` file, any vendored `.min.js` pack that contains it, and
-the matching `preset-inventory.csv` row, and appends a row for each to
-`removed-presets.csv`. Matching is exact-name only. The tool writes nothing
-unless it finds every requested name and every edited file passes a post-edit
-consistency check.
+`tools/remove_presets.js` removes exact preset names from `src/presets-extra/index.js`, their owning `chunk-NNN.js` file, matching vendored `.min.js` packs, and `preset-inventory.csv`. It appends a record for each removal to `removed-presets.csv`. Matching is exact-name only. The tool writes nothing unless it finds every requested name and every edited file passes a post-edit consistency check.
 
 ```bash
 node tools/remove_presets.js --names-file names.txt   # one exact name per line
@@ -406,17 +345,7 @@ It does not update the preset counts documented in this README/CHANGELOG -
 recompute those by hand after a removal (see the numbers in the "Extra
 Presets" section above for the formula).
 
-`tools/analyze_curation_history.js` reconstructs the full history of presets
-curated out via `git log` - auto-discovering every commit that ever touched
-`src/presets-extra/` or `src/vendor/*.min.js`, so it stays correct across
-history rewrites instead of relying on a hand-maintained commit list - and
-prints neutral frequency statistics (top words, bigrams, and likely
-contributor-name prefixes) over their names. It has no built-in notion of
-what's "risky" or unwanted, just the raw data, so anyone using this repo can
-review the same history and make their own curation decisions. This is also
-the tool that originally generated `removed-presets.csv`'s `--csv` output;
-`tools/remove_presets.js` keeps it current from here on, so you shouldn't
-normally need to regenerate it:
+`tools/analyze_curation_history.js` reconstructs the history of removed presets via `git log`. It auto-discovers commits touching `src/presets-extra/` or `src/vendor/*.min.js`, remaining correct across history rewrites. It prints frequency statistics (top words, bigrams, and likely contributor prefixes) over the removed names. It provides raw data without classifying presets as risky or unwanted. This script originally generated `removed-presets.csv`. Use `tools/remove_presets.js` to maintain the ledger going forward:
 
 ```bash
 node tools/analyze_curation_history.js
