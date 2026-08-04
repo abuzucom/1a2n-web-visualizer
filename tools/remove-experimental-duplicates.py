@@ -114,7 +114,7 @@ def main() -> int:
     if args.dry_run:
         for item in targets:
             print(f"would remove {item['displayName']} (mainline matches: {len(item['mainlineMatches'])})")
-        return
+        return 0
 
     by_chunk = {}
     for item in targets:
@@ -166,7 +166,8 @@ def main() -> int:
     atomic_write_text(EXCLUSIONS_PATH, json.dumps(exclusions, indent=2) + "\n")
     atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
     print(f"removed {len(targets)} experimental presets")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
