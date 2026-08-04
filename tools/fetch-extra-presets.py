@@ -71,7 +71,7 @@ WRAP_FILTER_PREFIX_RE = re.compile(r"^(?:fw|fc|pw|pc)_")
 
 
 def referenced_textures(preset):
-    """Texture names referenced by the preset's warp/comp shaders."""
+    """Return the set of texture names referenced by the preset's warp/comp shaders."""
     names = set()
     for field in ("warp", "comp"):
         shader = preset.get(field)
@@ -82,7 +82,8 @@ def referenced_textures(preset):
     return names
 
 
-def get_zip_bytes(zip_arg):
+def get_zip_bytes(zip_arg: str) -> bytes:
+    """Fetch and return the bytes of a ZIP archive from the specified path or URL."""
     if zip_arg:
         size = Path(zip_arg).stat().st_size
         if size > MAX_DOWNLOAD_BYTES:
@@ -122,8 +123,8 @@ def collect_presets(zf, allowed):
     if total_size > MAX_ZIP_UNCOMPRESSED_BYTES:
         raise ValueError("ZIP exceeds the uncompressed-size limit")
     members = sorted(
-        m for m in zf.namelist()
-        if m.startswith("converted/") and m.endswith(".json")
+        member for member in zf.namelist()
+        if member.startswith("converted/") and member.endswith(".json")
     )
 
     kept = {}
@@ -165,7 +166,7 @@ def write_output(kept, out_dir):
     total_bytes = 0
     for cid, chunk_names in enumerate(chunks):
         payload = json.dumps(
-            {n: kept[n] for n in chunk_names},
+            {name: kept[name] for name in chunk_names},
             separators=(",", ":"), sort_keys=True,
         )
         text = f"window.__bcPresetChunk({cid},{payload});\n"
@@ -185,7 +186,8 @@ def write_output(kept, out_dir):
     return chunks, total_bytes
 
 
-def main():
+def main() -> int:
+    """Fetch, convert, and organize experimental presets into chunked JSON files."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")
     args = parser.parse_args()
@@ -199,9 +201,9 @@ def main():
 
     missing_counts = {}
     for texs in excluded.values():
-        for t in texs:
-            missing_counts[t] = missing_counts.get(t, 0) + 1
-    top_missing = sorted(missing_counts.items(), key=lambda kv: -kv[1])[:10]
+        for texture_name in texs:
+            missing_counts[texture_name] = missing_counts.get(texture_name, 0) + 1
+    top_missing = sorted(missing_counts.items(), key=lambda key_value: -key_value[1])[:10]
 
     print(f"presets in zip:        {len(kept) + len(excluded) + len(bad_json)}")
     print(f"unparseable (skipped): {len(bad_json)}")
@@ -211,7 +213,7 @@ def main():
     print(f"output size:           {total_bytes/1e6:.1f} MB in {OUT_DIR}")
     if top_missing:
         print("most-missed textures:  "
-              + ", ".join(f"{t} ({c})" for t, c in top_missing))
+              + ", ".join(f"{texture} ({count})" for texture, count in top_missing))
 
 
 if __name__ == "__main__":

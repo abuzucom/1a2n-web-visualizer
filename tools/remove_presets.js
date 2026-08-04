@@ -32,7 +32,7 @@
  */
 
 const fs = require('fs');
-const os = require('os');
+const osModule = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -43,11 +43,25 @@ const CHUNK_DIR = path.join(ROOT, 'src/presets-extra');
 const VENDOR_DIR = path.join(ROOT, 'src/vendor');
 let chunkFiles = null;
 
-function readNamesFile(file) {
-  const lines = fs.readFileSync(file, 'utf8').split('\n');
+const ARGS_START = 2;
+const CHUNK_PAD_LENGTH = 3;
+const DATE_LENGTH = 10;
+const REGEX_GROUP_NAME_QUOTED = 1;
+const REGEX_GROUP_NAME_UNQUOTED = 2;
+const REGEX_GROUP_PACK = 3;
+const REGEX_GROUP_CHUNK = 4;
+
+/**
+ * Read and return preset names from a newline-separated file.
+ */
+function readNamesFile(path) {
+  const lines = fs.readFileSync(path, 'utf8').split('\n');
   return lines.map((line) => line.replace(/\r$/, '')).filter((line) => line.length > 0);
 }
 
+/**
+ * Parse and return the command-line arguments.
+ */
 function parseArgs(argv) {
   const names = [];
   let dryRun = false;
@@ -69,15 +83,23 @@ function parseArgs(argv) {
 
 // --- CSV parsing (name,pack,chunk) ---
 
+/**
+ * Parse a CSV line into fields, respecting quoted commas.
+ */
 function parseCsvLine(line) {
-  const m = line.match(/^(?:"((?:[^"]|"")*)"|([^,]*)),([^,]*),([^,]*)(?:,(.*))?$/);
-  if (!m) return null;
-  const name = m[1] !== undefined ? m[1].replace(/""/g, '"') : m[2];
-  return { name, pack: m[3], chunk: m[4] };
+  const match = line.match(/^(?:"((?:[^"]|"")*)"|([^,]*)),([^,]*),([^,]*)(?:,(.*))?$/);
+  if (!match) return null;
+  const name = match[REGEX_GROUP_NAME_QUOTED] !== undefined
+    ? match[REGEX_GROUP_NAME_QUOTED].replace(/""/g, '"')
+    : match[REGEX_GROUP_NAME_UNQUOTED];
+  return { name, pack: match[REGEX_GROUP_PACK], chunk: match[REGEX_GROUP_CHUNK] };
 }
 
 // --- src/presets-extra/index.js (JSON) ---
 
+/**
+ * Read and return the index.js mappings.
+ */
 function readIndex() {
   const raw = fs.readFileSync(INDEX_PATH, 'utf8');
   const prefix = 'window.BCExtraPresetIndex=';
@@ -94,34 +116,49 @@ function readIndex() {
   return { data, prefix, suffix };
 }
 
+/**
+ * Format and return the index.js file content.
+ */
 function writeIndex({ data, prefix, suffix }) {
   atomicWrite(INDEX_PATH, prefix + JSON.stringify(data) + suffix);
 }
 
 // --- src/presets-extra/chunk-NNN.js (JSON) ---
 
+/**
+ * Format and return the filesystem path for a chunk ID.
+ */
 function chunkPath(id) {
   const filename = chunkFiles && chunkFiles[id]
-    ? chunkFiles[id] : `chunk-${String(id).padStart(3, '0')}.js`;
+    ? chunkFiles[id] : `chunk-${String(id).padStart(CHUNK_PAD_LENGTH, '0')}.js`;
   return path.join(CHUNK_DIR, filename);
 }
 
+/**
+ * Read and return a chunk file's content and parsed JSON.
+ */
 function readChunk(id) {
   const raw = fs.readFileSync(chunkPath(id), 'utf8');
   const prefix = `window.__bcPresetChunk(${id},`;
   const suffix = ');';
   const trimmed = raw.trimEnd();
   if (!raw.startsWith(prefix) || !trimmed.endsWith(suffix)) {
-    throw new Error(`unexpected wrapper format in chunk-${String(id).padStart(3, '0')}.js`);
+    throw new Error(`unexpected wrapper format in chunk-${String(id).padStart(CHUNK_PAD_LENGTH, '0')}.js`);
   }
   const json = trimmed.slice(prefix.length, trimmed.length - suffix.length);
   return { data: JSON.parse(json), prefix, suffix };
 }
 
+/**
+ * Format and return a chunk file's content.
+ */
 function writeChunk(id, { data, prefix, suffix }) {
   atomicWrite(chunkPath(id), prefix + JSON.stringify(data) + suffix);
 }
 
+/**
+ * Atomically write text to a file using a temporary intermediate file.
+ */
 function atomicWrite(filePath, content) {
   const directory = fs.mkdtempSync(path.join(path.dirname(filePath), '.curation-'));
   const temporaryPath = path.join(directory, path.basename(filePath));
@@ -132,8 +169,8 @@ function atomicWrite(filePath, content) {
     } catch (error) {
       if (error.code !== 'EPERM') throw error;
       // Windows can reject replacing a tracked file while an external scanner
-      // briefly holds the destination. The content was prepared and checked;
-      // copy it over as the platform-specific fallback.
+      // briefly holds the destination. The content was prepared and checked.
+      // Copy it over as the platform-specific fallback.
       fs.copyFileSync(temporaryPath, filePath);
       fs.unlinkSync(temporaryPath);
     }
@@ -144,6 +181,9 @@ function atomicWrite(filePath, content) {
 
 // --- src/vendor/*.min.js (minified UMD bundles) ---
 
+/**
+ * Find and return the index of the matching closing bracket in a Javascript string.
+ */
 function findMatchingCloser(s, openIdx) {
   const open = s[openIdx];
   const close = open === '{' ? '}' : ']';
@@ -152,20 +192,20 @@ function findMatchingCloser(s, openIdx) {
   let strCh = null;
   let esc = false;
   for (let i = openIdx; i < s.length; i++) {
-    const c = s[i];
+    const char = s[i];
     if (inStr) {
       if (esc) esc = false;
-      else if (c === '\\') esc = true;
-      else if (c === strCh) inStr = false;
+      else if (char === '\\') esc = true;
+      else if (char === strCh) inStr = false;
       continue;
     }
-    if (c === '"' || c === "'") {
+    if (char === '"' || char === "'") {
       inStr = true;
-      strCh = c;
+      strCh = char;
       continue;
     }
-    if (c === open) depth++;
-    else if (c === close) {
+    if (char === open) depth++;
+    else if (char === close) {
       depth--;
       if (depth === 0) return i;
     }
@@ -173,20 +213,23 @@ function findMatchingCloser(s, openIdx) {
   return -1;
 }
 
+/**
+ * Read and return the keys of presets inside a vendor pack.
+ */
 function loadVendorPresetNames(source) {
   // fs.mkdtempSync gives us a securely-generated, unpredictable directory
-  // name (unlike a hand-rolled Date.now()/Math.random() filename), so the
-  // temp file inside it can't be pre-guessed or collide with another
+  // name. This differs from a hand-rolled Date.now()/Math.random() filename.
+  // The temp file inside it can't be pre-guessed or collide with another
   // process's file in the shared os.tmpdir().
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-check-'));
+  const dir = fs.mkdtempSync(path.join(osModule.tmpdir(), 'vendor-check-'));
   const tmp = path.join(dir, 'bundle.js');
   fs.writeFileSync(tmp, source);
   try {
     delete require.cache[require.resolve(tmp)];
-    const m = require(tmp);
-    const presets = m && m.default && typeof m.default.getPresets === 'function'
-      ? m.default.getPresets()
-      : (m && typeof m.getPresets === 'function' ? m.getPresets() : m);
+    const moduleObj = require(tmp);
+    const presets = moduleObj && moduleObj.default && typeof moduleObj.default.getPresets === 'function'
+      ? moduleObj.default.getPresets()
+      : (moduleObj && typeof moduleObj.getPresets === 'function' ? moduleObj.getPresets() : moduleObj);
     return new Set(Object.keys(presets));
   } finally {
     delete require.cache[require.resolve(tmp)];
@@ -194,8 +237,11 @@ function loadVendorPresetNames(source) {
   }
 }
 
-// Pattern A: `var presets={...};return{default:{getPresets:function(){return presets}}}` —
-// the whole preset map is one JSON-parseable object literal assigned to `presets`.
+// Pattern A: `var presets={...};return{default:{getPresets:function(){return presets}}}`.
+// The whole preset map is one JSON-parseable object literal assigned to `presets`.
+/**
+ * Attempt to match and return the vendor map using the standard Butterchurn pattern.
+ */
 function tryPatternA(source, names) {
   const marker = 'var presets={';
   const markerIdx = source.indexOf(marker);
@@ -218,9 +264,12 @@ function tryPatternA(source, names) {
   return { newSource, removed };
 }
 
-// Pattern B: a comma-expression chain of `_["name"]=t(N)` assignments building up
-// an object that's returned as the preset map (each preset's data lives in its own
-// numbered webpack module referenced by t(N); we only need to drop the map entry).
+// Pattern B: A comma-expression chain of `_["name"]=t(N)` assignments building up
+// an object that's returned as the preset map. Each preset's data lives in its own
+// numbered webpack module referenced by t(N). Drop the map entry.
+/**
+ * Attempt to match and return the vendor map using the fallback pattern.
+ */
 function tryPatternB(source, names) {
   let out = source;
   const removed = [];
@@ -252,20 +301,26 @@ function removeFromVendorPack(source, names) {
   const b = tryPatternB(source, names);
   if (b) return b;
   throw new Error(
-    'no recognized preset-map pattern found in this vendor pack (Pattern A/B both failed) — manual edit required',
+    'no recognized preset-map pattern found in this vendor pack (Pattern A/B both failed). Manual edit required',
   );
 }
 
 // --- main ---
 
+/**
+ * Calculate and return the total number of presets in the index chunks.
+ */
 function countIndexNames(data) {
   let total = 0;
   for (const arr of data.chunks) total += arr.length;
   return total;
 }
 
+/**
+ * Parse, validate, and return the list of names to remove.
+ */
 function parseAndValidateNames() {
-  const { names: rawNames, dryRun } = parseArgs(process.argv.slice(2));
+  const { names: rawNames, dryRun } = parseArgs(process.argv.slice(ARGS_START));
   const names = [...new Set(rawNames)];
   if (names.length === 0) {
     console.error('No names given. Use --name "<exact name>" and/or --names-file <path>.');
@@ -274,6 +329,9 @@ function parseAndValidateNames() {
   return { names, dryRun };
 }
 
+/**
+ * Read and return a map of preset rows from a CSV.
+ */
 function loadCsvByName(csvLines) {
   const byName = new Map();
   for (const line of csvLines) {
@@ -283,10 +341,13 @@ function loadCsvByName(csvLines) {
   return byName;
 }
 
+/**
+ * Resolve and return the removal targets grouped by pack and chunk.
+ */
 function resolveTargets(names, byName, alreadyRemoved) {
   const notFound = names.filter((n) => !byName.has(n) && !alreadyRemoved.has(n));
   if (notFound.length > 0) {
-    console.error(`Aborting — ${notFound.length} name(s) not found in preset-inventory.csv (no changes made):`);
+    console.error(`Aborting. ${notFound.length} name(s) not found in preset-inventory.csv (no changes made):`);
     for (const n of notFound) console.error(`  ${JSON.stringify(n)}`);
     process.exit(1);
   }
@@ -301,6 +362,9 @@ function resolveTargets(names, byName, alreadyRemoved) {
   return byPack;
 }
 
+/**
+ * Analyze and return the required changes to the chunk files and index.
+ */
 function chunkChanges(targets, indexData, alreadyRemoved) {
   const byChunk = new Map(); // chunk id -> [name]
   for (const n of targets) {
@@ -315,6 +379,9 @@ function chunkChanges(targets, indexData, alreadyRemoved) {
   return byChunk;
 }
 
+/**
+ * Remove specified presets from a chunk and return the new string content.
+ */
 function removeFromChunk(id, chunkNames, indexData) {
   const arr = indexData.chunks[id];
   if (!arr) throw new Error(`index.js has no chunk ${id}`);
@@ -326,12 +393,17 @@ function removeFromChunk(id, chunkNames, indexData) {
 
   const chunk = readChunk(id);
   for (const n of chunkNames) {
-    if (!(n in chunk.data)) throw new Error(`"${n}" not found as a key in chunk-${String(id).padStart(3, '0')}.js`);
+    if (!(n in chunk.data)) {
+      throw new Error(`"${n}" not found as a key in chunk-${String(id).padStart(CHUNK_PAD_LENGTH, '0')}.js`);
+    }
     delete chunk.data[n];
   }
   return chunk;
 }
 
+/**
+ * Prepare and return all filesystem writes for the presets-extra directory.
+ */
 function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alreadyRemoved) {
   if (!byPack.has('presets-extra')) return;
   const targets = byPack.get('presets-extra');
@@ -347,15 +419,20 @@ function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alrea
   pendingWrites.push({ kind: 'index', data: indexData, prefix: idxPrefix, suffix: idxSuffix });
 }
 
+/**
+ * Remove matching presets from a vendor pack and return the updated count and content.
+ */
 function removeFromVendorPackValidated(pack, targets, alreadyRemoved) {
   const vendorPath = path.join(VENDOR_DIR, `${pack}.min.js`);
-  if (!fs.existsSync(vendorPath)) throw new Error(`unknown pack "${pack}" — no file at ${vendorPath}`);
+  if (!fs.existsSync(vendorPath)) throw new Error(`unknown pack "${pack}". No file at ${vendorPath}`);
   const before = fs.readFileSync(vendorPath, 'utf8');
   const beforeNames = loadVendorPresetNames(before);
   const activeTargets = targets.filter((name) => beforeNames.has(name));
   const missing = targets.filter((name) => !beforeNames.has(name) && !alreadyRemoved.has(name));
   if (missing.length > 0) {
-    throw new Error(`could not locate these presets in ${pack}: ${missing.map((n) => JSON.stringify(n)).join(', ')}`);
+    throw new Error(
+      `missing chunks file for presets-extra/index.js; missing paths: ${Array.from(missing).join(', ')}`
+    );
   }
   if (activeTargets.length === 0) return null;
 
@@ -383,6 +460,9 @@ function removeFromVendorPackValidated(pack, targets, alreadyRemoved) {
   return { vendorPath, newSource, removedCount: activeTargets.length };
 }
 
+/**
+ * Prepare and return all filesystem writes for vendor packs.
+ */
 function prepareVendorWrites(byPack, pendingWrites, summary, alreadyRemoved) {
   for (const [pack, targets] of byPack) {
     if (pack === 'presets-extra') continue;
@@ -394,6 +474,9 @@ function prepareVendorWrites(byPack, pendingWrites, summary, alreadyRemoved) {
   }
 }
 
+/**
+ * Prepare and return the updated preset inventory CSV text.
+ */
 function prepareCsvUpdate(csvLines, names, summary) {
   const removeSet = new Set(names);
   const keptLines = csvLines.filter((line) => {
@@ -411,6 +494,9 @@ function prepareCsvUpdate(csvLines, names, summary) {
   return keptLines;
 }
 
+/**
+ * Print a summary of the pending removal operations.
+ */
 function logSummary(prefix, names, summary) {
   console.log(`${prefix} ${names.length} presets:`);
   console.log(`  presets-extra: ${summary.presetsExtra}`);
@@ -418,6 +504,9 @@ function logSummary(prefix, names, summary) {
   console.log(`  preset-inventory.csv rows: ${summary.csv}`);
 }
 
+/**
+ * Execute all prepared filesystem writes.
+ */
 function writeAll(pendingWrites, keptLines) {
   for (const w of pendingWrites) {
     if (w.kind === 'index') writeIndex(w);
@@ -427,14 +516,20 @@ function writeAll(pendingWrites, keptLines) {
   atomicWrite(CSV_PATH, keptLines.join('\n'));
 }
 
-// --- removed-presets.csv (durable ledger of everything ever curated out) ---
+// --- removed-presets.csv (durable ledger of all curated-out presets) ---
 
+/**
+ * Escape a string for safe inclusion in a CSV file.
+ */
 function escCsv(s) {
   return /[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : s;
 }
 
+/**
+ * Append records for removed presets to the durable ledger CSV.
+ */
 function appendRemovedPresetsCsv(names, byName, indexData) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, DATE_LENGTH);
   const rows = names.filter((n) => byName.has(n)).map((n) => {
     const { pack, chunk: inventoryChunk } = byName.get(n);
     const indexChunk = indexData.chunks.findIndex((chunkNames) => chunkNames.includes(n));
@@ -460,17 +555,18 @@ function appendRemovedPresetsCsv(names, byName, indexData) {
   if (newRows.length > 0) atomicWrite(REMOVED_CSV_PATH, existing + newRows.join(newline) + newline);
 }
 
+/**
+ * Read and return a set of all previously removed preset names.
+ */
 function loadRemovedNames() {
   if (!fs.existsSync(REMOVED_CSV_PATH)) return new Set();
   return new Set(fs.readFileSync(REMOVED_CSV_PATH, 'utf8').split(/\r?\n/)
     .map(parseCsvLine).filter(Boolean).map((row) => row.name));
 }
 
-// Consistency check: verify each file dropped by exactly the expected amount
-// relative to its own pre-run count (index.js and preset-inventory.csv report
-// different populations — the CSV reflects the runtime-deduplicated view, ~67
-// presets-extra names are shadowed by an identical vendored-pack name and
-// never appear in it at all — so compare deltas, not the two files' raw counts).
+/**
+ * Verify consistency between the index and the target records.
+ */
 function verifyConsistency(indexCountBefore, csvRowCountBefore, summary) {
   const indexCountAfter = countIndexNames(readIndex().data);
   const csvRowCountAfter = fs.readFileSync(CSV_PATH, 'utf8').split('\n').filter((l) => l.length > 0).length;
@@ -481,10 +577,13 @@ function verifyConsistency(indexCountBefore, csvRowCountBefore, summary) {
       `preset-inventory.csv rows -${csvDelta} (expected -${summary.csv}).`,
   );
   if (indexDelta !== summary.presetsExtra || csvDelta !== summary.csv) {
-    console.warn('WARNING: deltas do not match expectations — investigate before committing.');
+    console.warn('WARNING: deltas do not match expectations. Investigate before committing.');
   }
 }
 
+/**
+ * Manage the removal of presets from the repository.
+ */
 function main() {
   const { names, dryRun } = parseAndValidateNames();
 
@@ -506,17 +605,16 @@ function main() {
   const keptLines = prepareCsvUpdate(csvLines, csvTargets, summary);
 
   if (dryRun) {
-    console.log('Dry run — no files written.');
+    console.log('Dry run. No files written.');
     logSummary('Would remove', names, summary);
     return;
   }
 
-  // Record the ledger entry before the (larger, multi-file) destructive
-  // writes below, not after: if those fail partway through, the ledger
-  // having already recorded these names is the fail-safe direction (a
-  // future fetch won't resurrect them) versus the reverse order, where a
-  // failure after removal but before the ledger write could let a name
-  // slip back in.
+  // Record the ledger entry before the larger, multi-file destructive
+  // writes below, not after. If those fail partway through, the ledger
+  // having already recorded these names is the fail-safe direction. A
+  // future fetch won't resurrect them. The reverse order could let a name
+  // slip back in upon failure.
   appendRemovedPresetsCsv(names, byName, initialIndex);
   writeAll(pendingWrites, keptLines);
   logSummary('Removed', names, summary);

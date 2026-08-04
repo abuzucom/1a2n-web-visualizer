@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Import supplied NestDrop MilkDrop archives as experimental presets.
 
-Only .milk files and files under a top-level Textures/ directory are read from
-the supplied ZIPs. The importer never executes or extracts unrelated archive
-members. DDS-dependent presets are skipped because browsers cannot load DDS
-textures through the image bundle. Duplicate basenames receive deterministic
-``[variant N]`` suffixes when their converted content differs; identical
-converted content is retained once. Experimental runtime names receive the
-reserved ``[EXP] `` prefix.
+Read only .milk files and files under a top-level Textures/ directory from
+the supplied ZIPs. Never execute or extract unrelated archive
+members. Skip DDS-dependent presets because browsers cannot load DDS
+textures through the image bundle. Append deterministic ``[variant N]``
+suffixes to duplicate basenames when their converted content differs.
+Retain identical converted content once. Prefix experimental runtime names
+with the reserved ``[EXP] `` string.
 
 Usage:
     python3 tools/import-nestdrop-presets.py --zip PACK.zip --dry-run
@@ -63,6 +63,7 @@ EXISTING_TEXTURE_NAMES = {
 
 
 def read_csv_names(path):
+    """Read and return a set of preset names from the provided CSV file."""
     if not path.exists():
         return set()
     with path.open(newline="", encoding="utf-8") as handle:
@@ -70,6 +71,7 @@ def read_csv_names(path):
 
 
 def read_index():
+    """Read and return the index data and file list from index.js."""
     text = INDEX_PATH.read_text(encoding="utf-8").strip()
     if not text.startswith(INDEX_PREFIX) or not text.endswith(";"):
         raise ValueError(f"unexpected index wrapper in {INDEX_PATH}")
@@ -83,6 +85,7 @@ def read_index():
 
 
 def read_chunk(cid, filename):
+    """Read and return the presets from the specified experimental chunk file."""
     path = OUT_DIR / filename
     text = path.read_text(encoding="utf-8").strip()
     prefix = f"window.__bcPresetChunk({cid},"
@@ -92,7 +95,7 @@ def read_chunk(cid, filename):
 
 
 def normalize_equation_fields(preset):
-    """Keep optional equation fields defined for Butterchurn's compiler."""
+    """Ensure optional equation fields are defined for Butterchurn's compiler."""
     changed = False
     for field in ("init_eqs_str", "frame_eqs_str", "pixel_eqs_str"):
         if field not in preset:
@@ -128,6 +131,7 @@ def normalize_experimental_chunks(data, files):
 
 
 def canonicalize(value):
+    """Return a normalized copy of the preset dictionary for exact comparison."""
     if isinstance(value, dict):
         return {key: canonicalize(value[key]) for key in sorted(value)}
     if isinstance(value, list):
@@ -140,6 +144,7 @@ def canonicalize(value):
 
 
 def preset_hash(preset):
+    """Return the SHA-256 digest of the canonicalized preset."""
     payload = json.dumps(
         canonicalize(preset), ensure_ascii=False, sort_keys=True,
         separators=(",", ":"), allow_nan=False,
@@ -148,6 +153,7 @@ def preset_hash(preset):
 
 
 def build_mainline_hashes(data, files):
+    """Compute and return the set of SHA-256 hashes for all mainline presets."""
     by_hash = {}
     by_name = {}
     for cid, names in enumerate(data["chunks"]):
@@ -162,18 +168,17 @@ def build_mainline_hashes(data, files):
 
 
 def safe_member_path(root, member_name):
+    """Return a safe destination path for a ZIP archive member."""
     normalized = member_name.replace("\\", "/")
     member_path = PurePosixPath(normalized)
     parts = member_path.parts
     if not parts or member_path.is_absolute() or parts[0] in ("", ".") or ".." in parts:
         raise ValueError(f"unsafe ZIP member path: {member_name}")
-    destination = root.joinpath(*parts)
-    if root not in destination.parents:
-        raise ValueError(f"ZIP member escaped extraction root: {member_name}")
-    return destination
+    return root.joinpath(*parts)
 
 
-def extract_source(zip_path, destination, offset=0, max_milk=None):  # noqa: C901
+def extract_source(zip_path, destination, offset=0, max_milk=None):  # noqa: C901, PLR0912, PLR0915
+    """Extract authorized preset files from the ZIP archive and return their paths."""
     milk_count = 0
     skipped_milk = 0
     texture_files = []
@@ -200,7 +205,7 @@ def extract_source(zip_path, destination, offset=0, max_milk=None):  # noqa: C90
             if info.file_size > MAX_MEMBER_BYTES:
                 raise ValueError(f"ZIP member exceeds {MAX_MEMBER_BYTES} byte limit: {info.filename}")
             mode = (info.external_attr >> 16) & 0o170000
-            if mode == 0o120000:
+            if mode == 0o120000:  # noqa: PLR2004
                 raise ValueError(f"ZIP symlink is not allowed: {info.filename}")
             lower = info.filename.replace("\\", "/").lower()
             is_milk = lower.endswith(".milk")
@@ -248,6 +253,7 @@ def extract_source(zip_path, destination, offset=0, max_milk=None):  # noqa: C90
 
 
 def run_converter(source_root, output_path):
+    """Run the Node.js MilkDrop to JSON converter on the provided directory."""
     with output_path.open("wb") as output:
         subprocess.run(
             ["node", str(CONVERTER), "--dir", str(source_root)],
@@ -257,6 +263,7 @@ def run_converter(source_root, output_path):
 
 
 def image_dimensions(data, suffix):
+    """Read and return the width and height of an image file."""
     if suffix in {".png"} and data[:8] == b"\x89PNG\r\n\x1a\n":
         return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
     if suffix in {".gif"} and data[:6] in (b"GIF87a", b"GIF89a"):
@@ -266,15 +273,13 @@ def image_dimensions(data, suffix):
     if suffix in {".jpg", ".jpeg"} and data[:2] == b"\xff\xd8":
         pos = 2
         while pos + 9 < len(data):
-            if data[pos] != 0xFF:
+            if data[pos] != 0xFF:  # noqa: PLR2004
                 pos += 1
                 continue
             marker = data[pos + 1]
             pos += 2
             if marker in (0xD8, 0xD9):
                 continue
-            if pos + 2 > len(data):
-                break
             length = int.from_bytes(data[pos:pos + 2], "big")
             is_frame_marker = (
                 marker in range(0xC0, 0xC4)
@@ -289,6 +294,7 @@ def image_dimensions(data, suffix):
 
 
 def texture_names(preset):
+    """Return a set of texture filenames referenced in the given preset."""
     refs = set()
     for field in ("warp", "comp"):
         shader = preset.get(field, "")
@@ -299,6 +305,7 @@ def texture_names(preset):
 
 
 def build_texture_bundle(texture_files):
+    """Pack and write authorized textures into a JSON payload."""
     images = {}
     records = []
     unavailable = []
@@ -329,11 +336,7 @@ def build_texture_bundle(texture_files):
 
 
 def write_texture_bundle(images, records):
-    """Write the lazy-loaded texture part files and the texture manifest.
-
-    Delegates the part layout to tools/split-extra-images.py so the part
-    format has exactly one implementation shared with re-splitting runs.
-    """
+    """Write the lazy-loaded texture part files and the texture manifest."""
     splitter = load_texture_splitter()
     splitter.write_parts(images, dry_run=False)
     atomic_write_text(TEXTURE_MANIFEST_PATH, json.dumps(records, indent=2) + "\n")
@@ -349,8 +352,9 @@ def load_texture_splitter():
 
 
 def csv_escape(value):
+    """Escape a string for safe inclusion in a CSV file."""
     text = str(value)
-    return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(c in text for c in '",\n') else text
+    return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(csv_char in text for csv_char in '",\n') else text
 
 
 def atomic_write_text(path, text):
@@ -366,7 +370,8 @@ def atomic_write_text(path, text):
         Path(temporary.name).unlink(missing_ok=True)
 
 
-def main():  # noqa: C901
+def main():  # noqa: C901, PLR0912, PLR0915
+    """Import and normalize NestDrop presets into the experimental collection."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--zip", action="append", help="local source ZIP; repeat for multiple archives")
     parser.add_argument("--dry-run", action="store_true")

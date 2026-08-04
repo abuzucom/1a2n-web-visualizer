@@ -5,8 +5,8 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync('src/js/visualizer-core.js', 'utf8');
 
-// Mimic the vendored bundle's equation compilation: a SPACE before
-// "return a;", so unterminated final statements throw at load time.
+// Mimic the vendored bundle's equation compilation. Use a SPACE before
+// "return a;" so unterminated final statements throw at load time.
 function compileEquation(equationSource) {
   if (typeof equationSource !== 'string') return;
   new Function('a', ''.concat(equationSource, ' return a;'));
@@ -74,8 +74,8 @@ function createHarness(presets, initialWebglErrors) {
   window.butterchurn = {
     createVisualizer: function () {
       return {
-        // Like the real bundle: compile equations, link shaders without
-        // checking LINK_STATUS (the preset doubles as the program handle).
+        // Act like the real bundle. Compile equations and link shaders without
+        // checking LINK_STATUS. The preset doubles as the program handle.
         loadPreset: function (preset) {
           compilePresetEquations(preset);
           webgl.linkProgram(preset);

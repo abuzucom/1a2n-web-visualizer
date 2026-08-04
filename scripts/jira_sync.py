@@ -24,15 +24,17 @@ EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 ISSUE_KEY_RE = re.compile(rf"\b{re.escape(PROJECT_KEY)}-\d+\b", re.IGNORECASE)
 
 
-def adf_text(text: str) -> dict[str, Any]:
+def adf_text(content: str) -> dict[str, Any]:
+    """Return an Atlassian Document Format (ADF) paragraph containing the text."""
     return {
         "type": "doc",
         "version": 1,
-        "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": content}]}],
     }
 
 
 def jira_request(method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
+    """Make an authenticated request to the Jira API."""
     credentials = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_API_TOKEN}".encode()).decode()
     body = None if payload is None else json.dumps(payload).encode()
     request = urllib.request.Request(
@@ -54,6 +56,7 @@ def jira_request(method: str, path: str, payload: dict[str, Any] | None = None) 
 
 
 def github_request(path: str) -> Any:
+    """Make an authenticated request to the GitHub API."""
     request = urllib.request.Request(
         f"https://api.github.com{path}",
         headers={
@@ -67,6 +70,7 @@ def github_request(path: str) -> Any:
 
 
 def load_event() -> dict[str, Any]:
+    """Read and return the GitHub event payload."""
     if not EVENT_PATH:
         raise RuntimeError("GITHUB_EVENT_PATH is not set")
     with open(EVENT_PATH, encoding="utf-8") as event_file:
@@ -74,20 +78,23 @@ def load_event() -> dict[str, Any]:
 
 
 def issue_keys(values: list[str]) -> set[str]:
+    """Extract and return Jira issue keys from the provided list of text strings."""
     return {match.upper() for value in values for match in ISSUE_KEY_RE.findall(value or "")}
 
 
-def plain_text(value: Any) -> str:
-    if isinstance(value, dict):
-        return " ".join(plain_text(item) for item in value.values())
-    if isinstance(value, list):
-        return " ".join(plain_text(item) for item in value)
-    return str(value) if isinstance(value, str) else ""
+def plain_text(adf_body: dict[str, Any]) -> str:
+    """Extract and return plain text from an Atlassian Document Format body."""
+    if isinstance(adf_body, dict):
+        return " ".join(plain_text(item) for item in adf_body.values())
+    if isinstance(adf_body, list):
+        return " ".join(plain_text(item) for item in adf_body)
+    return str(adf_body) if isinstance(adf_body, str) else ""
 
 
-def add_remote_link(issue_key: str, pr_url: str, title: str) -> None:
+def add_remote_link(issue_key: str, title: str, url: str) -> None:
+    """Add a remote web link to the specified Jira issue."""
     links = jira_request("GET", f"/rest/api/3/issue/{issue_key}/remotelink") or []
-    global_id = f"github-pr:{pr_url}"
+    global_id = f"github-pr:{url}"
     if any(link.get("globalId") == global_id for link in links):
         return
     jira_request(
@@ -95,21 +102,22 @@ def add_remote_link(issue_key: str, pr_url: str, title: str) -> None:
         f"/rest/api/3/issue/{issue_key}/remotelink",
         {
             "globalId": global_id,
-            "object": {"url": pr_url, "title": title},
+            "object": {"url": url, "title": title},
         },
     )
 
 
-def add_comment(issue_key: str, marker: str, text: str) -> None:
+def add_comment(issue_key: str, marker: str, message: str) -> None:
+    """Append a comment to the specified Jira issue if the marker is not already present."""
     comments = jira_request("GET", f"/rest/api/3/issue/{issue_key}/comment?maxResults=100") or {}
     if marker in plain_text(comments):
         return
-    jira_request("POST", f"/rest/api/3/issue/{issue_key}/comment", {"body": adf_text(f"{marker}\n{text}")})
+    jira_request("POST", f"/rest/api/3/issue/{issue_key}/comment", {"body": adf_text(f"{marker}\n{message}")})
 
 
-def find_existing_pr_issue(pr_url: str) -> str | None:
-    # Keep event data out of JQL. Search the fixed integration label, then
-    # match the GitHub URL in returned descriptions locally.
+def find_existing_pr_issue(pull_request: dict[str, Any]) -> str | None:
+    """Find and return the Jira issue key associated with the given pull request, or None."""
+    pr_url = pull_request["html_url"]
     jql = "labels = github-pr"
     query = urllib.parse.urlencode({"jql": jql, "maxResults": 100, "fields": "key,description"})
     result = jira_request("GET", f"/rest/api/3/search/jql?{query}") or {}
@@ -122,9 +130,10 @@ def find_existing_pr_issue(pr_url: str) -> str | None:
     return None
 
 
-def create_issue(pr_url: str, title: str, branch: str) -> str:
-    summary = f"[GitHub PR] {title}"[:255]
-    description = f"Created from GitHub pull request {pr_url}.\nBranch: {branch}"
+def create_issue(pull_request: dict[str, Any]) -> str:
+    """Create a new Jira issue for the pull request and return its key."""
+    summary = f"[GitHub PR] {pull_request.get('title', 'Untitled PR')}"[:255]
+    description = f"Created from GitHub pull request {pull_request['html_url']}.\nBranch: {pull_request['head']['ref']}"
     created = jira_request(
         "POST",
         "/rest/api/3/issue",
@@ -142,30 +151,32 @@ def create_issue(pr_url: str, title: str, branch: str) -> str:
 
 
 def pr_sync(event: dict[str, Any]) -> None:
-    pr = event["pull_request"]
+    """Synchronize a pull request event with Jira."""
+    pull_request = event["pull_request"]
     repository = event["repository"]["full_name"]
-    number = pr["number"]
-    pr_url = pr["html_url"]
+    number = pull_request["number"]
+    pull_request_url = pull_request["html_url"]
     action = event.get("action", "updated")
     commit_messages = []
     if GITHUB_TOKEN:
         commits = github_request(f"/repos/{repository}/pulls/{number}/commits?per_page=100")
         commit_messages = [commit["commit"]["message"] for commit in commits]
-    keys = issue_keys([pr.get("title", ""), pr.get("body", ""), pr["head"]["ref"], *commit_messages])
+    keys = issue_keys([pull_request.get("title", ""), pull_request.get("body", ""), pull_request["head"]["ref"], *commit_messages])
     if not keys:
         if not JIRA_ALLOW_CREATE:
             print(f"No Jira key found for PR #{number}; jira-create label is absent.")
             return
-        existing = find_existing_pr_issue(pr_url)
-        keys = {existing or create_issue(pr_url, pr.get("title", "Untitled PR"), pr["head"]["ref"])}
-    state = "merged" if pr.get("merged") else action
+        existing = find_existing_pull_request_issue(pull_request_url)
+        keys = {existing or create_issue(pull_request_url, pull_request.get("title", "Untitled PR"), pull_request["head"]["ref"])}
+    state = "merged" if pull_request.get("merged") else action
     for key in sorted(keys):
-        add_remote_link(key, pr_url, f"GitHub PR #{number}: {pr.get('title', 'Untitled PR')}")
-        add_comment(key, f"[github-pr:{repository}#{number}:{action}]", f"PR status: {state}\n{pr_url}")
-    print(f"Linked PR #{number} to {', '.join(sorted(keys))}")
+        add_remote_link(key, pull_request_url, f"GitHub PR #{number}: {pull_request.get('title', 'Untitled PR')}")
+        add_comment(key, f"[github-pull_request:{repository}#{number}:{action}]", f"PR status: {state}\n{pull_request_url}")
+    pull_requestint(f"Linked PR #{number} to {', '.join(sorted(keys))}")
 
 
 def deployment_sync(event: dict[str, Any]) -> None:
+    """Synchronize a deployment status event with Jira."""
     commit_message = event.get("head_commit", {}).get("message", "")
     repository = event["repository"]["full_name"]
     sources = [commit_message, event.get("ref", "")]
@@ -204,6 +215,7 @@ def deployment_sync(event: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    """Process the GitHub event and dispatch to the correct sync handler."""
     if not JIRA_EMAIL or not JIRA_API_TOKEN:
         print("Jira secrets are not configured; skipping Jira sync.")
         return 0

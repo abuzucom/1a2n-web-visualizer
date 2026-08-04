@@ -1,8 +1,10 @@
 (function (global) {
   'use strict';
 
+  const DEFAULT_HISTORY_LIMIT = 20;
+
   function createHistory(limit) {
-    const maxEntries = limit > 0 ? limit : 20;
+    const maxEntries = limit > 0 ? limit : DEFAULT_HISTORY_LIMIT;
     let currentIndex = null;
     let pendingRestore = null;
     const entries = [];

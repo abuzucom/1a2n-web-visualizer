@@ -16,10 +16,14 @@
     setStatus('Audio device error: ' + error.message);
   }
 
+  const DEFAULT_CYCLE_SECS = 20;
+  const FILTER_DEBOUNCE_MS = 150;
+  const RADIX_DECIMAL = 10;
+
   const viz = BCViz.create(canvas, {
     onToast: setStatus,
     onPreset: function (i) { presetEl.value = i; },
-    cycleSecs: parseInt(secsEl.value, 10) || 20,
+    cycleSecs: parseInt(secsEl.value, RADIX_DECIMAL) || DEFAULT_CYCLE_SECS,
     cycleOn: cycleEl.checked
   });
 
@@ -53,7 +57,7 @@
   let filterTimer = null;
   filterEl.addEventListener('input', function () {
     clearTimeout(filterTimer);
-    filterTimer = setTimeout(rebuildPresetList, 150);
+    filterTimer = setTimeout(rebuildPresetList, FILTER_DEBOUNCE_MS);
   });
 
   function refreshDeviceList() {
@@ -86,7 +90,7 @@
   document.getElementById('nextBtn').addEventListener('click', function () { viz.next(); });
   document.getElementById('prevBtn').addEventListener('click', function () { viz.prev(); });
   document.getElementById('randBtn').addEventListener('click', function () { viz.random(); });
-  presetEl.addEventListener('change', function () { viz.goto(parseInt(presetEl.value, 10)); });
+  presetEl.addEventListener('change', function () { viz.goto(parseInt(presetEl.value, RADIX_DECIMAL)); });
   deviceEl.addEventListener('change', function () {
     if (viz.isStarted() && deviceEl.value) {
       viz.useDeviceById(deviceEl.value).catch(reportDeviceError);
@@ -96,7 +100,7 @@
     if (cycleEl.checked !== viz.isCycling()) viz.toggleCycle();
   });
   secsEl.addEventListener('change', function () {
-    secsEl.value = viz.setCycleSecs(parseInt(secsEl.value, 10));
+    secsEl.value = viz.setCycleSecs(parseInt(secsEl.value, RADIX_DECIMAL));
   });
 
   document.addEventListener('keydown', function (e) {

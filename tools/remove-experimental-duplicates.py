@@ -8,6 +8,7 @@ import os
 import tempfile
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "presets-extra"
@@ -21,15 +22,16 @@ EXP_PREFIX = "[EXP] "
 BASELINE_PHYSICAL_LIMIT = 9000
 
 
-def read_index():
-    text = INDEX_PATH.read_text(encoding="utf-8").strip()
+def read_index(path: Path) -> tuple[dict[str, Any], list[str]]:
+    """Read and return the experimental presets index mapping."""
+    text = path.read_text(encoding="utf-8").strip()
     data = json.loads(text[len(INDEX_PREFIX):-1])
     files = data.get("files") or [f"chunk-{cid:03d}.js" for cid in range(len(data["chunks"]))]
     return data, files
 
 
-def read_chunk(cid, filename):
-    path = OUT_DIR / filename
+def read_chunk(path: Path, cid: int) -> tuple[Path, str, dict[str, Any]]:
+    """Read and return the presets from the specified experimental chunk file."""
     text = path.read_text(encoding="utf-8").strip()
     prefix = f"window.__bcPresetChunk({cid},"
     if not text.startswith(prefix) or not text.endswith(");"):
@@ -37,9 +39,11 @@ def read_chunk(cid, filename):
     return path, prefix, json.loads(text[len(prefix):-2])
 
 
-def csv_escape(value):
-    text = str(value)
-    return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(c in text for c in '",\n') else text
+def csv_escape(string_val: str) -> str:
+    """Escape a string for safe inclusion in a CSV file."""
+    if any(csv_char in string_val for csv_char in '",\n'):
+        return f'"{string_val.replace(chr(34), chr(34) * 2)}"'
+    return string_val
 
 
 def atomic_write_text(path, text):
@@ -55,7 +59,9 @@ def atomic_write_text(path, text):
         Path(temporary.name).unlink(missing_ok=True)
 
 
-def main():  # noqa: C901
+def main() -> int:
+    # ruff: noqa: C901, PLR0912, PLR0915
+    """Analyze and remove duplicate presets from the experimental collection."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decisions", required=True, help="JSON report or list of approved experimental names")
     parser.add_argument("--dry-run", action="store_true")
