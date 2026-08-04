@@ -178,7 +178,7 @@ def pr_sync(event: dict[str, Any]) -> None:
         add_remote_link(key, f"GitHub PR #{number}: {pull_request.get('title', 'Untitled PR')}", pull_request_url)
         add_comment(
             key,
-            f"[github-pull_request:{repository}#{number}:{action}]",
+            f"[github-pr:{repository}#{number}:{action}]",
             f"PR status: {state}\n{pull_request_url}",
         )
     print(f"Linked PR #{number} to {', '.join(sorted(keys))}")
