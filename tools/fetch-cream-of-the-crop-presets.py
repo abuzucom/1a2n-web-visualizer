@@ -263,7 +263,7 @@ def append_inventory_rows(kept: dict[str, Any], start_chunk_id: int) -> None:
         f.write("\n".join(rows) + "\n")
 
 
-def main() -> int:
+def main() -> None:
     """Fetch, convert, and integrate the Cream of the Crop presets."""
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")

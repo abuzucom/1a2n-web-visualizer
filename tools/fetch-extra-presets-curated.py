@@ -75,7 +75,7 @@ def load_removed_names(csv_path):
         return {row["name"] for row in csv.DictReader(f)}
 
 
-def main() -> int:
+def main() -> None:
     """Fetch and organize curated experimental presets into the presets-extra directory."""
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")

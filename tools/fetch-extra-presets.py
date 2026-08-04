@@ -186,7 +186,7 @@ def write_output(kept, out_dir):
     return chunks, total_bytes
 
 
-def main() -> int:
+def main() -> None:
     """Fetch, convert, and organize experimental presets into chunked JSON files."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")

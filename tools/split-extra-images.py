@@ -167,7 +167,7 @@ def write_parts(images: dict, dry_run: bool) -> None:
             os.remove(BUNDLE)
 
 
-def main() -> int:
+def main() -> None:
     """Repackage experimental textures into optimized, chunked JSON payloads."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true")
