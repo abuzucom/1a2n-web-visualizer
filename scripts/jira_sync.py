@@ -57,13 +57,15 @@ def jira_request(method: str, path: str, payload: dict[str, Any] | None = None) 
 
 def github_request(path: str) -> Any:
     """Make an authenticated request to the GitHub API."""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     request = urllib.request.Request(
         f"https://api.github.com{path}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {GITHUB_TOKEN}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read())
