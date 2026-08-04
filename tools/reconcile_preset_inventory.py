@@ -47,6 +47,7 @@ def format_rows(rows: list) -> str:
 
 
 def main() -> None:
+    """Reconcile the preset inventory CSV with the actual preset chunks on disk."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -55,9 +56,9 @@ def main() -> None:
     rows = list(csv.reader(CSV_PATH.open(encoding="utf-8")))
     header, body = rows[0], rows[1:]
 
-    kept = [r for r in body if r[1] != PACK or r[0] in live]
+    kept = [row for row in body if row[1] != PACK or row[0] in live]
     dropped = len(body) - len(kept)
-    inventoried = {r[0] for r in kept if r[1] == PACK}
+    inventoried = {row[0] for row in kept if row[1] == PACK}
     missing = sorted(name for name in live if name not in inventoried)
     appended = [[name, PACK, str(live[name])] for name in missing]
 

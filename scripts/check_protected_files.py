@@ -12,6 +12,7 @@ from typing import Any
 
 CODE_OWNER = "itsjustatank"
 MAX_FILE_PAGES = 50
+MAX_FILE_PAGE_SIZE = 100
 AGENT_FILES = {
     "AGENTS.md", "CLAUDE.md", "GEMINI.md", "CONVENTIONS.md",
     ".cursorrules", ".clinerules", ".windsurfrules",
@@ -31,6 +32,7 @@ PROTECTED_FILES = {
 
 
 def is_protected(path: str) -> bool:
+    """Return True if the filepath requires owner review."""
     normalized = path.replace("\\", "/")
     name = PurePosixPath(normalized).name
     if name in AGENT_FILES:
@@ -41,6 +43,7 @@ def is_protected(path: str) -> bool:
 
 
 def github_get(path: str) -> Any:
+    """Fetch and return JSON from the GitHub API."""
     token = os.environ["GITHUB_TOKEN"]
     request = urllib.request.Request(
         f"https://api.github.com{path}",
@@ -55,27 +58,30 @@ def github_get(path: str) -> Any:
 
 
 def load_event() -> dict[str, Any]:
+    """Read and return the GitHub event payload."""
     with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
         return json.load(event_file)
 
 
 def changed_files(event: dict[str, Any]) -> list[str]:
+    """Return a list of filenames modified in the pull request."""
     repository = event["repository"]["full_name"]
     number = event["pull_request"]["number"]
     files = []
     for page in range(1, MAX_FILE_PAGES + 1):
-        batch = github_get(f"/repos/{repository}/pulls/{number}/files?per_page=100&page={page}")
+        batch = github_get(f"/repos/{repository}/pulls/{number}/files?per_page={MAX_FILE_PAGE_SIZE}&page={page}")
         files.extend(item["filename"] for item in batch)
-        if len(batch) < 100:
+        if len(batch) < MAX_FILE_PAGE_SIZE:
             return files
-    raise RuntimeError(f"pull request file list exceeded {MAX_FILE_PAGES * 100} files")
+    raise RuntimeError(f"pull request file list exceeded {MAX_FILE_PAGES * MAX_FILE_PAGE_SIZE} files")
 
 
 def current_owner_approval(event: dict[str, Any]) -> bool:
+    """Return True if an owner has approved the pull request."""
     repository = event["repository"]["full_name"]
     number = event["pull_request"]["number"]
     head_sha = event["pull_request"]["head"]["sha"]
-    reviews = github_get(f"/repos/{repository}/pulls/{number}/reviews?per_page=100")
+    reviews = github_get(f"/repos/{repository}/pulls/{number}/reviews?per_page={MAX_FILE_PAGE_SIZE}")
     return any(
         review.get("user", {}).get("login", "").lower() == CODE_OWNER.lower()
         and review.get("state") == "APPROVED"
@@ -85,6 +91,7 @@ def current_owner_approval(event: dict[str, Any]) -> bool:
 
 
 def requires_owner_approval(event: dict[str, Any]) -> bool:
+    """Return True if the author requires owner approval."""
     pull_request = event.get("pull_request")
     user = pull_request.get("user") if isinstance(pull_request, dict) else None
     author = user.get("login", "") if isinstance(user, dict) else ""
@@ -94,6 +101,7 @@ def requires_owner_approval(event: dict[str, Any]) -> bool:
 
 
 def main() -> int:
+    """Enforce owner approval for pull requests modifying protected files."""
     event = load_event()
     protected = sorted(path for path in changed_files(event) if is_protected(path))
     if not protected:

@@ -61,7 +61,7 @@
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
-const os = require('os');
+const osModule = require('os');
 const path = require('path');
 const utils = require('milkdrop-preset-utils');
 const eel = require('milkdrop-eel-parser');
@@ -69,12 +69,15 @@ const acorn = require('acorn');
 
 const SHADER_WORKER = path.join(__dirname, 'convert-shader-worker.js');
 const SHADER_TIMEOUT_MS = 8000;
+const LOG_INTERVAL = 200;
+const ARGS_START = 2;
+const JSON_INDENT = 2;
 
 /** Runs convert-shader-worker.js on one HLSL shader body with a hard timeout. */
 function convertShader(shaderBody) {
   if (!shaderBody || !shaderBody.trim()) return { ok: true, glsl: '' };
 
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shader-conv-'));
+  const dir = fs.mkdtempSync(path.join(osModule.tmpdir(), 'shader-conv-'));
   const inputPath = path.join(dir, 'shader.txt');
   fs.writeFileSync(inputPath, shaderBody);
   try {
@@ -141,7 +144,8 @@ function convertWaveOrShape(item, kind, index, presetVersion) {
       result.point_eqs_str = converted.perPixelEQs.trim();
     }
     return result;
-  } catch {
+  } catch (error) {
+    console.warn(`warning: custom equation conversion failed, falling back to baseVals: ${error.message}`);
     // Conversion of this item's custom equations failed -- fall back to
     // just its baseVals rather than dropping the whole preset.
     return { baseVals };
@@ -229,6 +233,9 @@ function findMilkFiles(dir) {
   return out;
 }
 
+/**
+ * Distribute conversion tasks across worker processes and return a promise array.
+ */
 function runBatch(rootDir) {
   const files = findMilkFiles(rootDir);
   const results = {};
@@ -238,7 +245,7 @@ function runBatch(rootDir) {
 
   files.forEach((filePath, i) => {
     const name = path.basename(filePath, path.extname(filePath));
-    if (i % 200 === 0) console.error(`converting ${i}/${files.length}...`);
+    if (i % LOG_INTERVAL === 0) console.error(`converting ${i}/${files.length}...`);
     if (Object.prototype.hasOwnProperty.call(results, name)) {
       // The name is the sole identity key everywhere downstream (index.js,
       // chunk files, preset-inventory.csv) -- keep the first occurrence
@@ -265,8 +272,11 @@ function runBatch(rootDir) {
   console.log(JSON.stringify(results));
 }
 
-function main() {
-  const args = process.argv.slice(2);
+/**
+ * Prepare paths and start the conversion pipeline for presets.
+ */
+async function main() {
+  const args = process.argv.slice(ARGS_START);
   if (args[0] === '--dir') {
     if (!args[1]) {
       console.error('Usage: node convert-milk-presets.js --dir <path/to/milk/files>');
@@ -285,7 +295,7 @@ function main() {
   const text = fs.readFileSync(inputPath, 'utf8');
   const { preset, warnings } = convertMilkText(text);
   if (warnings.length) console.error('warnings:', warnings.join('; '));
-  console.log(JSON.stringify(preset, null, 2));
+  console.log(JSON.stringify(preset, null, JSON_INDENT));
 }
 
 module.exports = { convertMilkText, validatePresetEquations };

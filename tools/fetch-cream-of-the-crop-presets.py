@@ -47,6 +47,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 from zipfile import ZipFile
+from typing import Any
 
 # Pinned to the master HEAD commit as of this script's authoring. Re-verify
 # and update both values (see the sha256 mismatch message below) before
@@ -82,7 +83,8 @@ SAMPLER_RE = re.compile(r"\bsampler_([A-Za-z0-9_]+)")
 WRAP_FILTER_PREFIX_RE = re.compile(r"^(?:fw|fc|pw|pc)_")
 
 
-def referenced_textures(preset):
+def referenced_textures(preset: dict[str, Any]) -> set[str]:
+    """Return a set of texture filenames referenced in the given preset."""
     names = set()
     for field in ("warp", "comp"):
         shader = preset.get(field)
@@ -100,14 +102,16 @@ MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024  # 200 MB -- generous headroom over the
 # compromised upstream, etc.), not real preset data.
 
 
-def _read_capped(resp, max_bytes):
+def _read_capped(resp: Any, max_bytes: int) -> bytes:
+    """Download and return content from a URL response up to a maximum byte limit."""
     data = resp.read(max_bytes + 1)
     if len(data) > max_bytes:
         sys.exit(f"download exceeded the {max_bytes/1e6:.0f} MB safety cap -- aborting")
     return data
 
 
-def get_zip_bytes(zip_arg):
+def get_zip_bytes(zip_arg: str) -> bytes:
+    """Fetch and return the bytes of a ZIP archive from the specified path or URL."""
     if zip_arg:
         data = Path(zip_arg).read_bytes()
         print(f"using local zip: {zip_arg} ({len(data)/1e6:.1f} MB)")
@@ -140,7 +144,8 @@ def get_zip_bytes(zip_arg):
     return data
 
 
-def load_existing_names(csv_path):
+def load_existing_names(csv_path: Path) -> set[str]:
+    """Return a set of all preset names from the provided CSV file."""
     if not csv_path.exists():
         return set()
     with csv_path.open(newline="", encoding="utf-8") as f:
@@ -152,10 +157,11 @@ MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
 def safe_extract(zf, dest):
-    """extractall() with zip-bomb guards: caps total entry count and total
-    uncompressed size before extracting anything. (Path traversal / zip-slip
-    is handled by zipfile itself on modern Python -- extractall normalizes
-    and rejects unsafe member paths.)"""
+    """Extract all files with zip-bomb guards.
+
+    Caps total entry count and total uncompressed size before extracting anything.
+    Path traversal or zip-slip is handled by zipfile itself on modern Python.
+    extractall normalizes and rejects unsafe member paths."""
     infos = zf.infolist()
     if len(infos) > MAX_ZIP_ENTRIES:
         sys.exit(f"zip has {len(infos)} entries, over the {MAX_ZIP_ENTRIES} safety cap -- aborting")
@@ -168,7 +174,8 @@ def safe_extract(zf, dest):
     zf.extractall(dest)
 
 
-def load_next_chunk_id(index_path):
+def load_next_chunk_id(index_path: Path) -> int:
+    """Return the next available sequential chunk ID from the index."""
     if not index_path.exists():
         return 0
     text = index_path.read_text(encoding="utf-8").strip()
@@ -178,13 +185,13 @@ def load_next_chunk_id(index_path):
 
 
 def convert_presets(milk_dir, tmp_dir):
-    """Runs tools/convert-milk-presets.js --dir over milk_dir, returns the
-    {name: preset} dict it printed to stdout (progress/warnings go to
-    stderr, passed through to this process's stderr). Redirects the child's
-    stdout straight to a file rather than buffering it in a subprocess.PIPE,
-    since the full output can run to tens of MB for a large collection --
-    avoids holding two in-memory copies (the pipe buffer and the decoded
-    string) before json.loads even starts."""
+    """Run tools/convert-milk-presets.js --dir over milk_dir.
+
+    Return the {name: preset} dict it printed to stdout. Progress and warnings go to
+    stderr and are passed through to this process's stderr. Redirect the child's
+    stdout straight to a file rather than buffering it in a subprocess.PIPE.
+    The full output can run to tens of MB for a large collection. This
+    avoids holding two in-memory copies before json.loads starts."""
     out_path = tmp_dir / "converted.json"
     with out_path.open("wb") as out_file:
         subprocess.run(
@@ -196,35 +203,33 @@ def convert_presets(milk_dir, tmp_dir):
 
 
 def atomic_write_text(path, text):
-    """Writes text to path via a same-directory temp file + os.replace, so a
-    reader (or a crash) never observes a partially-written file -- the path
-    either has the old content or the new content, never a half-written
-    mix."""
+    """Write text to path via a same-directory temp file and os.replace.
+
+    A reader or a crash never observes a partially-written file. The path
+    either has the old content or the new content, never a half-written mix."""
     tmp = path.with_name(f".{path.name}.tmp{os.getpid()}")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
 
 
 def append_chunks(kept, start_chunk_id):
-    """Appends `kept` (name -> preset) as new chunk-NNN.js files starting at
-    start_chunk_id, and extends index.js's chunks array to match. Returns
+    """Append `kept` as new chunk-NNN.js files starting at start_chunk_id.
+
+    Extend the index.js chunks array to match. Return a tuple of
     (new_chunk_id_to_names, total_bytes_written).
 
-    Chunk files are written (atomically) before index.js is updated to
-    reference them, so a crash mid-way leaves at worst harmless orphaned
-    chunk files that nothing points to yet -- never an index.js that
-    references a chunk that doesn't fully exist."""
+    Write chunk files atomically before index.js is updated to
+    reference them. A crash mid-way leaves at worst harmless orphaned
+    chunk files. It never leaves an index.js referencing an incomplete chunk."""
     names = sorted(kept)
     new_chunks = [names[i:i + PRESETS_PER_CHUNK] for i in range(0, len(names), PRESETS_PER_CHUNK)]
 
     total_bytes = 0
     for offset, chunk_names in enumerate(new_chunks):
-        cid = start_chunk_id + offset
-        payload = json.dumps(
-            {n: kept[n] for n in chunk_names}, separators=(",", ":"), sort_keys=True,
-        )
-        text = f"window.__bcPresetChunk({cid},{payload});\n"
-        path = OUT_DIR / f"chunk-{cid:03d}.js"
+        chunk_id = start_chunk_id + offset
+        chunk = {name: kept[name] for name in chunk_names}
+        text = f"window.__bcPresetChunk({chunk_id},{json.dumps(chunk, separators=(',', ':'))});\n"
+        path = OUT_DIR / f"chunk-{chunk_id:03d}.js"
         atomic_write_text(path, text)
         total_bytes += path.stat().st_size
 
@@ -237,16 +242,18 @@ def append_chunks(kept, start_chunk_id):
     return new_chunks, total_bytes
 
 
-def append_inventory_rows(kept, start_chunk_id):
-    def esc(s):
-        return f'"{s.replace(chr(34), chr(34)*2)}"' if re.search(r'[",\n]', str(s)) else s
+def append_inventory_rows(kept: dict[str, Any], start_chunk_id: int) -> None:
+    """Append the provided preset records to the inventory file."""
+    def esc(string_val: str) -> str:
+        """Escape a string for safe inclusion in a CSV file."""
+        return f'"{string_val.replace(chr(34), chr(34)*2)}"' if re.search(r'[",\n]', str(string_val)) else string_val
 
     names = sorted(kept)
     rows = []
     for offset in range(0, len(names), PRESETS_PER_CHUNK):
-        cid = start_chunk_id + offset // PRESETS_PER_CHUNK
+        chunk_id = start_chunk_id + offset // PRESETS_PER_CHUNK
         for name in names[offset:offset + PRESETS_PER_CHUNK]:
-            rows.append(f"{esc(name)},presets-extra,{cid}")
+            rows.append(f"{esc(name)},presets-extra,{chunk_id}")
 
     existing = CSV_PATH.read_bytes()
     needs_leading_newline = existing and not existing.endswith(b"\n")
@@ -256,7 +263,8 @@ def append_inventory_rows(kept, start_chunk_id):
         f.write("\n".join(rows) + "\n")
 
 
-def main():
+def main() -> None:
+    """Fetch, convert, and integrate the Cream of the Crop presets."""
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")
     parser.add_argument("--dry-run", action="store_true",
@@ -267,6 +275,7 @@ def main():
     allowed.update(json.loads(IMAGE_NAMES_FILE.read_text()))
 
     existing = load_existing_names(CSV_PATH)
+    lower_existing = {name.lower() for name in existing}
     removed = load_existing_names(REMOVED_CSV_PATH)
 
     zip_bytes = get_zip_bytes(args.zip)
@@ -283,18 +292,18 @@ def main():
 
     print(f"converted: {len(converted)}")
 
-    already_present = {n for n in converted if n in existing}
-    already_removed = {n for n in converted if n in removed}
+    already_present = {name for name in converted if name in existing}
+    already_removed = {name for name in converted if name in removed}
     excluded_texture = {}
     kept = {}
-    for name, preset in converted.items():
-        if name in existing or name in removed:
+    for preset_name, preset in converted.items():
+        if preset_name.lower() in lower_existing or preset_name in removed:
             continue
         missing = referenced_textures(preset) - allowed
         if missing:
-            excluded_texture[name] = sorted(missing)
+            excluded_texture[preset_name] = sorted(missing)
             continue
-        kept[name] = preset
+        kept[preset_name] = preset
 
     print(f"already in preset-inventory.csv: {len(already_present)}")
     print(f"already in removed-presets.csv ledger: {len(already_removed)}")

@@ -6,7 +6,10 @@ const path = require('path');
 const { validatePresetEquations } = require('./convert-milk-presets');
 
 const root = path.join(__dirname, '..');
-const outputPath = process.argv[2] || path.join(root, 'experimental-invalid-equations.json');
+const ARGS_OUTPUT = 2;
+const SUFFIX_LENGTH = -2;
+const JSON_INDENT = 2;
+const outputPath = process.argv[ARGS_OUTPUT] || path.join(root, 'experimental-invalid-equations.json');
 const indexPath = path.join(root, 'src', 'presets-extra', 'index.js');
 const indexText = fs.readFileSync(indexPath, 'utf8').trim();
 const index = JSON.parse(indexText.slice('window.BCExtraPresetIndex='.length, -1));
@@ -21,7 +24,7 @@ for (let cid = 0; cid < index.chunks.length; cid += 1) {
   if (!text.startsWith(prefix) || !text.endsWith(');')) {
     throw new Error(`invalid chunk wrapper: ${chunkPath}`);
   }
-  const chunk = JSON.parse(text.slice(prefix.length, -2));
+  const chunk = JSON.parse(text.slice(prefix.length, SUFFIX_LENGTH));
   for (const [name, preset] of Object.entries(chunk)) {
     try {
       validatePresetEquations(preset);
@@ -37,5 +40,5 @@ for (let cid = 0; cid < index.chunks.length; cid += 1) {
   }
 }
 
-fs.writeFileSync(outputPath, `${JSON.stringify({ presets: invalid }, null, 2)}\n`);
+fs.writeFileSync(outputPath, `${JSON.stringify({ presets: invalid }, null, JSON_INDENT)}\n`);
 console.log(`invalid experimental presets: ${invalid.length}`);

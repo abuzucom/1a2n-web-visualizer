@@ -62,6 +62,9 @@ All notable changes to this project are documented here. Format loosely follows
   presets workflow, for building a setlist during a live performance.
 
 ### Fixed
+- Fixed an errant double `try-catch` block inside `tools/convert-milk-presets.js` and ensured exceptions are properly logged or handled instead of swallowed.
+- Prevented potential zero-division crashes and eliminated slow/backtracking regular expressions during the preset parsing processes.
+- Eliminated unreachable dead code segments across the tooling scripts.
 - Randomized the initial fullscreen preset across the resident vendored
   collection while leaving the OBS startup behavior unchanged.
 - Normalized equation strings with a trailing newline before load, so presets
@@ -81,6 +84,10 @@ All notable changes to this project are documented here. Format loosely follows
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Changed
+- Enforced strict `AGENTS.md` code style and quality guidelines across the entire codebase.
+- Renamed all single-character and ambiguous variables in `src/js/` and `tools/` scripts to use descriptive, contextual names.
+- Restored and completed comprehensive JSDoc annotations across `visualizer-core.js`, `fullscreen-ui.js`, `obs-ui.js`, and `mobile-ui.js`.
+- Hardened Python tooling scripts by enforcing explicit types (e.g. `typing.Any`) and resolving Ruff complexity lint checks.
 - Pinned devDependencies in `package.json` to exact versions instead of caret
   ranges, matching the current `package-lock.json` resolutions and the
   pin-all-versions policy in AGENTS.md.

@@ -10,6 +10,7 @@ SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
 def find_failures(workflow_dir: Path) -> list[str]:
+    """Return lines containing unpinned action versions."""
     failures: list[str] = []
 
     workflows = sorted({
@@ -41,6 +42,7 @@ def find_failures(workflow_dir: Path) -> list[str]:
 
 
 def main() -> int:
+    """Verify all GitHub Actions use commit hash pins."""
     workflow_dir = Path(__file__).resolve().parents[1] / ".github" / "workflows"
     failures = find_failures(workflow_dir)
     if failures:

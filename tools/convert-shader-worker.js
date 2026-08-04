@@ -16,6 +16,9 @@ const fs = require('fs');
 const utils = require('milkdrop-preset-utils');
 const converter = require('milkdrop-shader-converter');
 
+/**
+ * Listen for messages from the parent process and convert presets.
+ */
 function main() {
   const [, , inputPath] = process.argv;
   const shaderBody = fs.readFileSync(inputPath, 'utf8');

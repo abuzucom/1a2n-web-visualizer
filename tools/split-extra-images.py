@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Split the experimental texture bundle into lazy-loaded part files.
 
-Reads the generated single-file bundle (or existing part files on re-runs),
-losslessly optimizes each embedded image, and writes deterministic part
+Read the generated single-file bundle or existing part files on re-runs.
+Losslessly optimize each embedded image. Write deterministic part
 files src/vendor/butterchurnExtraImagesExp-part-N.js. Each part calls
-window.__bcExtraImagesExpPart(N, TOTAL, {name: {data, width, height}});
+window.__bcExtraImagesExpPart(N, TOTAL, {name: {data, width, height}}).
 visualizer-core.js injects the parts on demand and feeds each payload to
 butterchurn as it arrives.
 
-Optimization is lossless only and skips gracefully when a helper is
-missing: JPEG via jpegtran, BMP and single-frame GIF converted to PNG via
-Pillow, PNG via optipng. Every optimized variant is decoded and compared
-pixel-for-pixel against the original before it is accepted.
+Use only lossless optimization. Skip gracefully when a helper is
+missing. Optimize JPEG via jpegtran, convert BMP and single-frame GIF to PNG via
+Pillow, and optimize PNG via optipng. Decode every optimized variant and compare
+pixel-for-pixel against the original before accepting it.
 """
 
 import argparse
@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 try:
     from PIL import Image
@@ -36,9 +37,6 @@ BUNDLE = VENDOR / "butterchurnExtraImagesExp.js"
 PART_GLOB = "butterchurnExtraImagesExp-part-*.js"
 BUNDLE_HEAD = "window.butterchurnExtraImagesExp={getImages:function(){return "
 BUNDLE_TAIL = "}};\n"
-PART_RE = re.compile(
-    r"^window\.__bcExtraImagesExpPart\((\d+),(\d+),(\{.*\})\);\n$", re.S
-)
 PART_COUNT = 8
 DATA_URI_RE = re.compile(r"^data:image/([a-z]+);base64,(.*)$", re.S)
 
@@ -55,10 +53,17 @@ def read_images() -> dict:
     if not parts:
         raise SystemExit("no butterchurnExtraImagesExp bundle or parts found")
     for path in parts:
-        match = PART_RE.match(path.read_text(encoding="utf-8"))
-        if not match:
+        text = path.read_text(encoding="utf-8")
+        prefix = "window.__bcExtraImagesExpPart("
+        suffix = ");\n"
+        if not text.startswith(prefix) or not text.endswith(suffix):
             raise SystemExit(f"unexpected part wrapper in {path}")
-        images.update(json.loads(match.group(3)))
+        inner = text[len(prefix):-len(suffix)]
+        tokens = inner.split(",", 2)
+        expected_tokens = 3
+        if len(tokens) != expected_tokens:
+            raise SystemExit(f"unexpected part wrapper in {path}")
+        images.update(json.loads(tokens[2]))
     return images
 
 
@@ -110,10 +115,10 @@ def optimize_payload(kind: str, payload: bytes, stats: dict):
     return mime, candidate
 
 
-def optimize_images(images: dict) -> dict:
-    """Losslessly optimize every embedded image in place."""
+def optimize_images(texture_data: dict[str, Any]) -> dict[str, Any]:
+    """Compress and return a dictionary of optimized image payloads."""
     stats = {"saved": {}, "rejected_mismatch": 0, "skipped_animated": 0}
-    for name, record in images.items():
+    for name, record in texture_data.items():
         match = DATA_URI_RE.match(record["data"])
         if not match:
             raise SystemExit(f"unexpected data URI for image {name!r}")
@@ -127,13 +132,15 @@ def optimize_images(images: dict) -> dict:
         print(f"rejected non-identical variants: {stats['rejected_mismatch']}")
     if stats["skipped_animated"]:
         print(f"skipped animated images: {stats['skipped_animated']}")
-    return images
+    return texture_data
 
 
 def write_parts(images: dict, dry_run: bool) -> None:
     """Write size-balanced deterministic part files and drop the old bundle."""
     names = sorted(images)
-    total_bytes = sum(len(images[n]["data"]) for n in names)
+    total_bytes = sum(len(images[name]["data"]) for name in names)
+    if not PART_COUNT:
+        raise ValueError("PART_COUNT cannot be zero")
     target = total_bytes / PART_COUNT
     parts, current, filled = [], {}, 0
     for name in names:
@@ -161,6 +168,7 @@ def write_parts(images: dict, dry_run: bool) -> None:
 
 
 def main() -> None:
+    """Repackage experimental textures into optimized, chunked JSON payloads."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(

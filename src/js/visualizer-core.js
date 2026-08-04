@@ -9,6 +9,16 @@
   'use strict';
 
   const MAX_PIXEL_RATIO = 2;
+  const CHUNK_TIMEOUT_MS = 10000;
+  const CHUNK_PAD_LENGTH = 3;
+  const EXPONENTIAL_BACKOFF_BASE = 2;
+  const DEFAULT_CACHE_MAX = 16;
+  const ONE_SECOND_MS = 1000;
+  const MIN_POOL_SIZE = 2;
+  const DEFAULT_BLEND = 2.7;
+  const DEFAULT_CYCLE_SECS = 20;
+  const FALLBACK_PREFETCH_DELAY_MS = 5000;
+  const MIN_CYCLE_SECS = 3;
   const PRESET_PACKS = [
     'butterchurnPresets', 'butterchurnPresetsExtra',
     'butterchurnPresetsExtra2', 'butterchurnPresetsMD1',
@@ -139,11 +149,11 @@
   const CHUNK_RETRY_BASE_MS = 500;
 
   function requestChunk(state, cid, attempt) {
-    const timer = setTimeout(function () { failChunk(state, cid); }, 10000);
+    const timer = setTimeout(function () { failChunk(state, cid); }, CHUNK_TIMEOUT_MS);
     const script = document.createElement('script');
     const filename = state.extraIndex.files && state.extraIndex.files[cid]
       ? state.extraIndex.files[cid]
-      : 'chunk-' + String(cid).padStart(3, '0') + '.js';
+      : 'chunk-' + String(cid).padStart(CHUNK_PAD_LENGTH, '0') + '.js';
     script.src = 'presets-extra/' + filename;
     script.onerror = function () {
       clearTimeout(timer);
@@ -153,7 +163,7 @@
       if (attempt < CHUNK_MAX_RETRIES) {
         setTimeout(function () {
           if (state.status[cid] === 'loading') requestChunk(state, cid, attempt + 1);
-        }, CHUNK_RETRY_BASE_MS * Math.pow(2, attempt));
+        }, CHUNK_RETRY_BASE_MS * Math.pow(EXPONENTIAL_BACKOFF_BASE, attempt));
         return;
       }
       failChunk(state, cid);
@@ -195,7 +205,7 @@
       scripts: {},
       owned: {},
       lru: [],
-      cacheMax: opts.chunkCacheMax || 16,
+      cacheMax: opts.chunkCacheMax || DEFAULT_CACHE_MAX,
       getCurrentIndex: getCurrentIndex,
     };
     global.__bcPresetChunk = function (cid, chunkPresets) {
@@ -348,11 +358,14 @@
     controller.cycleTimer = setInterval(function () {
       if (controller.shuffleOn) loadRandom(controller);
       else loadPreset(controller, stepIndex(controller, 1));
-    }, controller.cycleSecs * 1000);
+    }, controller.cycleSecs * ONE_SECOND_MS);
   }
 
+  /**
+   * Select and load a random preset from the visualizer index.
+   */
   function loadRandom(controller) {
-    if (controller.store.keys.length < 2) return loadPreset(controller, 0, undefined, true, 'random');
+    if (controller.store.keys.length < MIN_POOL_SIZE) return loadPreset(controller, 0, undefined, true, 'random');
     const pool = candidatePool(controller, false);
     if (!pool.length) {
       controller.onToast('\u26A0 no working random preset found');
@@ -361,6 +374,9 @@
     loadPreset(controller, pool[Math.floor(Math.random() * pool.length)], undefined, true, 'random');
   }
 
+  /**
+   * Remove the current preset by triggering the removal script, if available.
+   */
   function removeCurrent(controller) {
     if (!controller.store.keys.length) return null;
     const removed = controller.store.keys[controller.idx];
@@ -371,6 +387,9 @@
     return removed;
   }
 
+  /**
+   * Mark the current preset as a favorite and print its name to the console.
+   */
   function favoriteCurrent(controller) {
     if (!controller.store.keys.length) return null;
     const name = controller.store.keys[controller.idx];
@@ -378,13 +397,16 @@
     return name;
   }
 
+  /**
+   * Create and attach the keyboard controller for preset playback.
+   */
   function createPlaybackController(store, opts, onToast, onPreset, canvas) {
     return {
       store: store,
       onToast: onToast,
       onPreset: onPreset,
       canvas: canvas,
-      defaultBlend: opts.blend != null ? opts.blend : 2.7,
+      defaultBlend: opts.blend != null ? opts.blend : DEFAULT_BLEND,
       visualizer: null,
       idx: 0,
       excluded: new Set(),
@@ -392,7 +414,7 @@
       loadSeq: 0,
       cycleOn: opts.cycleOn !== false,
       shuffleOn: opts.shuffle === true,
-      cycleSecs: opts.cycleSecs || 20,
+      cycleSecs: opts.cycleSecs || DEFAULT_CYCLE_SECS,
       cycleTimer: null,
       navigationMode: 'sequential',
       linkGuard: null,
@@ -405,11 +427,17 @@
     };
   }
 
+  /**
+   * Halt the active requestAnimationFrame render loop.
+   */
   function stopRenderLoop(controller) {
     controller.rendering = false;
     if (controller.driver) controller.driver.stop();
   }
 
+  /**
+   * Resize the WebGL canvas to match its client dimensions.
+   */
   function sizeCanvas(audio) {
     const dpr = Math.min(global.devicePixelRatio || 1, MAX_PIXEL_RATIO);
     audio.canvas.width = Math.round(global.innerWidth * dpr);
@@ -417,6 +445,9 @@
     if (audio.visualizer) audio.visualizer.setRendererSize(audio.canvas.width, audio.canvas.height);
   }
 
+  /**
+   * Request and return a list of connected audio input devices.
+   */
   async function getDevices(audio) {
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
@@ -466,6 +497,9 @@
     }
   }
 
+  /**
+   * Connect an active MediaStream to the visualizer's audio analyzer.
+   */
   function connectStream(audio, stream) {
     releaseCurrentStream(audio);
     audio.micStream = stream;
@@ -477,6 +511,9 @@
     if (audio.keepalive) audio.keepalive.setInputLabel(currentDeviceLabel(audio));
   }
 
+  /**
+   * Request and return a MediaStream for the specified audio device.
+   */
   function openStream(deviceId) {
     const constraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
     if (deviceId) constraints.deviceId = { exact: deviceId };
@@ -504,6 +541,9 @@
     return Boolean(audio.micStream) && index === audio.deviceIdx;
   }
 
+  /**
+   * Switch the visualizer's audio input to the specified device.
+   */
   async function useDevice(audio, index) {
     const requestSeq = ++audio.deviceRequestSeq;
     if (!audio.inputDevices.length) await getDevices(audio);
@@ -529,12 +569,18 @@
     return device;
   }
 
+  /**
+   * Switch the visualizer's audio input to the device matching the provided ID.
+   */
   async function useDeviceById(audio, id) {
     if (!audio.inputDevices.length) await getDevices(audio);
     const index = audio.inputDevices.findIndex(function (device) { return device.deviceId === id; });
     return index >= 0 ? useDevice(audio, index) : null;
   }
 
+  /**
+   * Dispatch preloaded texture part images to the active visualizer instance.
+   */
   function applyExtraImages(audio, images) {
     try {
       audio.visualizer.loadExtraImages(images);
@@ -543,11 +589,17 @@
     }
   }
 
+  /**
+   * Coordinate the loading of all experimental texture parts.
+   */
   function loadExtraImages(audio) {
     const library = getLib('butterchurnExtraImages');
     if (library && library.getImages) applyExtraImages(audio, library.getImages());
   }
 
+  /**
+   * Request and inject a script element to load a specific texture part.
+   */
   function injectImagePart(number) {
     return new Promise(function (resolve) {
       const script = document.createElement('script');
@@ -589,12 +641,15 @@
     return audio.experimentalImagesLoading;
   }
 
+  /**
+   * Schedule the idle prefetch of experimental texture parts.
+   */
   function scheduleImagePrefetch(audio) {
     const prefetch = function () { ensureExperimentalImages(audio); };
     if (typeof global.requestIdleCallback === 'function') {
       global.requestIdleCallback(prefetch, { timeout: 15000 });
     } else {
-      setTimeout(prefetch, 5000);
+      setTimeout(prefetch, FALLBACK_PREFETCH_DELAY_MS);
     }
   }
 
@@ -616,6 +671,9 @@
     if (index >= 0) audio.deviceIdx = index;
   }
 
+  /**
+   * Establish the initial audio stream connection when the visualizer starts.
+   */
   async function connectInitialStream(audio, deviceId) {
     try {
       const stream = await openStream(deviceId);
@@ -629,6 +687,9 @@
     }
   }
 
+  /**
+   * Create and return the Web Audio context for the visualizer.
+   */
   function initializeAudio(audio, playback, deviceId) {
     if (!audio.prepared) prepareAudio(audio, playback);
     audio.audioCtx.resume().catch(function (error) {
@@ -637,6 +698,9 @@
     connectInitialStream(audio, deviceId);
   }
 
+  /**
+   * Configure the audio analyzer and attach it to the visualizer context.
+   */
   function prepareAudio(audio, playback) {
     if (audio.prepared) return;
     audio.audioCtx = new (global.AudioContext || global.webkitAudioContext)();
@@ -653,22 +717,25 @@
    * never checks LINK_STATUS itself, so unlinked shaders otherwise render
    * broken frames while the browser floods the console with GL errors. */
   function installLinkGuard(canvas) {
-    const gl = canvas.getContext ? canvas.getContext('webgl2') : null;
-    if (!gl || typeof gl.linkProgram !== 'function') return { failures: [] };
-    if (gl.__bcLinkGuard) return gl.__bcLinkGuard;
+    const webglContext = canvas.getContext ? canvas.getContext('webgl2') : null;
+    if (!webglContext || typeof webglContext.linkProgram !== 'function') return { failures: [] };
+    if (webglContext.__bcLinkGuard) return webglContext.__bcLinkGuard;
     const guard = { failures: [] };
-    const nativeLinkProgram = gl.linkProgram;
-    gl.linkProgram = function (program) {
-      nativeLinkProgram.call(gl, program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        guard.failures.push(typeof gl.getProgramInfoLog === 'function'
-          ? gl.getProgramInfoLog(program) : 'shader program link failed');
+    const nativeLinkProgram = webglContext.linkProgram;
+    webglContext.linkProgram = function (program) {
+      nativeLinkProgram.call(webglContext, program);
+      if (!webglContext.getProgramParameter(program, webglContext.LINK_STATUS)) {
+        guard.failures.push(typeof webglContext.getProgramInfoLog === 'function'
+          ? webglContext.getProgramInfoLog(program) : 'shader program link failed');
       }
     };
-    gl.__bcLinkGuard = guard;
+    webglContext.__bcLinkGuard = guard;
     return guard;
   }
 
+  /**
+   * Construct and return the core Butterchurn visualizer instance.
+   */
   function createVisualizer(audio, playback) {
     audio.visualizer = audio.Butterchurn.createVisualizer(audio.audioCtx, audio.canvas, {
       width: audio.canvas.width, height: audio.canvas.height, pixelRatio: 1, textureRatio: 1,
@@ -680,6 +747,9 @@
     scheduleImagePrefetch(audio);
   }
 
+  /**
+   * Start playback by picking and loading the first preset.
+   */
   function loadInitialPreset(audio, playback, randomFirst) {
     const resident = playback.store.residentKeys;
     let first = resident.length ? playback.store.keys.indexOf(resident[0]) : 0;
@@ -701,7 +771,9 @@
     restartCycle(playback);
   }
 
-  /** One frame, called by whichever tick source the render driver has live. */
+  /**
+   * One frame, called by whichever tick source the render driver has live.
+   */
   function renderOnce(audio, playback) {
     if (!playback.rendering) return;
     try {
@@ -713,6 +785,9 @@
     }
   }
 
+  /**
+   * Discard the current visualizer context and rebuild it after a WebGL crash.
+   */
   function recoverVisualizer(audio, playback) {
     try {
       createVisualizer(audio, playback);
@@ -727,6 +802,9 @@
     }
   }
 
+  /**
+   * Initialize audio systems and request microphone permissions to begin capture.
+   */
   async function startAudio(audio, playback, deviceId) {
     if (audio.started || audio.starting) return;
     if (!audio.Butterchurn) {
@@ -750,6 +828,9 @@
     }
   }
 
+  /**
+   * Build and return an API interface for external code to manage the visualizer.
+   */
   function createAudioController(canvas, opts, onToast) {
     return {
       canvas: canvas,
@@ -803,7 +884,7 @@
       getAudioContext: function () { return audio.audioCtx; },
       getTrack: function () { return currentTrack(audio); },
       // Without a stream there is no input to lose, so do not report one gone.
-      isMonitoring: function () { return audio.hadStream; },
+      handleLostInput: function () { if (audio.hadStream) audio.onToast('\u26A0 audio input lost'); },
       getDeviceId: function () { return currentDeviceId(audio); },
       getDeviceLabel: function () { return currentDeviceLabel(audio); },
       listDevices: function () { return getDevices(audio); },
@@ -860,6 +941,9 @@
     });
   }
 
+  /**
+   * Initialize and return the core visualization system bound to a canvas element.
+   */
   function create(canvas, opts) {
     opts = opts || {};
     const onToast = opts.onToast || function () {};
@@ -892,7 +976,7 @@
       favoriteCurrentPreset: function () { return favoriteCurrent(playback); },
       favoritesList: function () { return Array.from(playback.favorites); },
       setCycleSecs: function (seconds) {
-        playback.cycleSecs = Math.max(3, seconds | 0);
+        playback.cycleSecs = Math.max(MIN_CYCLE_SECS, seconds | 0);
         restartCycle(playback);
         return playback.cycleSecs;
       },

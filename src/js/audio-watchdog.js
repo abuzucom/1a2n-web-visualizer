@@ -30,6 +30,14 @@
   const VB_AUDIO_PATTERN = /vb-?(audio|cable)/i;
   const DEFAULT_PATTERN = /^default\b/i;
 
+  const RANK_SAME_ID = 0;
+  const RANK_VOICEMEETER = 1;
+  const RANK_VB_AUDIO = 2;
+  const RANK_LABEL_OVERLAP = 3;
+  const RANK_DEFAULT = 4;
+  const BACKOFF_MULTIPLIER = 2;
+  const MS_PER_SEC = 1000;
+
   function labelsOverlap(left, right) {
     if (!left || !right) return false;
     const a = left.toLowerCase();
@@ -42,11 +50,11 @@
    * a built-in microphone. */
   function rankDevice(device, previous) {
     const label = device.label || '';
-    if (previous.deviceId && device.deviceId === previous.deviceId) return 0;
-    if (VOICEMEETER_PATTERN.test(label)) return 1;
-    if (VB_AUDIO_PATTERN.test(label)) return 2;
-    if (labelsOverlap(label, previous.label)) return 3;
-    if (DEFAULT_PATTERN.test(label) || device.deviceId === 'default') return 4;
+    if (previous.deviceId && device.deviceId === previous.deviceId) return RANK_SAME_ID;
+    if (VOICEMEETER_PATTERN.test(label)) return RANK_VOICEMEETER;
+    if (VB_AUDIO_PATTERN.test(label)) return RANK_VB_AUDIO;
+    if (labelsOverlap(label, previous.label)) return RANK_LABEL_OVERLAP;
+    if (DEFAULT_PATTERN.test(label) || device.deviceId === 'default') return RANK_DEFAULT;
     return Infinity;
   }
 
@@ -88,7 +96,7 @@
     }
     if (state.lastRestartAt && now - state.lastRestartAt < state.restartBackoffMs) return;
     state.lastRestartAt = now;
-    state.restartBackoffMs = Math.min(state.restartBackoffMs * 2, RESTART_BACKOFF_MAX_MS);
+    state.restartBackoffMs = Math.min(state.restartBackoffMs * BACKOFF_MULTIPLIER, RESTART_BACKOFF_MAX_MS);
     state.consecutiveRestarts += 1;
     state.restarts += 1;
     state.restartDriver();
@@ -170,7 +178,7 @@
   function remainingSecs(state) {
     if (!state.armed || !state.lossSince) return 0;
     const remaining = state.graceMs - (state.now() - graceStart(state));
-    return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+    return remaining > 0 ? Math.ceil(remaining / MS_PER_SEC) : 0;
   }
 
   function createState(opts) {

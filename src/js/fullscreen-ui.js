@@ -26,12 +26,20 @@
   let startupPending = false;
   let startupTimer = null;
   const STARTUP_COUNTDOWN = 5;
+  const MAX_TOAST_LENGTH = 60;
+  const TRUNCATED_TOAST_LENGTH = 57;
+  const TOAST_DURATION_MS = 2400;
+  const PERCENT_MULTIPLIER = 100;
+  const ONE_SECOND_MS = 1000;
+  const CYCLE_STEP_THRESHOLD = 10;
+  const CYCLE_STEP_SMALL = 1;
+  const CYCLE_STEP_LARGE = 5;
   function say(msg) {
-    const s = msg.length > 60 ? msg.slice(0, 57) + '\u2026' : msg;
+    const s = msg.length > MAX_TOAST_LENGTH ? msg.slice(0, TRUNCATED_TOAST_LENGTH) + '\u2026' : msg;
     toast.textContent = s;
     toast.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2400);
+    toastTimer = setTimeout(function () { toast.classList.remove('show'); }, TOAST_DURATION_MS);
   }
 
   /** Turns a getUserMedia error into a short, actionable hint keyed on name,
@@ -77,7 +85,8 @@
   function updateStartupStatus(secondsRemaining) {
     if (secondsRemaining > 0) {
       startupStatusText.textContent = 'Loading visualizer... ' + secondsRemaining + 's';
-      startupProgressBar.style.width = (secondsRemaining / STARTUP_COUNTDOWN * 100) + '%';
+      if (!STARTUP_COUNTDOWN) throw new Error('STARTUP_COUNTDOWN cannot be zero');
+      startupProgressBar.style.width = (secondsRemaining / STARTUP_COUNTDOWN * PERCENT_MULTIPLIER) + '%';
       startupProgressBar.parentElement.setAttribute('aria-valuenow', secondsRemaining);
       return;
     }
@@ -94,7 +103,7 @@
     startupTimer = window.setInterval(function () {
       const remaining = Number(startupProgressBar.parentElement.getAttribute('aria-valuenow')) - 1;
       updateStartupStatus(Number.isNaN(remaining) ? 0 : remaining);
-    }, 1000);
+    }, ONE_SECOND_MS);
   }
 
   function clearStartupStatus(showPrompt) {
@@ -231,11 +240,17 @@
       // finer steps near the bottom of the range: 1s at/below 10s, 5s above
       case '[':
         say('Cycle: ' + viz.setCycleSecs(
-          viz.getCycleSecs() - (viz.getCycleSecs() <= 10 ? 1 : 5)) + 's');
+          viz.getCycleSecs() - (
+            viz.getCycleSecs() <= CYCLE_STEP_THRESHOLD ? CYCLE_STEP_SMALL : CYCLE_STEP_LARGE
+          )
+        ) + 's');
         break;
       case ']':
         say('Cycle: ' + viz.setCycleSecs(
-          viz.getCycleSecs() + (viz.getCycleSecs() < 10 ? 1 : 5)) + 's');
+          viz.getCycleSecs() + (
+            viz.getCycleSecs() < CYCLE_STEP_THRESHOLD ? CYCLE_STEP_SMALL : CYCLE_STEP_LARGE
+          )
+        ) + 's');
         break;
       case 'd': case 'D':
         viz.nextDevice().catch(function (error) { say('Audio device error: ' + describeDeviceError(error)); });
@@ -267,8 +282,8 @@
   closeFavoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); hideFavoritesPanel(); });
 
   /* -- idle-fade: hide corner buttons after 3 s of inactivity ------ */
-  var idleTimer = null;
-  var IDLE_MS = 3000;
+  let idleTimer = null;
+  const IDLE_MS = 3000;
 
   function goIdle() { document.body.classList.add('idle'); }
   function wakeUp() {

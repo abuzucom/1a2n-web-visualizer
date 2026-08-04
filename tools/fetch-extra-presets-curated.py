@@ -75,7 +75,8 @@ def load_removed_names(csv_path):
         return {row["name"] for row in csv.DictReader(f)}
 
 
-def main():
+def main() -> None:
+    """Fetch and organize curated experimental presets into the presets-extra directory."""
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")
     parser.add_argument("--dry-run", action="store_true",
@@ -92,14 +93,14 @@ def main():
     removed_names = load_removed_names(REMOVED_CSV_PATH)
 
     zf = ZipFile(io.BytesIO(fetch.get_zip_bytes(args.zip)))
-    fresh_kept, excluded_textures, bad_json = fetch.collect_presets(zf, allowed)
+    fresh_presets, excluded_textures, bad_json = fetch.collect_presets(zf, allowed)
 
-    snapshot_diff = set(fresh_kept) - current_names if current_names is not None else set()
-    ledger_hits = set(fresh_kept) & removed_names
+    snapshot_diff = set(fresh_presets) - current_names if current_names is not None else set()
+    ledger_hits = set(fresh_presets) & removed_names
     curated_out = snapshot_diff | ledger_hits
-    final_kept = {n: p for n, p in fresh_kept.items() if n not in curated_out}
+    final_kept = {name: preset for name, preset in fresh_presets.items() if name not in curated_out}
 
-    print(f"fresh upstream (post texture-filter): {len(fresh_kept)}")
+    print(f"fresh upstream (post texture-filter): {len(fresh_presets)}")
     print(f"currently curated in (index.js):      "
           f"{0 if current_names is None else len(current_names)}")
     print(f"removed-presets.csv ledger entries:   {len(removed_names)}")

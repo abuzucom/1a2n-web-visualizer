@@ -6,7 +6,7 @@
 // have no direct ESLint equivalent and stay as human-reviewed guidance.
 // AGENTS.md's "under 10 locals per function" also has no core ESLint rule
 // and is not enforced here.
-const js = require('@eslint/js');
+const eslintJs = require('@eslint/js');
 
 const codeQualityRules = {
   'max-depth': ['error', 3],
@@ -14,6 +14,8 @@ const codeQualityRules = {
   'max-len': ['error', { code: 120 }],
   'no-empty': ['error', { allowEmptyCatch: false }],
   'no-cond-assign': ['error', 'always'],
+  'no-magic-numbers': ['error', { ignore: [-1, 0, 1], enforceConst: true }],
+  'no-warning-comments': ['error', { terms: ['todo', 'fixme', 'xxx', 'hack'], location: 'anywhere' }],
 };
 
 module.exports = [
@@ -42,7 +44,7 @@ module.exports = [
       },
     },
     rules: {
-      ...js.configs.recommended.rules,
+      ...eslintJs.configs.recommended.rules,
       ...codeQualityRules,
     },
   },
@@ -75,7 +77,7 @@ module.exports = [
       },
     },
     rules: {
-      ...js.configs.recommended.rules,
+      ...eslintJs.configs.recommended.rules,
       ...codeQualityRules,
     },
   },

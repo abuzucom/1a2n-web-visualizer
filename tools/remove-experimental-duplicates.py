@@ -8,6 +8,7 @@ import os
 import tempfile
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "presets-extra"
@@ -21,15 +22,16 @@ EXP_PREFIX = "[EXP] "
 BASELINE_PHYSICAL_LIMIT = 9000
 
 
-def read_index():
-    text = INDEX_PATH.read_text(encoding="utf-8").strip()
+def read_index(path: Path) -> tuple[dict[str, Any], list[str]]:
+    """Read and return the experimental presets index mapping."""
+    text = path.read_text(encoding="utf-8").strip()
     data = json.loads(text[len(INDEX_PREFIX):-1])
     files = data.get("files") or [f"chunk-{cid:03d}.js" for cid in range(len(data["chunks"]))]
     return data, files
 
 
-def read_chunk(cid, filename):
-    path = OUT_DIR / filename
+def read_chunk(path: Path, cid: int) -> tuple[Path, str, dict[str, Any]]:
+    """Read and return the presets from the specified experimental chunk file."""
     text = path.read_text(encoding="utf-8").strip()
     prefix = f"window.__bcPresetChunk({cid},"
     if not text.startswith(prefix) or not text.endswith(");"):
@@ -37,9 +39,11 @@ def read_chunk(cid, filename):
     return path, prefix, json.loads(text[len(prefix):-2])
 
 
-def csv_escape(value):
-    text = str(value)
-    return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(c in text for c in '",\n') else text
+def csv_escape(string_val: str) -> str:
+    """Escape a string for safe inclusion in a CSV file."""
+    if any(csv_char in string_val for csv_char in '",\n'):
+        return f'"{string_val.replace(chr(34), chr(34) * 2)}"'
+    return string_val
 
 
 def atomic_write_text(path, text):
@@ -55,7 +59,9 @@ def atomic_write_text(path, text):
         Path(temporary.name).unlink(missing_ok=True)
 
 
-def main():  # noqa: C901
+def main() -> int:
+    # ruff: noqa: C901, PLR0912, PLR0915
+    """Analyze and remove duplicate presets from the experimental collection."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decisions", required=True, help="JSON report or list of approved experimental names")
     parser.add_argument("--dry-run", action="store_true")
@@ -79,7 +85,7 @@ def main():  # noqa: C901
     if not approved or any(not name.startswith(EXP_PREFIX) for name in approved):
         raise SystemExit("every approved target must be a non-empty [EXP] runtime name")
 
-    data, files = read_index()
+    data, files = read_index(INDEX_PATH)
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     records = {item["displayName"]: item for item in manifest.get("presets", [])}
     missing = sorted(approved - records.keys())
@@ -108,14 +114,14 @@ def main():  # noqa: C901
     if args.dry_run:
         for item in targets:
             print(f"would remove {item['displayName']} (mainline matches: {len(item['mainlineMatches'])})")
-        return
+        return 0
 
     by_chunk = {}
     for item in targets:
         by_chunk.setdefault(item["logicalChunk"], []).append(item["displayName"])
 
     for cid, names in by_chunk.items():
-        path, prefix, chunk = read_chunk(cid, files[cid])
+        path, prefix, chunk = read_chunk(OUT_DIR / files[cid], cid)
         for name in names:
             if name not in data["chunks"][cid]:
                 raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
@@ -160,7 +166,8 @@ def main():  # noqa: C901
     atomic_write_text(EXCLUSIONS_PATH, json.dumps(exclusions, indent=2) + "\n")
     atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
     print(f"removed {len(targets)} experimental presets")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

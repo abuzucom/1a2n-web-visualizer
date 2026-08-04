@@ -12,21 +12,30 @@
   const intervalValue = document.getElementById('intervalValue');
   const hyperspeedBtn = document.getElementById('hyperspeedBtn');
   const hyperspeedValue = document.getElementById('hyperspeedValue');
-  const INTERVALS = [15, 30, 60];
+  const INTERVAL_15S = 15;
+  const INTERVAL_30S = 30;
+  const INTERVAL_60S = 60;
+  const MAX_TOAST_LENGTH = 60;
+  const TRUNCATED_TOAST_LENGTH = 57;
+  const TOAST_DURATION_MS = 2400;
+  const HISTORY_LIMIT = 20;
+  const IDLE_TIMEOUT_MS = 4000;
+
+  const INTERVALS = [INTERVAL_15S, INTERVAL_30S, INTERVAL_60S];
   let toastTimer = null;
   let startupPending = false;
   let idleTimer = null;
-  const history = window.BCMobileState.createHistory(20);
+  const history = window.BCMobileState.createHistory(HISTORY_LIMIT);
   const intervalCycle = window.BCMobileState.createIntervalCycle(INTERVALS, 1);
 
   function say(msg) {
-    toast.textContent = msg.length > 60 ? msg.slice(0, 57) + '\u2026' : msg;
+    toast.textContent = msg.length > MAX_TOAST_LENGTH ? msg.slice(0, TRUNCATED_TOAST_LENGTH) + '\u2026' : msg;
     toast.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2400);
+    toastTimer = setTimeout(function () { toast.classList.remove('show'); }, TOAST_DURATION_MS);
   }
 
-  function formatInterval(seconds) { return seconds === 60 ? '1m' : seconds + 's'; }
+  function formatInterval(seconds) { return seconds === INTERVAL_60S ? '1m' : seconds + 's'; }
 
   function updateBackState() { backBtn.disabled = !history.canGoBack(); }
 
@@ -50,7 +59,7 @@
     clearTimeout(idleTimer);
     idleTimer = setTimeout(function () {
       document.body.classList.add('controls-idle');
-    }, 4000);
+    }, IDLE_TIMEOUT_MS);
   }
 
   function shufflePreset() {

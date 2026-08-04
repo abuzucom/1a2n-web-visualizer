@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "presets-extra"
@@ -20,7 +21,8 @@ EXP_PREFIX = "[EXP] "
 EXPERIMENTAL_PHYSICAL_BASE = 9000
 
 
-def canonicalize(value):
+def canonicalize(value: Any) -> Any:
+    """Return a normalized copy of the preset data for exact comparison."""
     if isinstance(value, dict):
         return {key: canonicalize(value[key]) for key in sorted(value)}
     if isinstance(value, list):
@@ -32,7 +34,8 @@ def canonicalize(value):
     return value
 
 
-def digest(preset):
+def digest(preset: dict[str, Any]) -> str:
+    """Return the SHA-256 digest of the canonicalized preset."""
     payload = json.dumps(
         canonicalize(preset), ensure_ascii=False, sort_keys=True,
         separators=(",", ":"), allow_nan=False,
@@ -41,6 +44,7 @@ def digest(preset):
 
 
 def read_index():
+    """Read and return the experimental presets index mapping."""
     text = INDEX_PATH.read_text(encoding="utf-8").strip()
     data = json.loads(text[len(INDEX_PREFIX):-1])
     files = data.get("files") or [f"chunk-{cid:03d}.js" for cid in range(len(data["chunks"]))]
@@ -50,6 +54,7 @@ def read_index():
 
 
 def read_chunk(cid, filename):
+    """Read and return the presets from the specified experimental chunk file."""
     text = (OUT_DIR / filename).read_text(encoding="utf-8").strip()
     prefix = f"window.__bcPresetChunk({cid},"
     if not text.startswith(prefix) or not text.endswith(");"):
@@ -58,12 +63,14 @@ def read_chunk(cid, filename):
 
 
 def physical_id(filename):
+    """Extract and return the physical integer ID from a chunk filename."""
     stem = Path(filename).stem
     suffix = stem.rsplit("-", 1)[-1]
     return int(suffix) if suffix.isdigit() else None
 
 
 def main():
+    """Analyze experimental presets and locate duplicates across chunks."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--output", default="experimental-duplicate-report.json")
     args = parser.parse_args()

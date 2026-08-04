@@ -2,4 +2,4 @@
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "C90"]
+select = ["E", "F", "W", "B", "C90", "PLR", "FIX", "RET", "BLE"]
