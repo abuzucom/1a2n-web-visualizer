@@ -12,6 +12,7 @@ from typing import Any
 
 CODE_OWNER = "itsjustatank"
 MAX_FILE_PAGES = 50
+MAX_FILE_PAGE_SIZE = 100
 AGENT_FILES = {
     "AGENTS.md", "CLAUDE.md", "GEMINI.md", "CONVENTIONS.md",
     ".cursorrules", ".clinerules", ".windsurfrules",
@@ -68,11 +69,11 @@ def changed_files(event: dict[str, Any]) -> list[str]:
     number = event["pull_request"]["number"]
     files = []
     for page in range(1, MAX_FILE_PAGES + 1):
-        batch = github_get(f"/repos/{repository}/pulls/{number}/files?per_page=100&page={page}")
+        batch = github_get(f"/repos/{repository}/pulls/{number}/files?per_page={MAX_FILE_PAGE_SIZE}&page={page}")
         files.extend(item["filename"] for item in batch)
-        if len(batch) < 100:
+        if len(batch) < MAX_FILE_PAGE_SIZE:
             return files
-    raise RuntimeError(f"pull request file list exceeded {MAX_FILE_PAGES * 100} files")
+    raise RuntimeError(f"pull request file list exceeded {MAX_FILE_PAGES * MAX_FILE_PAGE_SIZE} files")
 
 
 def current_owner_approval(event: dict[str, Any]) -> bool:
@@ -80,7 +81,7 @@ def current_owner_approval(event: dict[str, Any]) -> bool:
     repository = event["repository"]["full_name"]
     number = event["pull_request"]["number"]
     head_sha = event["pull_request"]["head"]["sha"]
-    reviews = github_get(f"/repos/{repository}/pulls/{number}/reviews?per_page=100")
+    reviews = github_get(f"/repos/{repository}/pulls/{number}/reviews?per_page={MAX_FILE_PAGE_SIZE}")
     return any(
         review.get("user", {}).get("login", "").lower() == CODE_OWNER.lower()
         and review.get("state") == "APPROVED"

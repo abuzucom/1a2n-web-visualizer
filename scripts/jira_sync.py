@@ -161,7 +161,12 @@ def pr_sync(event: dict[str, Any]) -> None:
     if GITHUB_TOKEN:
         commits = github_request(f"/repos/{repository}/pulls/{number}/commits?per_page=100")
         commit_messages = [commit["commit"]["message"] for commit in commits]
-    keys = issue_keys([pull_request.get("title", ""), pull_request.get("body", ""), pull_request["head"]["ref"], *commit_messages])
+    keys = issue_keys([
+        pull_request.get("title", ""),
+        pull_request.get("body", ""),
+        pull_request["head"]["ref"],
+        *commit_messages,
+    ])
     if not keys:
         if not JIRA_ALLOW_CREATE:
             print(f"No Jira key found for PR #{number}; jira-create label is absent.")
@@ -171,7 +176,11 @@ def pr_sync(event: dict[str, Any]) -> None:
     state = "merged" if pull_request.get("merged") else action
     for key in sorted(keys):
         add_remote_link(key, f"GitHub PR #{number}: {pull_request.get('title', 'Untitled PR')}", pull_request_url)
-        add_comment(key, f"[github-pull_request:{repository}#{number}:{action}]", f"PR status: {state}\n{pull_request_url}")
+        add_comment(
+            key,
+            f"[github-pull_request:{repository}#{number}:{action}]",
+            f"PR status: {state}\n{pull_request_url}",
+        )
     print(f"Linked PR #{number} to {', '.join(sorted(keys))}")
 
 

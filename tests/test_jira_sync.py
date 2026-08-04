@@ -3,7 +3,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
-import scripts.jira_sync as jira_sync
+from scripts import jira_sync
 from scripts.jira_sync import adf_text, issue_keys
 
 
