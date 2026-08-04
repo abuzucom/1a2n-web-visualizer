@@ -8,12 +8,12 @@ function loadScript(path, window) {
   vm.runInNewContext(source, { window: window });
 }
 
-test('hyperspeed toggles one scheduler and stops on visibility changes', function () {
+function createHyperspeedHarness(extraOptions) {
   const timers = [];
   const cleared = [];
+  const changes = [];
   let visibilityHandler = null;
   let shuffleCount = 0;
-  const changes = [];
   const window = {
     setInterval: function (callback, interval) {
       const timer = { callback: callback, interval: interval };
@@ -29,25 +29,71 @@ test('hyperspeed toggles one scheduler and stops on visibility changes', functio
     },
   };
   loadScript('src/js/hyperspeed.js', window);
-  const controller = window.BCHyperspeed.create({
+  const options = Object.assign({
     shuffle: function () { shuffleCount += 1; },
     intervalMs: 100,
     visibilityTarget: document,
     onChange: function (enabled) { changes.push(enabled); },
-  });
+  }, extraOptions || {});
+  return {
+    controller: window.BCHyperspeed.create(options),
+    timers: timers,
+    cleared: cleared,
+    changes: changes,
+    document: document,
+    shuffleCount: function () { return shuffleCount; },
+    hasVisibilityHandler: function () { return Boolean(visibilityHandler); },
+    hide: function () {
+      document.hidden = true;
+      if (visibilityHandler) visibilityHandler();
+    },
+  };
+}
 
-  assert.equal(controller.toggle(), true);
-  assert.equal(shuffleCount, 1);
-  assert.equal(timers.length, 1);
-  assert.equal(timers[0].interval, 100);
-  timers[0].callback();
-  assert.equal(shuffleCount, 2);
+test('hyperspeed toggles exactly one scheduler', function () {
+  const harness = createHyperspeedHarness();
 
-  document.hidden = true;
-  visibilityHandler();
-  assert.equal(controller.isEnabled(), false);
-  assert.deepEqual(changes, [true, false]);
-  assert.deepEqual(cleared, [timers[0]]);
+  assert.equal(harness.controller.toggle(), true);
+  assert.equal(harness.shuffleCount(), 1);
+  assert.equal(harness.timers.length, 1);
+  assert.equal(harness.timers[0].interval, 100);
+  harness.timers[0].callback();
+  assert.equal(harness.shuffleCount(), 2);
+
+  assert.equal(harness.controller.toggle(), false);
+  assert.deepEqual(harness.changes, [true, false]);
+  assert.deepEqual(harness.cleared, [harness.timers[0]]);
+});
+
+test('hyperspeed keeps running while the page is hidden by default', function () {
+  const harness = createHyperspeedHarness();
+
+  harness.controller.toggle();
+  harness.hide();
+
+  // The render driver keeps producing frames while hidden, so hyperspeed has
+  // no reason to switch itself off any more.
+  assert.equal(harness.controller.isEnabled(), true);
+  assert.deepEqual(harness.changes, [true]);
+  assert.deepEqual(harness.cleared, []);
+  assert.equal(harness.hasVisibilityHandler(), false, 'no listener is attached at all');
+
+  harness.timers[0].callback();
+  assert.equal(harness.shuffleCount(), 2, 'and it keeps shuffling');
+});
+
+test('hyperspeed still stops on hide when pauseWhenHidden is requested', function () {
+  const harness = createHyperspeedHarness({ pauseWhenHidden: true });
+
+  assert.equal(harness.controller.toggle(), true);
+  assert.equal(harness.shuffleCount(), 1);
+  harness.timers[0].callback();
+  assert.equal(harness.shuffleCount(), 2);
+
+  harness.hide();
+  assert.equal(harness.controller.isEnabled(), false);
+  assert.deepEqual(harness.changes, [true, false]);
+  assert.deepEqual(harness.cleared, [harness.timers[0]]);
 });
 
 test('mobile history is session-only and supports returning through visits', function () {
@@ -91,7 +137,8 @@ function createClassList() {
   };
 }
 
-function createFullscreenHarness(vizOverrides) {
+function createFullscreenHarness(vizOverrides, options) {
+  const opts = options || {};
   const listeners = {};
   const elements = {};
   const bodyClassList = createClassList();
@@ -113,9 +160,16 @@ function createFullscreenHarness(vizOverrides) {
     };
   });
   const document = {
-    body: { classList: bodyClassList },
+    body: { classList: bodyClassList, appendChild: function () {} },
     documentElement: {},
     fullscreenElement: null,
+    createElement: function () {
+      return {
+        className: '', textContent: '', hidden: false,
+        appendChild: function (child) { return child; },
+        setAttribute: function () {},
+      };
+    },
     getElementById: function (id) { return elements[id]; },
     addEventListener: function (event, callback) {
       if (!listeners[event]) listeners[event] = [];
@@ -136,8 +190,16 @@ function createFullscreenHarness(vizOverrides) {
     setInterval: function () { return 1; },
     clearInterval: function () {},
   };
+  // Real diagnostics module, so the I key and the ?diag/?guard flags are
+  // exercised against the code the pages actually load.
+  loadScript('src/js/diagnostics.js', window);
+  let armed = false;
   const viz = Object.assign({
     keys: function () { return ['preset']; },
+    diagnostics: function () { return { armed: armed }; },
+    isAudioGuardArmed: function () { return armed; },
+    setAudioGuard: function (next) { armed = Boolean(next); return armed; },
+    toggleAudioGuard: function () { armed = !armed; return armed; },
     isStarted: function () { return true; },
     removeCurrentFromShuffle: function () { return null; },
     excludedList: function () { return []; },
@@ -156,6 +218,7 @@ function createFullscreenHarness(vizOverrides) {
     window: window,
     document: document,
     navigator: {},
+    location: { search: opts.search || '' },
     BCViz: { create: function () { return viz; } },
     setTimeout: window.setTimeout,
     clearTimeout: window.clearTimeout,
@@ -214,4 +277,28 @@ test('fullscreen K shows the favorites panel and Escape closes both panels', fun
   });
   assert.equal(harness.elements.favoritesPanel.classList.contains('hidden'), true);
   assert.equal(harness.elements.excludedPanel.classList.contains('hidden'), true);
+});
+
+test('fullscreen A arms and disarms the audio guard', function () {
+  const harness = createFullscreenHarness();
+
+  assert.equal(harness.viz.isAudioGuardArmed(), false, 'disarmed until asked');
+
+  harness.listeners.keydown.forEach(function (handler) {
+    handler({ key: 'a', preventDefault: function () {} });
+  });
+  assert.equal(harness.viz.isAudioGuardArmed(), true);
+
+  harness.listeners.keydown.forEach(function (handler) {
+    handler({ key: 'A', preventDefault: function () {} });
+  });
+  assert.equal(harness.viz.isAudioGuardArmed(), false);
+});
+
+test('fullscreen ?guard=1 pre-arms the audio guard at load', function () {
+  const armed = createFullscreenHarness(null, { search: '?guard=1' });
+  assert.equal(armed.viz.isAudioGuardArmed(), true);
+
+  const plain = createFullscreenHarness(null, { search: '?diag=1' });
+  assert.equal(plain.viz.isAudioGuardArmed(), false);
 });

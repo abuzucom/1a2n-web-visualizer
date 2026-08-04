@@ -12,6 +12,7 @@
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="css/brand.css">
     <link rel="stylesheet" href="css/fullscreen.css">
+    <link rel="stylesheet" href="css/diagnostics.css">
   </head>
   <body>
     <canvas id="viz"></canvas>
@@ -39,6 +40,8 @@
           <tr><td class="k"><kbd>L</kbd></td><td>View presets excluded this session</td></tr>
           <tr><td class="k"><kbd>M</kbd></td><td>Favorite the current preset</td></tr>
           <tr><td class="k"><kbd>K</kbd></td><td>View presets favorited this session</td></tr>
+          <tr><td class="k"><kbd>A</kbd></td><td>Arm / disarm the audio guard</td></tr>
+          <tr><td class="k"><kbd>I</kbd></td><td>Show diagnostics overlay</td></tr>
           <tr><td class="k"><kbd>?</kbd></td><td>Show this help</td></tr>
         </table>
         <div class="go pulse" id="startPrompt">Click or press any key to start</div>
@@ -83,6 +86,10 @@
          tools/fetch-extra-presets.py). A missing file 404s harmlessly.
          Experimental textures load lazily; see ensureExperimentalImages. -->
     <script defer src="presets-extra/index.js"></script>
+    <script defer src="js/render-driver.js"></script>
+    <script defer src="js/audible-keepalive.js"></script>
+    <script defer src="js/audio-watchdog.js"></script>
+    <script defer src="js/diagnostics.js"></script>
     <script defer src="js/visualizer-core.js"></script>
     <script defer src="js/hyperspeed.js"></script>
     <script defer src="js/fullscreen-ui.js"></script>
