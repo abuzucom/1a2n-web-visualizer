@@ -4,6 +4,7 @@ services:
     container_name: butterchurn-visualizer
     ports:
       - "127.0.0.1:8080:80"
+    user: "1000:1000"
     read_only: true
     security_opt:
       - no-new-privileges:true

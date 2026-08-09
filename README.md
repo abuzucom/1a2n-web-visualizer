@@ -222,7 +222,33 @@ Dependency security is reinforced with a lodash version override in
 `package.json`. Pull requests and pushes to `develop` run `scripts/sync.py --check`,
 pinned GitHub Actions checks, ESLint, Ruff, Node & Python unit tests (`npm test`),
 and preset chunk & experimental preset validation (`npm run validate:presets`, `npm run validate:exp`)
-through `.github/workflows/checks.yml`.
+through `.github/workflows/checks.yml`. Pull requests also run a banned-agent
+authorship check, branch-name and commit-message shape checks (skipped for
+Dependabot, whose own naming does not follow this repo's conventions), and
+static checks for `persist-credentials: false` on checkout steps, unjustified
+MD5/SHA-1, non-root containers, and likely secrets.
+
+These checks come from the `abuzucom/agents` AI-agent-instructions template
+(see AGENTS.md's own history for the adoption). `make sync` (or
+`python3 scripts/sync.py`) regenerates the tool-specific copies after editing
+`AGENTS.md`; `make check` verifies them without writing; `make lint` runs the
+AGENTS.md-specific style checks below, additive to `npm run lint` (ESLint and
+Ruff), not a replacement for it. Running `pre-commit install` after cloning
+also wires most of the same checks in as local git hooks (`.pre-commit-config.yaml`).
+
+| Script | Backs | Blocking? |
+|---|---|---|
+| `scripts/lint_style.py` | No run-on sentences/dashes; no non-ASCII characters (in `AGENTS.md`) | Yes |
+| `scripts/check_us_spelling.py` | American English spelling | No, warns only |
+| `scripts/check_english_only.py` | English only | No, warns only |
+| `scripts/check_banned_agents.py` | Banned agents | Yes |
+| `scripts/check_branch_name.py` | Branch naming conventions | Yes |
+| `scripts/check_commit_message.py` | Commit message style | Yes |
+| `scripts/check_persist_credentials.py` | No persisted git credentials in CI workflows | Yes |
+| `scripts/check_weak_hashing.py` | No weak hashing in security-sensitive contexts | Yes |
+| `scripts/check_dockerfile_root.py` | No root containers without explicit consent | Yes |
+| `scripts/check_secrets_heuristic.py` | No secrets in version control (heuristic, not entropy-based) | Yes |
+| `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Available, not wired into CI: this repo's existing prose (`CHANGELOG.md`, `README.md`) uses spaced hyphens outside the scope the rule targets |
 
 Protected-file review runs from the trusted default branch through
 `.github/workflows/protected-files.yml`. It covers agent instructions,

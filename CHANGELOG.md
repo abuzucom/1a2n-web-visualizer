@@ -51,6 +51,16 @@ All notable changes to this project are documented here. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- Adopted the current `abuzucom/agents` template infrastructure: brought
+  AGENTS.md's rule body to parity (rules 10-13, checker attribution
+  clauses, two new Style bullets for American spelling and English-only
+  prose), added the ten upstream `scripts/check_*.py` and `lint_style.py`
+  checkers, wired them into `.github/workflows/checks.yml` and a new
+  `.pre-commit-config.yaml`, and added `.editorconfig`, `.gitattributes`,
+  `Makefile`, and `hooks/` (an inert Claude Code example hook), while
+  preserving this repo's Commands, Do not touch, Architecture, Gotchas, and
+  Read before touching orientation. Also added an explicit non-root `user:`
+  to the Docker Compose service, matching the image's existing runtime user.
 - `tools/split-extra-images.py` - splits the experimental texture bundle
   into deterministic lazy-loaded part files and losslessly optimizes the
   embedded images, verifying every optimized variant pixel-for-pixel.
