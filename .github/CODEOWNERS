@@ -1,4 +1,5 @@
 # Security-sensitive instructions, automation, dependencies, and deployment.
+SECURITY.md @itsjustatank
 AGENTS.md @itsjustatank
 **/AGENTS.md @itsjustatank
 CLAUDE.md @itsjustatank

@@ -51,6 +51,10 @@ All notable changes to this project are documented here. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- Added `SECURITY.md`: how to privately report a vulnerability (GitHub
+  Security Advisories), scope, supported versions, and the accepted risks
+  already documented elsewhere (CSP `unsafe-eval`, localhost-only Docker
+  binding, vendored dependencies) linked rather than duplicated.
 - Adopted the current `abuzucom/agents` template infrastructure: brought
   AGENTS.md's rule body to parity (rules 10-13, checker attribution
   clauses, two new Style bullets for American spelling and English-only
