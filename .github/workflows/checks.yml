@@ -210,6 +210,35 @@ jobs:
       - name: Validate experimental presets
         run: npm run validate:exp
 
+  html-css-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Download and verify vnu.jar
+        # validator/validator publishes its one recommended, production-ready
+        # jar under the "latest" release tag rather than per-version tags
+        # (currently vnu 26.8.6); the hash below, computed from that exact
+        # download, is the real pin. Upstream ships only MD5/SHA-1 checksums
+        # for this asset (AGENTS.md Rule 7 bars trusting those), so verify
+        # against a SHA-256 computed here instead. A checksum mismatch means
+        # upstream published a new jar; re-verify and update this hash.
+        run: |
+          curl -sSLo vnu.jar https://github.com/validator/validator/releases/download/latest/vnu.jar
+          echo "506657d684d2084bf17a37498fa5fadbbfd705b9b5ba74c8702dd8699f7a09a0  vnu.jar" | sha256sum -c -
+
+      - name: Validate HTML and CSS
+        run: java -jar vnu.jar --also-check-css src/*.html src/css/*.css
+
   upload-coverage-javascript:
     needs: unit-tests
     if: ${{ !cancelled() && needs.unit-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}

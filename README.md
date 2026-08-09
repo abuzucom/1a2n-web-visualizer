@@ -221,7 +221,9 @@ it to `127.0.0.1:8080`; do not expose it to a network or the public internet.
 Dependency security is reinforced with a lodash version override in
 `package.json`. Pull requests and pushes to `develop` run `scripts/sync.py --check`,
 pinned GitHub Actions checks, ESLint, Ruff, Node & Python unit tests (`npm test`),
-and preset chunk & experimental preset validation (`npm run validate:presets`, `npm run validate:exp`)
+preset chunk & experimental preset validation (`npm run validate:presets`, `npm run validate:exp`),
+and HTML/CSS validation against `src/*.html` and `src/css/*.css` via the
+[Nu Html Checker](https://github.com/validator/validator)
 through `.github/workflows/checks.yml`. Pull requests also run a banned-agent
 authorship check, branch-name and commit-message shape checks (skipped for
 Dependabot, whose own naming does not follow this repo's conventions), and

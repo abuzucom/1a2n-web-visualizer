@@ -51,6 +51,11 @@ All notable changes to this project are documented here. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- Added an `html-css-validation` job to `.github/workflows/checks.yml` that
+  runs the [Nu Html Checker](https://github.com/validator/validator) against
+  `src/*.html` and `src/css/*.css` on every pull request and push to
+  `develop`, downloading its `vnu.jar` release asset pinned by a SHA-256
+  checksum computed at adoption time.
 - Added `SECURITY.md`: how to privately report a vulnerability (GitHub
   Security Advisories), scope, supported versions, and the accepted risks
   already documented elsewhere (CSP `unsafe-eval`, localhost-only Docker
