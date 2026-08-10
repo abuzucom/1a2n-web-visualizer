@@ -115,10 +115,11 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   protected-file review gate, `jira_sync.py` links PRs and deploys to Jira.
 - Deployed via `.github/workflows/deploy.yml` to GitHub Pages on push to
   `develop`; alternatively self-hosted via the included Docker/Caddy config.
-  Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff),
-  `protected-files.yml` (code-owner approval gate, see
-  `docs/protected-file-review.md`), and `jira.yml` (creates and references
-  issues in the Jira `VID` project, see `docs/jira-integration.md`).
+  Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff,
+  HTML/CSS validation via the Nu Html Checker), `protected-files.yml`
+  (code-owner approval gate, see `docs/protected-file-review.md`), and
+  `jira.yml` (creates and references issues in the Jira `VID` project, see
+  `docs/jira-integration.md`).
 
 ## Gotchas
 
