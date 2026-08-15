@@ -103,6 +103,13 @@ All notable changes to this project are documented here. Format loosely follows
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Changed
+- Reduced `checks.yml` CI minute usage: `validate-presets` now skips its two
+  `npm run validate:*` steps (which otherwise parse all of
+  `src/presets-extra/`) unless the diff touches preset data or the
+  validator tooling; the Nu Html Checker jar and pip packages in
+  `unit-tests` are now cached between runs; and `checks.yml` no longer
+  also runs on push to `develop`, since a merge only lands after its PR's
+  checks already passed (`deploy.yml`'s own push trigger is unaffected).
 - Enforced strict `AGENTS.md` code style and quality guidelines across the entire codebase.
 - Renamed all single-character and ambiguous variables in `src/js/` and `tools/` scripts to use descriptive, contextual names.
 - Restored and completed comprehensive JSDoc annotations across `visualizer-core.js`, `fullscreen-ui.js`, `obs-ui.js`, and `mobile-ui.js`.
