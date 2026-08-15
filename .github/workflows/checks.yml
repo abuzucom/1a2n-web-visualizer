@@ -5,8 +5,6 @@ name: Checks
 # triggers/permissions and isn't relevant here).
 on:
   pull_request:
-  push:
-    branches: [develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -152,6 +150,12 @@ jobs:
       - name: Install JS dependencies
         run: npm ci --ignore-scripts
 
+      - name: Cache pip packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-lcov_cobertura-coverage
+
       - name: Install coverage tools
         run: pip install lcov_cobertura coverage
 
@@ -194,20 +198,44 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check whether preset validation is needed
+        id: preset-diff
+        # Full preset-chunk validation parses all of src/presets-extra/
+        # (500+ files); only pay that cost when the diff could plausibly
+        # affect it. Any diff-command failure (e.g. an unusual merge
+        # state) falls back to "relevant=true" so we never silently skip.
+        run: |
+          if git diff --name-only \
+              "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" \
+              > changed-files.txt; then
+            if grep -qE '^(src/presets-extra/|tools/validate-preset-chunks\.js|tools/validate-experimental-presets\.js|package(-lock)?\.json|\.github/workflows/checks\.yml)' changed-files.txt; then
+              echo "relevant=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "relevant=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Node
+        if: steps.preset-diff.outputs.relevant == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: 22
           cache: npm
 
       - name: Install JS dependencies
+        if: steps.preset-diff.outputs.relevant == 'true'
         run: npm ci --ignore-scripts
 
       - name: Validate preset chunk callback IDs
+        if: steps.preset-diff.outputs.relevant == 'true'
         run: npm run validate:presets
 
       - name: Validate experimental presets
+        if: steps.preset-diff.outputs.relevant == 'true'
         run: npm run validate:exp
 
   html-css-validation:
@@ -224,6 +252,16 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Cache vnu.jar
+        id: vnu-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vnu.jar
+          # Keyed on the pinned checksum below, not a mutable version
+          # string, so the cache invalidates itself the moment that hash
+          # is next updated for a new upstream jar.
+          key: vnu-jar-506657d684d2084bf17a37498fa5fadbbfd705b9b5ba74c8702dd8699f7a09a0
+
       - name: Download and verify vnu.jar
         # validator/validator publishes its one recommended, production-ready
         # jar under the "latest" release tag rather than per-version tags
@@ -232,9 +270,14 @@ jobs:
         # for this asset (AGENTS.md Rule 7 bars trusting those), so verify
         # against a SHA-256 computed here instead. A checksum mismatch means
         # upstream published a new jar; re-verify and update this hash.
+        if: steps.vnu-cache.outputs.cache-hit != 'true'
         run: |
           curl -sSLo vnu.jar https://github.com/validator/validator/releases/download/latest/vnu.jar
           echo "506657d684d2084bf17a37498fa5fadbbfd705b9b5ba74c8702dd8699f7a09a0  vnu.jar" | sha256sum -c -
+
+      - name: Verify cached vnu.jar checksum
+        if: steps.vnu-cache.outputs.cache-hit == 'true'
+        run: echo "506657d684d2084bf17a37498fa5fadbbfd705b9b5ba74c8702dd8699f7a09a0  vnu.jar" | sha256sum -c -
 
       - name: Validate HTML and CSS
         run: java -jar vnu.jar --also-check-css src/*.html src/css/*.css
