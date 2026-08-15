@@ -54,7 +54,7 @@ jobs:
             --head "${{ github.event.pull_request.head.sha }}"
 
   branch-name:
-    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -66,7 +66,7 @@ jobs:
         run: python3 scripts/check_branch_name.py "${{ github.head_ref }}"
 
   commit-message:
-    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
