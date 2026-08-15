@@ -295,7 +295,7 @@ jobs:
         with:
           name: coverage-report-javascript
       - name: Upload JS coverage to GitHub
-        uses: actions/upload-code-coverage@1c15be36fc3733ba839b1dd643bd9556e4426dc1 # v1
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
         with:
           file: coverage-js.xml
           language: JavaScript
@@ -314,7 +314,7 @@ jobs:
         with:
           name: coverage-report-python
       - name: Upload Python coverage to GitHub
-        uses: actions/upload-code-coverage@1c15be36fc3733ba839b1dd643bd9556e4426dc1 # v1
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
         with:
           file: coverage-python.xml
           language: Python
