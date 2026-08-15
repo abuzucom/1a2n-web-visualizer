@@ -260,12 +260,12 @@ jobs:
           # Keyed on the pinned checksum below, not a mutable version
           # string, so the cache invalidates itself the moment that hash
           # is next updated for a new upstream jar.
-          key: vnu-jar-506657d684d2084bf17a37498fa5fadbbfd705b9b5ba74c8702dd8699f7a09a0
+          key: vnu-jar-c70279e260e5f4f9e95b3890ef6c9548f90ebdaec2a75219ec41694ab6241e34
 
       - name: Download and verify vnu.jar
         # validator/validator publishes its one recommended, production-ready
         # jar under the "latest" release tag rather than per-version tags
-        # (currently vnu 26.8.6); the hash below, computed from that exact
+        # (currently vnu 26.8.15); the hash below, computed from that exact
         # download, is the real pin. Upstream ships only MD5/SHA-1 checksums
         # for this asset (AGENTS.md Rule 7 bars trusting those), so verify
         # against a SHA-256 computed here instead. A checksum mismatch means
@@ -273,11 +273,11 @@ jobs:
         if: steps.vnu-cache.outputs.cache-hit != 'true'
         run: |
           curl -sSLo vnu.jar https://github.com/validator/validator/releases/download/latest/vnu.jar
-          echo "506657d684d2084bf17a37498fa5fadbbfd705b9b5ba74c8702dd8699f7a09a0  vnu.jar" | sha256sum -c -
+          echo "c70279e260e5f4f9e95b3890ef6c9548f90ebdaec2a75219ec41694ab6241e34  vnu.jar" | sha256sum -c -
 
       - name: Verify cached vnu.jar checksum
         if: steps.vnu-cache.outputs.cache-hit == 'true'
-        run: echo "506657d684d2084bf17a37498fa5fadbbfd705b9b5ba74c8702dd8699f7a09a0  vnu.jar" | sha256sum -c -
+        run: echo "c70279e260e5f4f9e95b3890ef6c9548f90ebdaec2a75219ec41694ab6241e34  vnu.jar" | sha256sum -c -
 
       - name: Validate HTML and CSS
         run: java -jar vnu.jar --also-check-css src/*.html src/css/*.css
