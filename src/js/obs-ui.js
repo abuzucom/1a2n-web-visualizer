@@ -11,27 +11,26 @@
   const secsEl   = document.getElementById('cycleSecs');
   const guardEl  = document.getElementById('audioGuard');
 
+  const deviceErrors = window.BCDeviceErrors;
+  const audioPrefs = window.BCAudioPrefs;
+
   function setStatus(msg) { statusEl.textContent = msg; }
 
-  /** Turns a getUserMedia error into a short, actionable hint keyed on name,
-   * so "Could not start audio source" points at the fix instead of just the
-   * symptom. See docs/unattended-operation.md for the full explanation. */
-  function describeDeviceError(error) {
-    const name = error && error.name;
-    const message = (error && error.message) || String(error);
-    let hint = '';
-    if (name === 'NotReadableError' || name === 'AbortError') {
-      hint = ' (device may be exclusively locked by another app)';
-    } else if (name === 'NotFoundError') {
-      hint = ' (device appears to be unplugged or disabled)';
-    } else if (name === 'OverconstrainedError') {
-      hint = ' (device id no longer valid; re-select an input)';
-    }
-    return (name ? name + ': ' : '') + message + hint;
+  function reportDeviceError(error) {
+    setStatus('Audio device error: ' + deviceErrors.describe(error));
   }
 
-  function reportDeviceError(error) {
-    setStatus('Audio device error: ' + describeDeviceError(error));
+  function labelFor(deviceId) {
+    const match = viz.listDevices().find(function (d) { return d.deviceId === deviceId; });
+    return match ? (match.label || '') : '';
+  }
+
+  /* An OBS browser source is rebuilt from scratch on a scene refresh, so
+   * without this the operator's input is replaced by the OS default every
+   * time the source reloads. */
+  function rememberCurrentDevice() {
+    const deviceId = viz.currentDeviceId();
+    if (deviceId) audioPrefs.write(deviceId, labelFor(deviceId));
   }
 
   const DEFAULT_CYCLE_SECS = 20;
@@ -111,15 +110,62 @@
       o.value = ''; o.textContent = '\u2014 grant mic access first \u2014';
       deviceEl.appendChild(o);
     }
+    // Show whichever input is actually connected. Rebuilding the options
+    // otherwise leaves the dropdown on the first one, claiming a device that
+    // may not be the one feeding the visualizer.
+    const live = viz.currentDeviceId();
+    if (live) deviceEl.value = live;
+  }
+
+  /* Before permission is granted every enumerated label is blank, so a saved
+   * device can only be matched by id here. The second pass after the stream
+   * opens is what recovers a device whose id changed, by label. */
+  function requestedDeviceId() {
+    if (deviceEl.value) return deviceEl.value;
+    return audioPrefs.resolve(viz.listDevices(), audioPrefs.read()) || undefined;
+  }
+
+  async function reselectSavedDevice(requested) {
+    const saved = audioPrefs.read();
+    const wanted = audioPrefs.resolve(viz.listDevices(), saved);
+    if (!wanted || wanted === requested || wanted === viz.currentDeviceId()) return;
+    await viz.useDeviceById(wanted);
+    refreshDeviceList();
+  }
+
+  function switchToSelectedDevice() {
+    return viz.useDeviceById(deviceEl.value)
+      .then(function (device) {
+        deviceEl.value = viz.currentDeviceId();
+        // useDeviceById resolves with null for an id that is no longer in the
+        // device list, so without this the dropdown would just spring back
+        // with no explanation.
+        if (!device) {
+          setStatus('That input is no longer present. Re-open the picker to rescan.');
+          return;
+        }
+        rememberCurrentDevice();
+      })
+      .catch(function (error) {
+        // deviceIdx is only committed on a successful switch, and the failed
+        // attempt restored the stream that was already playing, so this is
+        // the input actually connected. Reverting the dropdown to it keeps
+        // the UI from claiming a switch that did not happen.
+        deviceEl.value = viz.currentDeviceId();
+        reportDeviceError(error);
+      });
   }
 
   async function start() {
     try {
-      await viz.start(deviceEl.value || undefined);
+      const requested = requestedDeviceId();
+      await viz.start(requested);
       refreshDeviceList();
+      await reselectSavedDevice(requested);
+      rememberCurrentDevice();
       setStatus('\u25B6 Running. Press H to hide this panel.');
     } catch (e) {
-      setStatus('Audio error: ' + e.message);
+      setStatus('Audio error: ' + deviceErrors.describe(e));
     }
   }
 
@@ -129,20 +175,12 @@
   document.getElementById('randBtn').addEventListener('click', function () { viz.random(); });
   presetEl.addEventListener('change', function () { viz.goto(parseInt(presetEl.value, RADIX_DECIMAL)); });
   deviceEl.addEventListener('change', function () {
-    if (viz.isStarted() && deviceEl.value) {
-      viz.useDeviceById(deviceEl.value)
-        .then(function () { deviceEl.value = viz.currentDeviceId(); })
-        .catch(function (error) {
-          // deviceIdx is only committed on a successful switch, so this is
-          // the previously selected device, not one that is actually
-          // connected: the failed attempt already released that stream.
-          // Reverting the dropdown to it, rather than leaving it on the
-          // device that failed to open, keeps the UI from claiming a switch
-          // that did not happen.
-          deviceEl.value = viz.currentDeviceId();
-          reportDeviceError(error);
-        });
+    if (!deviceEl.value) return;
+    if (!viz.isStarted()) {
+      setStatus('Input selected. Press Start to use it.');
+      return;
     }
+    switchToSelectedDevice();
   });
   cycleEl.addEventListener('change', function () {
     if (cycleEl.checked !== viz.isCycling()) viz.toggleCycle();

@@ -4,6 +4,31 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.0]
+
+### Added
+- Remembered the selected audio input across reloads
+  (`src/js/audio-prefs.js`). An OBS browser source is rebuilt from scratch on a
+  scene refresh, which previously dropped the visualizer back to the system
+  default input every time. The device is matched back by id first and by label
+  second, so it also survives a Voicemeeter restart handing the same device
+  back under a new id. This is the only state the pages persist.
+
+### Fixed
+- Fixed `NotAllowedError: Permission denied` when selecting an audio input
+  giving no indication of the cause. The error wording now distinguishes a page
+  or embedder block, which in OBS means a **Local file** browser source that
+  has to become a **URL** source, from an operating-system privacy block, and
+  covers `SecurityError` as well. The wording moved out of the two
+  byte-identical copies in `src/js/obs-ui.js` and `src/js/fullscreen-ui.js`
+  into `src/js/device-errors.js`. See the new troubleshooting entries in
+  `docs/audio-routing.md` and the expanded note in `docs/obs-setup.md`.
+- Fixed a failure to open the audio input at startup collapsing into one
+  generic message, so a permission denial looked the same as an unplugged
+  cable. The initial connect is also awaited now, so the device picker is
+  rebuilt from the list enumerated under permission rather than the
+  pre-permission list, where every label is blank.
+
 ## [1.8.1]
 
 ### Fixed

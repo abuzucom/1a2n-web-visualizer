@@ -11,6 +11,7 @@ const SUPPORT_SCRIPTS = [
   'src/js/render-driver.js',
   'src/js/audible-keepalive.js',
   'src/js/audio-watchdog.js',
+  'src/js/device-errors.js',
 ];
 
 // Mimic the vendored bundle's equation compilation. Use a SPACE before
@@ -608,6 +609,34 @@ test('a non-retryable device error on switch rejects immediately without retryin
   // visualizer is honestly silent rather than misreporting the old device as
   // still connected.
   assert.equal(viz.diagnostics().trackState, 'none');
+});
+
+/* Every getUserMedia failure at startup used to collapse into one generic
+ * toast, so a permission denial looked exactly like an unplugged cable. The
+ * visualizer still keeps running; it just says which failure it hit. */
+test('a permission denial at start names the error instead of a generic message', async function () {
+  const toasts = [];
+  const fakeMediaDevices = {
+    enumerateDevices: async function () { return []; },
+    getUserMedia: async function () {
+      const err = new Error('Permission denied');
+      err.name = 'NotAllowedError';
+      throw err;
+    },
+  };
+  const harness = createHarness({ aaa: { baseVals: {} } }, undefined, { fakeMediaDevices: fakeMediaDevices });
+  const viz = harness.window.BCViz.create(harness.canvas, {
+    cycleOn: false,
+    onToast: function (message) { toasts.push(message); },
+  });
+
+  await viz.start();
+  await sleep(5);
+
+  const reported = toasts.find(function (message) { return message.indexOf('NotAllowedError') >= 0; });
+  assert.ok(reported, 'the toast names the error: ' + JSON.stringify(toasts));
+  assert.match(reported, /URL source/);
+  assert.equal(viz.isStarted(), true, 'the visualizer keeps running without an input');
 });
 
 test('deviceIdx syncs to whichever device the initial default connect resolved to', async function () {
