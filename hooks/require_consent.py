@@ -39,9 +39,17 @@ omission survivable.
 
 An `ask` needs a human to answer it. When `permission_mode` reports an
 unattended session, or a mode this hook does not recognize, the ask becomes a
-deny: absence of a human is absence of consent. For headless runs a human
-sets AGENTS_CONSENT_GRANTED at launch to a comma-separated list of paths the
-gate may release. The model cannot forge it, since Bash tool calls do not
+deny: absence of a human is absence of consent.
+
+Paths are resolved before anything is decided about them. A path is only as
+trustworthy as the file it reaches, so classification runs on both the name
+given and its canonical target: a symlink called notes.txt still reaches a
+test, and a test-named symlink pointing outside the project root is gated
+rather than followed.
+
+For headless runs a human sets AGENTS_CONSENT_GRANTED at launch to a
+comma-separated list of paths the gate may release, matched on the canonical
+path so that one grant releases one file. The model cannot forge it, since Bash tool calls do not
 persist shell state and this hook inherits Claude Code's environment rather
 than the model's shell.
 
@@ -181,7 +189,7 @@ def collect_edits(tool_name: str, tool_input: dict, target: str) -> list:
 
 def find_gate_reason(tool_name: str, tool_input: dict, target: str) -> str:
     """Return why this write needs the user's consent, or an empty string."""
-    if not is_test_path(target) or not os.path.exists(target):
+    if not os.path.exists(target):
         return ""
     if tool_name == "NotebookEdit":
         return "rewrites a cell in an existing test notebook"
@@ -194,21 +202,68 @@ def find_gate_reason(tool_name: str, tool_input: dict, target: str) -> str:
     return ""
 
 
-def resolve_target(tool_input: dict, project_dir: str) -> str:
-    """Return the absolute path this tool call writes to, or an empty string."""
+def given_path(tool_input: dict) -> str:
+    """Return the path the tool call names, before any resolution."""
     for key in PATH_KEYS:
         raw = tool_input.get(key)
         if raw:
-            return raw if os.path.isabs(raw) else os.path.join(project_dir, raw)
+            return raw
     return ""
 
 
-def is_override_granted(target: str) -> bool:
-    """Return True if a human released `target` through the override variable."""
-    normalized = os.path.normpath(target).replace(os.sep, "/")
+def resolve_target(raw: str, project_dir: str) -> str:
+    """Return the absolute, symlink-resolved path `raw` reaches."""
+    candidate = raw if os.path.isabs(raw) else os.path.join(project_dir, raw)
+    return os.path.realpath(candidate)
+
+
+def names_a_test(raw: str, target: str) -> bool:
+    """Return True if the named path or the file it reaches is a test.
+
+    Both are checked because either one alone can be made to lie. A symlink
+    called notes.txt reaches a test file, and a symlink called
+    tests/test_x.js reaches whatever its author chose.
+    """
+    return is_test_path(raw) or is_test_path(target)
+
+
+def escapes_root(target: str, project_dir: str) -> bool:
+    """Return True if `target` sits outside the project root."""
+    root = os.path.realpath(project_dir)
+    return target != root and not target.startswith(root + os.sep)
+
+
+def is_redirected(raw: str, project_dir: str, target: str) -> bool:
+    """Return True if resolving `raw` followed a link to somewhere else."""
+    candidate = raw if os.path.isabs(raw) else os.path.join(project_dir, raw)
+    return os.path.abspath(candidate) != target
+
+
+def escape_reason(raw: str, target: str, project_dir: str) -> str:
+    """Return why a redirected path cannot be cleared, or an empty string.
+
+    Only a path that resolution actually redirected is checked against the
+    root. An ordinary path to a file outside the project is somebody working
+    in more than one tree; a link out of the project is the tree being used
+    to reach something it does not contain.
+    """
+    if not is_redirected(raw, project_dir, target):
+        return ""
+    if not escapes_root(target, project_dir):
+        return ""
+    return "follows a link to a test file outside the project root, which the gate cannot vouch for"
+
+
+def is_override_granted(target: str, project_dir: str) -> bool:
+    """Return True if a human released exactly this file at launch.
+
+    Comparison is on the canonical path. Matching a suffix would let one
+    grant for tests/test_auth.py release every other file whose path happens
+    to end the same way.
+    """
     for entry in os.environ.get(OVERRIDE_ENV, "").split(","):
-        cleaned = entry.strip().strip("/")
-        if cleaned and (normalized == cleaned or normalized.endswith("/" + cleaned)):
+        cleaned = entry.strip()
+        if cleaned and resolve_target(cleaned, project_dir) == target:
             return True
     return False
 
@@ -251,13 +306,18 @@ def emit_context(event: str, context: str) -> int:
 def _handle_write(payload: dict, project_dir: str) -> int:
     """Gate a write that would weaken an existing test."""
     tool_input = payload.get("tool_input", {})
-    target = resolve_target(tool_input, project_dir)
-    if not target:
+    raw = given_path(tool_input)
+    if not raw:
         return 0
-    reason = find_gate_reason(payload.get("tool_name", ""), tool_input, target)
+    target = resolve_target(raw, project_dir)
+    if not names_a_test(raw, target):
+        return 0
+    reason = escape_reason(raw, target, project_dir) or find_gate_reason(
+        payload.get("tool_name", ""), tool_input, target
+    )
     if not reason:
         return 0
-    if is_override_granted(target):
+    if is_override_granted(target, project_dir):
         return 0
     if payload.get("permission_mode") in INTERACTIVE_MODES:
         return emit("ask", build_reason(target, reason))

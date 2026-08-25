@@ -13,7 +13,12 @@ All notable changes to this project are documented here. Format loosely follows
   addition must start on a new line, and the old text must sit at the end of the file.
   An earlier form of this check asked only whether the old text still appeared somewhere
   in the new text, which passed an assertion that had been commented out, wrapped in a
-  string, moved into a branch that never runs, or extended on the same line. An edit that removes or rewrites existing test
+  string, moved into a branch that never runs, or extended on the same line. Paths are
+  resolved before classification, so a symlink with an innocuous name cannot carry an
+  edit into a test file, and a test-named symlink pointing outside the project root is
+  gated rather than followed. The `AGENTS_CONSENT_GRANTED` override for headless runs
+  is compared on the canonical path, so one grant releases one file rather than every
+  file whose path ends the same way. An edit that removes or rewrites existing test
   content, drops an assertion, or introduces a skip marker now goes to a permission
   prompt (AGENTS.md Rule 3), so the decision lands with a person at the act rather
   than with an agent that has talked itself into it. Adding a test, or appending one

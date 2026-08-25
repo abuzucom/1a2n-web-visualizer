@@ -43,6 +43,7 @@ def run_hook(payload: dict, env: dict = None) -> tuple:
     """Return the hook's (exit code, parsed stdout) for `payload`."""
     environment = dict(os.environ)
     environment.pop("AGENTS_CONSENT_GRANTED", None)
+    environment.pop("CLAUDE_PROJECT_DIR", None)
     if env:
         environment.update(env)
     result = subprocess.run(
@@ -270,7 +271,9 @@ class FailClosedTest(TestFileFixture):
     def test_override_releases_only_the_named_path(self):
         old = "  assert.equal(viz.diagnostics().trackState, 'none');\n"
         granted = {"AGENTS_CONSENT_GRANTED": "tests/test_bcviz_api.js"}
-        code, parsed = run_hook(edit_payload(str(self.test_file), old, "", "bypassPermissions"), granted)
+        payload = edit_payload(str(self.test_file), old, "", "bypassPermissions")
+        payload["cwd"] = self.tmp.name
+        code, parsed = run_hook(payload, granted)
         self.assertEqual(code, 0)
         self.assertEqual(decision_of(parsed), "")
 
@@ -282,6 +285,83 @@ class FailClosedTest(TestFileFixture):
         code, parsed = run_hook(payload, granted)
         self.assertEqual(code, 0)
         self.assertEqual(decision_of(parsed), "ask")
+
+
+class PathAliasTest(unittest.TestCase):
+    """A path is only as trustworthy as what it resolves to.
+
+    Classifying the string the caller supplied, rather than the file it
+    reaches, lets a symlink with an innocuous name carry an edit straight
+    into a test file.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = os.path.realpath(self.tmp.name)
+        os.makedirs(os.path.join(self.root, "tests"))
+        self.test_file = Path(self.root) / "tests" / "test_auth.js"
+        self.test_file.write_text(EXISTING_TEST, encoding="utf-8")
+
+    def _edit(self, target: str, env: dict = None, mode: str = "default") -> str:
+        payload = edit_payload(target, "  assert.equal(deviceBCalls, 1, 'no retry attempted');", "", mode)
+        payload["cwd"] = self.root
+        _, parsed = run_hook(payload, env)
+        return decision_of(parsed)
+
+    def test_symlink_with_an_innocuous_name_is_still_a_test(self):
+        alias = Path(self.root) / "notes.txt"
+        alias.symlink_to(self.test_file)
+        self.assertEqual(self._edit(str(alias)), "ask")
+
+    def test_test_named_symlink_pointing_outside_the_root_is_gated(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        target = Path(os.path.realpath(outside.name)) / "payload.js"
+        target.write_text(EXISTING_TEST, encoding="utf-8")
+        alias = Path(self.root) / "tests" / "test_escape.js"
+        alias.symlink_to(target)
+        self.assertEqual(self._edit(str(alias)), "ask")
+
+    def test_ordinary_non_test_file_still_passes(self):
+        source = Path(self.root) / "src.js"
+        source.write_text("export function create() {}\n", encoding="utf-8")
+        payload = edit_payload(str(source), "create() {}", "create() { return 1; }")
+        payload["cwd"] = self.root
+        _, parsed = run_hook(payload)
+        self.assertEqual(decision_of(parsed), "")
+
+
+class OverrideScopeTest(unittest.TestCase):
+    """A grant names one file, not every file whose path ends the same way."""
+
+    GRANT = {"AGENTS_CONSENT_GRANTED": "tests/test_auth.js"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = os.path.realpath(self.tmp.name)
+        self.granted = self._make_test("tests")
+        self.other = self._make_test(os.path.join("elsewhere", "tests"))
+
+    def _make_test(self, relative_dir: str) -> Path:
+        directory = Path(self.root) / relative_dir
+        directory.mkdir(parents=True)
+        path = directory / "test_auth.js"
+        path.write_text(EXISTING_TEST, encoding="utf-8")
+        return path
+
+    def _edit(self, target: Path) -> str:
+        payload = edit_payload(str(target), "  assert.equal(deviceBCalls, 1, 'no retry attempted');", "")
+        payload["cwd"] = self.root
+        _, parsed = run_hook(payload, self.GRANT)
+        return decision_of(parsed)
+
+    def test_grant_releases_the_named_file(self):
+        self.assertEqual(self._edit(self.granted), "")
+
+    def test_grant_does_not_release_a_matching_suffix_elsewhere(self):
+        self.assertEqual(self._edit(self.other), "ask")
 
 
 class QuestionChecklistTest(unittest.TestCase):
