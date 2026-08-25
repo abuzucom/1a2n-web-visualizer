@@ -238,6 +238,18 @@ AGENTS.md-specific style checks below, additive to `npm run lint` (ESLint and
 Ruff), not a replacement for it. Running `pre-commit install` after cloning
 also wires most of the same checks in as local git hooks (`.pre-commit-config.yaml`).
 
+`hooks/` holds two Claude Code hooks, wired through `.claude/settings.json`,
+that run before a tool call rather than after a commit.
+`block_destructive_bash.py` denies `rm -rf` aimed at `/`, `~`, or `$HOME`, a
+bare `git push --force`, and `git reset --hard`, and routes every other
+recursive delete, the `--force-with-lease` family, `git commit --amend`,
+`git rebase`, and `git filter-branch` to a permission prompt.
+`require_consent.py` sends an edit that removes, rewrites, or weakens
+existing test content to the same prompt; adding a test, or appending one to
+an existing file, passes untouched. Both are heuristics rather than a
+sandbox, and neither sees a file written through a Bash redirect, which is
+what the protected-file review in `docs/protected-file-review.md` covers.
+
 | Script | Backs | Blocking? |
 |---|---|---|
 | `scripts/lint_style.py` | No run-on sentences/dashes; no non-ASCII characters (in `AGENTS.md`) | Yes |

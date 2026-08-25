@@ -4,6 +4,38 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.0]
+
+### Added
+- Added `hooks/require_consent.py` and `.claude/settings.json`, wiring two Claude Code
+  gates that run before a tool call. An edit that removes or rewrites existing test
+  content, drops an assertion, or introduces a skip marker now goes to a permission
+  prompt (AGENTS.md Rule 3), so the decision lands with a person at the act rather
+  than with an agent that has talked itself into it. Adding a test, or appending one
+  to an existing file, passes untouched, which keeps the mandated test-first workflow
+  unprompted.
+- Added `tests/test_require_consent.py` and `tests/test_block_destructive_bash.py`,
+  27 tests covering every gate outcome and whether the settings files still register
+  each hook.
+- Added `tests/`, `hooks/`, and `.claude/` to `PROTECTED_PREFIXES` in
+  `scripts/check_protected_files.py`. Pull requests touching a test, or touching the
+  gates themselves, now need code-owner approval on the current commit. A local hook
+  is defeatable by editing the settings it lives in; this check is not.
+- Added four AGENTS.md lines, each backed by a check that now exists (Rule 13):
+  approving a plan is not authorization for the acts inside it; Rule 2 carries no
+  scope qualifier; disclosure is not a substitute for stopping; `--force-with-lease`
+  is not an exception to the pushed-history rule.
+
+### Changed
+- Wired `hooks/block_destructive_bash.py` into `.claude/settings.json`. The repo has
+  carried the script since adopting the template but never registered it, so it had
+  never run. It also gained ask outcomes: `rm -rf` against any target outside `/`,
+  `~`, and `$HOME`; the `--force-with-lease` family, which its `--force` pattern
+  never matched; `git push --delete`; `git commit --amend`; `git rebase`; and
+  `git filter-branch`.
+- Documented the new protected paths in `docs/protected-file-review.md` and both
+  hooks in the README Security Model section.
+
 ## [1.8.1]
 
 ### Fixed
