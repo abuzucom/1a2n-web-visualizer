@@ -70,20 +70,39 @@ def find_reason(command: str) -> str:
     return ""
 
 
+CONSENT_CHECKS = (
+    (
+        _is_recursive_force_rm,
+        "rm -rf: Rule 2 gates every target, including a directory this session created",
+    ),
+    (
+        lambda command: _is_git(command, "push") and FORCE_VARIANT.search(command) is not None,
+        "git push with a --force variant: a lease is not consent to rewrite pushed history",
+    ),
+    (
+        lambda command: _is_git(command, "push") and _has_flag(command, "d", "--delete"),
+        "git push --delete: this removes a published ref",
+    ),
+    (
+        lambda command: _is_git(command, "commit") and "--amend" in command,
+        "git commit --amend: this rewrites a commit",
+    ),
+    (
+        lambda command: _is_git(command, "rebase"),
+        "git rebase: this rewrites history",
+    ),
+    (
+        lambda command: _is_git(command, "filter-branch"),
+        "git filter-branch: this rewrites history",
+    ),
+)
+
+
 def find_consent_reason(command: str) -> str:
     """Return why `command` needs the user's consent, or an empty string."""
-    if _is_recursive_force_rm(command):
-        return "rm -rf: Rule 2 gates every target, including a directory this session created"
-    if _is_git(command, "push") and FORCE_VARIANT.search(command):
-        return "git push with a --force variant: a lease is not consent to rewrite pushed history"
-    if _is_git(command, "push") and _has_flag(command, "d", "--delete"):
-        return "git push --delete: this removes a published ref"
-    if _is_git(command, "commit") and "--amend" in command:
-        return "git commit --amend: this rewrites a commit"
-    if _is_git(command, "rebase"):
-        return "git rebase: this rewrites history"
-    if _is_git(command, "filter-branch"):
-        return "git filter-branch: this rewrites history"
+    for matches, reason in CONSENT_CHECKS:
+        if matches(command):
+            return reason
     return ""
 
 
