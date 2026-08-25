@@ -240,18 +240,20 @@ def is_redirected(raw: str, project_dir: str, target: str) -> bool:
 
 
 def escape_reason(raw: str, target: str, project_dir: str) -> str:
-    """Return why a redirected path cannot be cleared, or an empty string.
+    """Return why an out-of-tree path cannot be cleared, or an empty string.
 
-    Only a path that resolution actually redirected is checked against the
-    root. An ordinary path to a file outside the project is somebody working
-    in more than one tree; a link out of the project is the tree being used
-    to reach something it does not contain.
+    Any test file resolving outside the project root is gated, whether a
+    link redirected it there or the caller named it directly. The gate
+    reasons about one tree and can only speak for that tree; a file outside
+    it is one the person running the session should be asked about. A
+    redirected path is named separately because a link that leaves the tree
+    is the tree being used to reach something it does not contain.
     """
-    if not is_redirected(raw, project_dir, target):
-        return ""
     if not escapes_root(target, project_dir):
         return ""
-    return "follows a link to a test file outside the project root, which the gate cannot vouch for"
+    if is_redirected(raw, project_dir, target):
+        return "follows a link to a test file outside the project root, which the gate cannot vouch for"
+    return "names a test file outside the project root, which the gate cannot vouch for"
 
 
 def is_override_granted(target: str, project_dir: str) -> bool:

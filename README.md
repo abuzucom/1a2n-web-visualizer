@@ -255,9 +255,9 @@ must sit at the end of the file. A new test file passes untouched. Edits that
 keep the old text are still gated, because an assertion that is commented
 out, wrapped in a string, or moved into a branch that never runs keeps its
 text and loses its effect. Paths are resolved before classification, so a
-symlink with an innocuous name cannot carry an edit into a test file, and a
-test-named symlink pointing outside the project root is gated rather than
-followed. Both are heuristics rather than a
+symlink with an innocuous name cannot carry an edit into a test file, and any
+test file resolving outside the project root is gated whether a link
+redirected it there or the caller named it directly. Both are heuristics rather than a
 sandbox, and neither sees a file written through a Bash redirect, which is
 what the protected-file review in `docs/protected-file-review.md` covers.
 

@@ -15,8 +15,8 @@ All notable changes to this project are documented here. Format loosely follows
   in the new text, which passed an assertion that had been commented out, wrapped in a
   string, moved into a branch that never runs, or extended on the same line. Paths are
   resolved before classification, so a symlink with an innocuous name cannot carry an
-  edit into a test file, and a test-named symlink pointing outside the project root is
-  gated rather than followed. The `AGENTS_CONSENT_GRANTED` override for headless runs
+  edit into a test file, and any test file resolving outside the project root is gated
+  whether a link redirected it there or the caller named it directly. The `AGENTS_CONSENT_GRANTED` override for headless runs
   is compared on the canonical path, so one grant releases one file rather than every
   file whose path ends the same way. An edit that removes or rewrites existing test
   content, drops an assertion, or introduces a skip marker now goes to a permission

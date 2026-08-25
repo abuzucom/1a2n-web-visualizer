@@ -79,6 +79,8 @@ class TestFileFixture(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.tmp.name)
         self.test_file = Path(self.tmp.name) / "tests" / "test_bcviz_api.js"
         self.test_file.parent.mkdir(parents=True)
         self.test_file.write_text(EXISTING_TEST, encoding="utf-8")
@@ -322,6 +324,16 @@ class PathAliasTest(unittest.TestCase):
         alias = Path(self.root) / "tests" / "test_escape.js"
         alias.symlink_to(target)
         self.assertEqual(self._edit(str(alias)), "ask")
+
+    def test_test_file_outside_the_root_is_gated_without_any_link(self):
+        """The gate speaks for one tree and is asked about anything outside it."""
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        target = Path(os.path.realpath(outside.name)) / "tests"
+        target.mkdir()
+        external = target / "test_external.js"
+        external.write_text(EXISTING_TEST, encoding="utf-8")
+        self.assertEqual(self._edit(str(external)), "ask")
 
     def test_ordinary_non_test_file_still_passes(self):
         source = Path(self.root) / "src.js"
