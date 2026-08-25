@@ -29,10 +29,17 @@ All notable changes to this project are documented here. Format loosely follows
 ### Changed
 - Wired `hooks/block_destructive_bash.py` into `.claude/settings.json`. The repo has
   carried the script since adopting the template but never registered it, so it had
-  never run. It also gained ask outcomes: `rm -rf` against any target outside `/`,
-  `~`, and `$HOME`; the `--force-with-lease` family, which its `--force` pattern
-  never matched; `git push --delete`; `git commit --amend`; `git rebase`; and
-  `git filter-branch`.
+  never run. It also gained ask outcomes: a recursive `rm` against any target outside
+  `/`, `~`, and `$HOME`; the `--force-with-lease` family, which its `--force` pattern
+  never matched; `git push --mirror`; `git push --delete`; a forced `+` refspec;
+  `git commit --amend`; `git rebase`; and `git filter-branch`.
+- Rewrote that hook to tokenize and normalize the command before deciding. Matching
+  the raw string matched spelling rather than meaning, so every equivalent spelling
+  walked through: `rm -Rf` and `rm -r`, `git -C dir push --force` and other
+  global-option forms, `--force-with-lease=main:<oid>`, and `git push origin
+  +HEAD:main`. The `git -C dir push --force` form bypassed a deny, not just an ask.
+  Ambiguity now fails closed, and quoted text such as `echo 'rm -rf /'` no longer
+  reads as a command.
 - Documented the new protected paths in `docs/protected-file-review.md` and both
   hooks in the README Security Model section.
 

@@ -113,6 +113,65 @@ class FailClosedTest(unittest.TestCase):
                 self.assertEqual(decision, "ask")
 
 
+class EvasionTest(unittest.TestCase):
+    """Valid command forms that must not slip past the gate.
+
+    Every case here was ALLOWED by the original regex matcher. A gate that
+    reads the raw command string matches spelling rather than meaning, so
+    any equivalent spelling walks through it.
+    """
+
+    DENIED = (
+        "git -C /repo push --force origin main",
+        "git --no-pager push -f origin main",
+        "git push -fu origin main",
+        "sudo rm -rf /",
+        "rm -Rf ~",
+    )
+
+    ASKED = (
+        "rm -Rf /tmp/x",
+        "rm -fR /tmp/x",
+        "rm -r /tmp/x",
+        "rm --recursive /tmp/x",
+        "git -C . rebase main",
+        "git -c user.name=x commit --amend",
+        "git --no-pager rebase main",
+        "git --git-dir=/tmp/g --work-tree=/tmp/w rebase main",
+        "git push --force-with-lease=main:abc123",
+        "git push --force-if-includes=x origin main",
+        "git push origin +HEAD:main",
+        "git push origin +refs/heads/main:refs/heads/main",
+        "git push --mirror origin",
+        "true; rm -rf /tmp/x",
+        "ls | xargs rm -rf",
+        "FOO=bar rm -rf /tmp/x",
+    )
+
+    def test_denied_forms_are_denied(self):
+        for command in self.DENIED:
+            with self.subTest(command=command):
+                code, decision = run_hook(command)
+                self.assertEqual(code, BLOCKING_EXIT_CODE)
+                self.assertEqual(decision, "deny")
+
+    def test_asked_forms_reach_the_human(self):
+        for command in self.ASKED:
+            with self.subTest(command=command):
+                code, decision = run_hook(command)
+                self.assertEqual(code, 0)
+                self.assertEqual(decision, "ask")
+
+    def test_unparseable_destructive_command_fails_closed(self):
+        """An unbalanced quote must not be read as 'nothing to see here'."""
+        _, decision = run_hook("rm -rf '/tmp/x")
+        self.assertIn(decision, ("ask", "deny"))
+
+    def test_unresolvable_git_subcommand_fails_closed(self):
+        _, decision = run_hook("git $SUBCOMMAND --force origin main")
+        self.assertIn(decision, ("ask", "deny"))
+
+
 class AllowTest(unittest.TestCase):
     """Ordinary commands pass without a prompt."""
 

@@ -240,10 +240,14 @@ also wires most of the same checks in as local git hooks (`.pre-commit-config.ya
 
 `hooks/` holds two Claude Code hooks, wired through `.claude/settings.json`,
 that run before a tool call rather than after a commit.
-`block_destructive_bash.py` denies `rm -rf` aimed at `/`, `~`, or `$HOME`, a
-bare `git push --force`, and `git reset --hard`, and routes every other
-recursive delete, the `--force-with-lease` family, `git commit --amend`,
-`git rebase`, and `git filter-branch` to a permission prompt.
+`block_destructive_bash.py` denies a recursive `rm` aimed at `/`, `~`, or
+`$HOME`, a bare `git push --force`, and `git reset --hard`, and routes every
+other recursive delete, the `--force-with-lease` family, `git push --mirror`,
+`git push --delete`, a forced (`+`) refspec, `git commit --amend`,
+`git rebase`, and `git filter-branch` to a permission prompt. It tokenizes the
+command first, so equivalent spellings (`rm -Rf`, `git -C dir push --force`,
+`--force-with-lease=main:<oid>`) are caught rather than read past, and a
+command it cannot parse is gated rather than cleared.
 `require_consent.py` sends an edit that removes, rewrites, or weakens
 existing test content to the same prompt; adding a test, or appending one to
 an existing file, passes untouched. Both are heuristics rather than a
