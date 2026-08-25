@@ -260,24 +260,30 @@ jobs:
           # Keyed on the pinned checksum below, not a mutable version
           # string, so the cache invalidates itself the moment that hash
           # is next updated for a new upstream jar.
-          key: vnu-jar-c70279e260e5f4f9e95b3890ef6c9548f90ebdaec2a75219ec41694ab6241e34
+          key: vnu-jar-467249d9312a66bea0de153449b7b965a1ff0e5070efd00b8d0cc4237d9a40df
 
-      - name: Download and verify vnu.jar
-        # validator/validator publishes its one recommended, production-ready
-        # jar under the "latest" release tag rather than per-version tags
-        # (currently vnu 26.8.15); the hash below, computed from that exact
-        # download, is the real pin. Upstream ships only MD5/SHA-1 checksums
-        # for this asset (AGENTS.md Rule 7 bars trusting those), so verify
-        # against a SHA-256 computed here instead. A checksum mismatch means
-        # upstream published a new jar; re-verify and update this hash.
+      - name: Download and extract vnu.jar
+        # validator/validator attaches release assets only to its moving
+        # "latest" tag; its per-version git tags carry no assets, so there
+        # is no immutable GitHub URL to pin. Take the jar from the npm
+        # package the same project publishes instead: a published npm
+        # version can never be replaced, so this URL and both hashes stay
+        # valid until someone deliberately bumps the version. Upstream
+        # ships only MD5/SHA-1 checksums (AGENTS.md Rule 7 bars trusting
+        # those), so verify SHA-256 computed at pin time. The tarball hash
+        # covers the download; the jar hash covers what is cached and run.
+        # To bump: fetch the new tarball, confirm it is the version you
+        # want, recompute both hashes, and update them with the cache key.
         if: steps.vnu-cache.outputs.cache-hit != 'true'
         run: |
-          curl -sSLo vnu.jar https://github.com/validator/validator/releases/download/latest/vnu.jar
-          echo "c70279e260e5f4f9e95b3890ef6c9548f90ebdaec2a75219ec41694ab6241e34  vnu.jar" | sha256sum -c -
+          curl -sSLo vnu-jar.tgz https://registry.npmjs.org/vnu-jar/-/vnu-jar-26.8.21.tgz
+          echo "ac60074085475df62ae3b39cf5ae144c135ef01bc85bb72ed22aa280df3422db  vnu-jar.tgz" | sha256sum -c -
+          tar -xzOf vnu-jar.tgz package/build/dist/vnu.jar > vnu.jar
+          rm vnu-jar.tgz
 
-      - name: Verify cached vnu.jar checksum
-        if: steps.vnu-cache.outputs.cache-hit == 'true'
-        run: echo "c70279e260e5f4f9e95b3890ef6c9548f90ebdaec2a75219ec41694ab6241e34  vnu.jar" | sha256sum -c -
+      # Runs on both paths: a fresh extraction and a restored cache entry.
+      - name: Verify vnu.jar checksum
+        run: echo "467249d9312a66bea0de153449b7b965a1ff0e5070efd00b8d0cc4237d9a40df  vnu.jar" | sha256sum -c -
 
       - name: Validate HTML and CSS
         run: java -jar vnu.jar --also-check-css src/*.html src/css/*.css

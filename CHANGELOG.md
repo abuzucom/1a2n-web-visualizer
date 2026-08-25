@@ -79,8 +79,12 @@ All notable changes to this project are documented here. Format loosely follows
 - Added an `html-css-validation` job to `.github/workflows/checks.yml` that
   runs the [Nu Html Checker](https://github.com/validator/validator) against
   `src/*.html` and `src/css/*.css` on every pull request and push to
-  `develop`, downloading its `vnu.jar` release asset pinned by a SHA-256
-  checksum computed at adoption time.
+  `develop`. Upstream attaches release assets only to a moving `latest` tag,
+  which silently replaces the jar and breaks any checksum pinned against it,
+  so the job takes `vnu.jar` from the immutable `vnu-jar` npm tarball the
+  same project publishes, pinned by version and verified by SHA-256 on both
+  the tarball and the extracted jar. Moving to a new checker version is now
+  a deliberate change rather than whatever upstream published last.
 - Added `SECURITY.md`: how to privately report a vulnerability (GitHub
   Security Advisories), scope, supported versions, and the accepted risks
   already documented elsewhere (CSP `unsafe-eval`, localhost-only Docker
