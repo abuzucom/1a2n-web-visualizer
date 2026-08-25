@@ -37,6 +37,11 @@ All notable changes to this project are documented here. Format loosely follows
   is not an exception to the pushed-history rule.
 
 ### Changed
+- Excluded merge commits from `scripts/check_commit_message.py`, and returned it to the template's advisory
+  behavior so a subject violation reports rather than blocks. `git merge` writes `Merge branch 'x' into y`,
+  which no author chose and which no `type: description` subject can express, so every ordinary branch update
+  failed the check. Added `tests/test_check_commit_message.py` covering the merge case, a real violation, and
+  the advisory exit code.
 - Registered both hooks in the exec form (`command` plus `args`) instead of a shell string. In shell form an
   unquoted `${CLAUDE_PROJECT_DIR}` splits a project path containing a space, and the gate silently never runs.
 - Made both hooks fail closed on their own inputs. An unparseable payload or a malformed `tool_input` is denied

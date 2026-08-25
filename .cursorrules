@@ -507,7 +507,7 @@ Good: `# Verify the user is authenticated before continuing`
 
 **Comment the why.** Document the reasoning; the code shows the execution.
 
-**Commit messages.** Subject as `type: description` (feat, fix, chore, docs, test), imperative mood, 50 characters max, no trailing period. Put extra detail in the body rather than truncating it. Shape backed by `scripts/check_commit_message.py`; it cannot verify imperative mood.
+**Commit messages.** Subject as `type: description` (feat, fix, chore, docs, test), imperative mood, 50 characters max, no trailing period. Put extra detail in the body rather than truncating it. Shape backed by `scripts/check_commit_message.py`, which warns rather than blocks and cannot verify imperative mood. Merge commits are exempt, because `git merge` writes their subject and no `type: description` form can express it.
 
 **Variables.** Name for role (`active_user_records`, not `d`). Loop counters (`i, j, k`) and math variables (`x, y`) are exempt.
 

@@ -274,7 +274,7 @@ what the protected-file review in `docs/protected-file-review.md` covers.
 | `scripts/check_english_only.py` | English only | No, warns only |
 | `scripts/check_banned_agents.py` | Banned agents | Yes |
 | `scripts/check_branch_name.py` | Branch naming conventions | Yes |
-| `scripts/check_commit_message.py` | Commit message style | Yes |
+| `scripts/check_commit_message.py` | Commit message style (merge commits exempt) | No, warns only |
 | `scripts/check_persist_credentials.py` | No persisted git credentials in CI workflows | Yes |
 | `scripts/check_weak_hashing.py` | No weak hashing in security-sensitive contexts | Yes |
 | `scripts/check_dockerfile_root.py` | No root containers without explicit consent | Yes |
