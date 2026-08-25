@@ -37,6 +37,11 @@ All notable changes to this project are documented here. Format loosely follows
   is not an exception to the pushed-history rule.
 
 ### Changed
+- Registered both hooks in the exec form (`command` plus `args`) instead of a shell string. In shell form an
+  unquoted `${CLAUDE_PROJECT_DIR}` splits a project path containing a space, and the gate silently never runs.
+- Made both hooks fail closed on their own inputs. An unparseable payload or a malformed `tool_input` is denied
+  rather than treated as a SessionStart or crashing, and a test file that cannot be read or decoded is gated
+  rather than read as an empty string, which had let a non-UTF-8 test file be overwritten with no prompt.
 - Wired `hooks/block_destructive_bash.py` into `.claude/settings.json`. The repo has
   carried the script since adopting the template but never registered it, so it had
   never run. It also gained ask outcomes: a recursive `rm` against any target outside

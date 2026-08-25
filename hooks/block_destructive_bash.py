@@ -270,18 +270,42 @@ def emit(decision: str, reason: str) -> int:
     return 0
 
 
-def main() -> int:
-    payload = json.load(sys.stdin)
-    if payload.get("tool_name") != "Bash":
-        return 0
-    decision, reason = classify(payload.get("tool_input", {}).get("command", ""))
-    if not decision:
-        return 0
+def _read_payload():
+    """Return the stdin payload, or None when it cannot be parsed.
+
+    A gate that crashes on its input is a gate that is not there: Claude Code
+    treats a hook that exits non-zero for any reason other than 2 as a
+    non-blocking error, so an unhandled exception waves the command through.
+    """
+    try:
+        parsed = json.loads(sys.stdin.read())
+    except (OSError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _decide(payload: dict, decision: str, reason: str) -> int:
+    """Emit the decision, turning an ask nobody can answer into a deny."""
     if decision == "deny":
         return emit("deny", reason)
     if payload.get("permission_mode") in INTERACTIVE_MODES:
         return emit("ask", reason)
     return emit("deny", f"{reason}. No interactive session is available to consent.")
+
+
+def main() -> int:
+    payload = _read_payload()
+    if payload is None:
+        return emit("deny", "the hook payload could not be parsed, so the gate cannot clear this command")
+    if payload.get("tool_name") != "Bash":
+        return 0
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return emit("deny", "the tool input is malformed, so the gate cannot read this command")
+    decision, reason = classify(tool_input.get("command", ""))
+    if not decision:
+        return 0
+    return _decide(payload, decision, reason)
 
 
 if __name__ == "__main__":

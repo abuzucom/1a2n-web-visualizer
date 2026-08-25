@@ -193,6 +193,32 @@ class AllowTest(unittest.TestCase):
                 self.assertEqual(decision, "")
 
 
+class MalformedPayloadTest(unittest.TestCase):
+    """A gate that crashes on its input is a gate that is not there."""
+
+    def test_unparseable_payload_denies(self):
+        result = subprocess.run(
+            [sys.executable, str(HOOK_PATH)],
+            input="this is not json",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
+        decision = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"]
+        self.assertEqual(decision, "deny")
+
+    def test_non_dict_tool_input_denies(self):
+        result = subprocess.run(
+            [sys.executable, str(HOOK_PATH)],
+            input=json.dumps({"tool_name": "Bash", "tool_input": "not a dict"}),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
+
+
 class NonBashTest(unittest.TestCase):
     """The hook ignores tools other than Bash."""
 

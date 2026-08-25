@@ -248,6 +248,12 @@ other recursive delete, the `--force-with-lease` family, `git push --mirror`,
 command first, so equivalent spellings (`rm -Rf`, `git -C dir push --force`,
 `--force-with-lease=main:<oid>`) are caught rather than read past, and a
 command it cannot parse is gated rather than cleared.
+
+Both hooks fail closed on their own inputs: a payload that will not parse, or
+a test file that cannot be decoded as text, is denied or gated rather than
+waved through. They are registered in the exec form (`command` plus `args`),
+because in shell form a project path containing a space splits into two
+arguments and the hook silently never runs.
 `require_consent.py` sends any write to an existing test file to the same
 prompt, except a verified append at the end of it: the new text must begin
 with the old text, the addition must start on a new line, and the old text

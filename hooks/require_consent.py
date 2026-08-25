@@ -79,7 +79,16 @@ WEAKENING_MARKERS = (
 )
 OVERRIDE_ENV = "AGENTS_CONSENT_GRANTED"
 
-CHECKLIST = """GATE CHECKLIST before you ask this question.
+SESSION_NOTICE = """Consent gates are live in this repository.
+
+Edits that remove, rewrite, or weaken existing test content route to the user
+for a decision at the act (AGENTS.md Rule 3). Destructive and history
+rewriting Bash commands do the same (Rule 2). Adding a new test, or appending
+one at the end of an existing file, is not gated.
+
+Approval of a plan is not authorization for the individual acts inside it.
+
+GATE CHECKLIST, before you write any question for the user.
 
 Does any option require editing an existing test, deleting files or
 directories, rewriting pushed history, adding or upgrading a dependency, or
@@ -88,28 +97,30 @@ changing a public API contract?
 If yes, that option must name the artifact and the rule in its own text, and
 must say it requires the user's sign-off. Do not label it Recommended. State
 the rule-governed cost, not only the engineering trade-off: the user cannot
-make a call you did not put in front of them."""
+make a call you did not put in front of them.
 
-SESSION_NOTICE = """Consent gates are live in this repository.
-
-Edits that remove, rewrite, or weaken existing test content route to the user
-for a decision at the act (AGENTS.md Rule 3). Destructive and history
-rewriting Bash commands do the same (Rule 2). Adding a new test, or appending
-one to an existing file, is not gated.
-
-Approval of a plan is not authorization for the individual acts inside it."""
+This arrives now rather than when a question is asked, because by the time a
+question reaches a hook its options are already written."""
 
 
-def _read_payload() -> dict:
-    """Return the hook's stdin JSON, or an empty dict when stdin carries none."""
+def _read_payload():
+    """Return the stdin payload, or None when it cannot be parsed.
+
+    Empty stdin is the SessionStart invocation and yields an empty dict.
+    Anything else that will not parse is a refusal, not a shrug: a gate that
+    answers "fine" to input it could not read is worse than no gate.
+    """
     try:
         raw = sys.stdin.read()
     except (OSError, ValueError):
+        return None
+    if not raw.strip():
         return {}
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except ValueError:
-        return {}
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _project_dir(payload: dict) -> str:
@@ -166,16 +177,21 @@ def classify_edit(old: str, new: str, content: str) -> str:
     return ""
 
 
-def read_text(path: str) -> str:
-    """Return the file's contents, or an empty string when it cannot be read."""
+def read_text(path: str):
+    """Return the file's contents, or None when it cannot be read as text.
+
+    None and "" are different answers. An empty file is a file the gate has
+    read; a file it could not decode is one it knows nothing about, and
+    treating that as empty made every edit look like an append.
+    """
     try:
         with open(path, encoding="utf-8") as handle:
             return handle.read()
     except (OSError, UnicodeDecodeError):
-        return ""
+        return None
 
 
-def collect_edits(tool_name: str, tool_input: dict, target: str) -> list:
+def collect_edits(tool_name: str, tool_input: dict, content: str) -> list:
     """Return the (old, new) text pairs this tool call would apply."""
     if tool_name == "MultiEdit":
         return [
@@ -183,7 +199,7 @@ def collect_edits(tool_name: str, tool_input: dict, target: str) -> list:
             for edit in tool_input.get("edits", [])
         ]
     if tool_name == "Write":
-        return [(read_text(target), tool_input.get("content", ""))]
+        return [(content, tool_input.get("content", ""))]
     return [(tool_input.get("old_string", ""), tool_input.get("new_string", ""))]
 
 
@@ -194,7 +210,9 @@ def find_gate_reason(tool_name: str, tool_input: dict, target: str) -> str:
     if tool_name == "NotebookEdit":
         return "rewrites a cell in an existing test notebook"
     content = read_text(target)
-    for old, new in collect_edits(tool_name, tool_input, target):
+    if content is None:
+        return "cannot be read as text, so the gate cannot confirm what this edit changes"
+    for old, new in collect_edits(tool_name, tool_input, content):
         reason = classify_edit(old, new, content)
         if reason:
             return reason
@@ -305,9 +323,19 @@ def emit_context(event: str, context: str) -> int:
     return 0
 
 
+def _decide(payload: dict, target: str, reason: str) -> int:
+    """Emit the gate decision, turning an ask nobody can answer into a deny."""
+    message = build_reason(target, reason)
+    if payload.get("permission_mode") in INTERACTIVE_MODES:
+        return emit("ask", message)
+    return emit("deny", f"{message} No interactive session is available to consent.")
+
+
 def _handle_write(payload: dict, project_dir: str) -> int:
     """Gate a write that would weaken an existing test."""
-    tool_input = payload.get("tool_input", {})
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return emit("deny", "the tool input is malformed, so the gate cannot read what this call writes")
     raw = given_path(tool_input)
     if not raw:
         return 0
@@ -321,19 +349,12 @@ def _handle_write(payload: dict, project_dir: str) -> int:
         return 0
     if is_override_granted(target, project_dir):
         return 0
-    if payload.get("permission_mode") in INTERACTIVE_MODES:
-        return emit("ask", build_reason(target, reason))
-    return emit(
-        "deny",
-        f"{build_reason(target, reason)} No interactive session is available to consent.",
-    )
+    return _decide(payload, target, reason)
 
 
 def _handle_pre_tool_use(payload: dict, project_dir: str) -> int:
     """Dispatch on the tool the session is about to call."""
     tool_name = payload.get("tool_name", "")
-    if tool_name == "AskUserQuestion":
-        return emit_context("PreToolUse", CHECKLIST)
     if tool_name in GATED_TOOLS:
         return _handle_write(payload, project_dir)
     return 0
@@ -341,6 +362,8 @@ def _handle_pre_tool_use(payload: dict, project_dir: str) -> int:
 
 def main() -> int:
     payload = _read_payload()
+    if payload is None:
+        return emit("deny", "the hook payload could not be parsed, so the gate cannot clear this call")
     project_dir = _project_dir(payload)
     if payload.get("hook_event_name") == "PreToolUse":
         return _handle_pre_tool_use(payload, project_dir)

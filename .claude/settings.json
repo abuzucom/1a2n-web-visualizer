@@ -5,7 +5,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR}/hooks/require_consent.py",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/require_consent.py"
+            ],
             "timeout": 30
           }
         ]
@@ -17,7 +20,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR}/hooks/block_destructive_bash.py",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/block_destructive_bash.py"
+            ],
             "timeout": 30
           }
         ]
@@ -27,17 +33,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR}/hooks/require_consent.py",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "AskUserQuestion",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR}/hooks/require_consent.py",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/require_consent.py"
+            ],
             "timeout": 30
           }
         ]

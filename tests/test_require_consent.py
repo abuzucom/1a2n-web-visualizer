@@ -28,7 +28,6 @@ LIVE_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 EXAMPLE_SETTINGS = REPO_ROOT / "hooks" / "claude-code-settings.example.json"
 BLOCKING_EXIT_CODE = 2
 EDIT_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
-QUESTION_MATCHER = "AskUserQuestion"
 
 EXISTING_TEST = """test('device switch failure leaves the visualizer silent', function () {
   assert.equal(deviceBCalls, 1, 'no retry attempted');
@@ -376,21 +375,114 @@ class OverrideScopeTest(unittest.TestCase):
         self.assertEqual(self._edit(self.other), "ask")
 
 
-class QuestionChecklistTest(unittest.TestCase):
-    """AskUserQuestion gets the gate checklist and never a decision."""
+class FailClosedInputTest(unittest.TestCase):
+    """A gate that cannot read its input must not answer 'fine'."""
 
-    def test_checklist_is_injected(self):
+    def test_unparseable_payload_denies(self):
+        result = subprocess.run(
+            [sys.executable, str(HOOK_PATH)],
+            input="this is not json",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
+        parsed = json.loads(result.stdout)
+        self.assertEqual(decision_of(parsed), "deny")
+
+    def test_empty_stdin_is_still_a_session_start(self):
+        """No payload at all is the SessionStart invocation, not a failure."""
+        result = subprocess.run(
+            [sys.executable, str(HOOK_PATH)],
+            input="",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Rule 3", json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"])
+
+    def test_non_dict_tool_input_denies(self):
+        code, parsed = run_hook({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "permission_mode": "default",
+            "tool_input": "not a dict",
+        })
+        self.assertEqual(code, BLOCKING_EXIT_CODE)
+        self.assertEqual(decision_of(parsed), "deny")
+
+
+class UnreadableFileTest(unittest.TestCase):
+    """A test file the gate cannot decode is not an empty file."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = os.path.realpath(self.tmp.name)
+        os.makedirs(os.path.join(self.root, "tests"))
+
+    def _write_over(self, target: str) -> str:
         payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "permission_mode": "default",
+            "cwd": self.root,
+            "tool_input": {"file_path": target, "content": "\ntest('replaced', function () {});\n"},
+        }
+        _, parsed = run_hook(payload)
+        return decision_of(parsed)
+
+    def test_non_utf8_test_file_is_gated(self):
+        target = os.path.join(self.root, "tests", "test_binary.js")
+        with open(target, "wb") as handle:
+            handle.write(b"test('x', function () {\n  assert.ok(\xff\xfe);\n});\n")
+        self.assertEqual(self._write_over(target), "ask")
+
+    def test_unreadable_test_file_is_gated(self):
+        target = os.path.join(self.root, "tests", "test_noread.js")
+        Path(target).write_text(EXISTING_TEST, encoding="utf-8")
+        os.chmod(target, 0o000)
+        self.addCleanup(os.chmod, target, 0o644)
+        self.assertEqual(self._write_over(target), "ask")
+
+    def test_non_utf8_file_cannot_be_edited_through_an_empty_old_string(self):
+        target = os.path.join(self.root, "tests", "test_binary2.js")
+        with open(target, "wb") as handle:
+            handle.write(b"assert.ok(\xff\xfe);\n")
+        payload = edit_payload(target, "", "\nwhatever")
+        payload["cwd"] = self.root
+        _, parsed = run_hook(payload)
+        self.assertEqual(decision_of(parsed), "ask")
+
+
+class QuestionChecklistTest(unittest.TestCase):
+    """The checklist arrives at SessionStart, before any question is written.
+
+    It used to be injected on PreToolUse for AskUserQuestion, which is too
+    late to help: by the time a tool call reaches a hook, the model has
+    already written the question and its option labels, and additionalContext
+    cannot rewrite them. Guidance that arrives after the decision it is meant
+    to shape is decoration.
+    """
+
+    def test_checklist_is_in_the_session_notice(self):
+        code, parsed = run_hook({"hook_event_name": "SessionStart"})
+        self.assertEqual(code, 0)
+        context = parsed["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("existing test", context)
+        self.assertIn("Recommended", context)
+
+    def test_ask_user_question_gets_no_decision(self):
+        """The hook has nothing useful to say at this point and says nothing."""
+        code, parsed = run_hook({
             "hook_event_name": "PreToolUse",
             "tool_name": "AskUserQuestion",
             "permission_mode": "default",
             "tool_input": {"questions": []},
-        }
-        code, parsed = run_hook(payload)
+        })
         self.assertEqual(code, 0)
-        self.assertEqual(decision_of(parsed), "")
-        self.assertIn("existing test", parsed["hookSpecificOutput"]["additionalContext"])
-        self.assertIn("Recommended", parsed["hookSpecificOutput"]["additionalContext"])
+        self.assertEqual(parsed, {})
 
 
 class SessionStartTest(unittest.TestCase):
@@ -406,13 +498,19 @@ class SettingsWiringTest(unittest.TestCase):
     """The hook enforces nothing unless the settings files register it."""
 
     @staticmethod
-    def _matchers_for(settings: dict, command_fragment: str, event: str) -> list:
-        """Return every matcher registering `command_fragment` for `event`."""
+    def _registers(entry: dict, hook_name: str) -> bool:
+        """Return True if this hook entry runs `hook_name`, in either form."""
+        parts = [entry.get("command", "")] + list(entry.get("args", []))
+        return any(hook_name in part for part in parts)
+
+    @classmethod
+    def _matchers_for(cls, settings: dict, hook_name: str, event: str) -> list:
+        """Return every matcher registering `hook_name` for `event`."""
         return [
             matcher.get("matcher", "")
             for matcher in settings.get("hooks", {}).get(event, [])
             for entry in matcher.get("hooks", [])
-            if command_fragment in entry.get("command", "")
+            if cls._registers(entry, hook_name)
         ]
 
     def _assert_registered(self, path: Path):
@@ -422,13 +520,9 @@ class SettingsWiringTest(unittest.TestCase):
             f"{path.name} does not register require_consent.py for SessionStart",
         )
         pre_tool_use = self._matchers_for(settings, "require_consent.py", "PreToolUse")
-        self.assertIn(
-            EDIT_MATCHER, pre_tool_use,
-            f"{path.name} does not register require_consent.py for {EDIT_MATCHER}",
-        )
-        self.assertIn(
-            QUESTION_MATCHER, pre_tool_use,
-            f"{path.name} does not register require_consent.py for {QUESTION_MATCHER}",
+        self.assertEqual(
+            pre_tool_use, [EDIT_MATCHER],
+            f"{path.name} must register require_consent.py for exactly {EDIT_MATCHER}",
         )
 
     def test_live_settings_register_the_hook(self):
@@ -436,6 +530,17 @@ class SettingsWiringTest(unittest.TestCase):
 
     def test_example_settings_register_the_hook(self):
         self._assert_registered(EXAMPLE_SETTINGS)
+
+    def test_entries_use_the_exec_form(self):
+        """Shell form splits a project path containing spaces and the hook never runs."""
+        for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
+            settings = json.loads(path.read_text(encoding="utf-8"))
+            for event in ("SessionStart", "PreToolUse"):
+                for matcher in settings["hooks"][event]:
+                    for entry in matcher.get("hooks", []):
+                        with self.subTest(path=path.name, command=entry.get("command")):
+                            self.assertEqual(entry.get("command"), "python3")
+                            self.assertTrue(entry.get("args"), "exec form requires args")
 
     def test_destructive_bash_hook_is_registered(self):
         """The incident's rm -rf and force-push ran because nothing wired this."""
