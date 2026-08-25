@@ -24,6 +24,12 @@ PROTECTED_PREFIXES = (
     "patches/",
     "src/js/",
     "src/vendor/",
+    # A test is a recorded decision about what the code must do, and the
+    # hooks and settings below are what stop that decision being edited
+    # unilaterally. Both need the owner's eyes on the pull request.
+    "tests/",
+    "hooks/",
+    ".claude/",
 )
 PROTECTED_FILES = {
     "package.json", "package-lock.json", "Dockerfile", "docker-compose.yml",
