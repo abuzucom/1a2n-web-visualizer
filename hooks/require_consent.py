@@ -14,10 +14,18 @@ deciding the rule's purpose does not cover this case; it cannot talk itself
 past a permission prompt. So the gate returns `ask` and the human answers.
 
 The gate stays out of the way of the mandated test-first workflow. A new test
-file passes. An append to an existing test file passes, detected by the old
-string surviving verbatim inside the new one. What gets gated is an edit that
-removes or rewrites existing test content, drops an assertion, or introduces
-a skip marker. Existing test content is a human's recorded decision, and a
+file passes, and so does an append at the end of an existing test file. That
+is the whole carve-out. An edit that rewrites existing content, inserts into
+the middle of a file, drops an assertion, or introduces a skip marker is
+gated.
+
+The carve-out is an end-of-file append rather than "the old text still appears
+somewhere in the new text", because the latter is not a test that the old
+behavior survived. Commenting an assertion out, wrapping it in a string, or
+moving it into a branch that never runs all preserve its text while removing
+its effect. Telling those apart from a real addition needs to parse the
+language under test, so the gate does not try: anything it cannot verify as
+an append goes to the human. Existing test content is a human's recorded decision, and a
 comment explaining why a test asserts what it asserts is the strongest form
 of that signal, not a license to overrule it.
 
@@ -120,13 +128,31 @@ def find_new_markers(old: str, new: str) -> list:
     return [marker for marker in WEAKENING_MARKERS if marker in new and marker not in old]
 
 
-def classify_edit(old: str, new: str) -> str:
-    """Return why replacing `old` with `new` weakens a test, or an empty string."""
+def is_appended(old: str, new: str) -> bool:
+    """Return True if `new` is `old` followed only by whole added lines."""
+    if not new.startswith(old):
+        return False
+    remainder = new[len(old):]
+    return remainder == "" or remainder.startswith("\n")
+
+
+def classify_edit(old: str, new: str, content: str) -> str:
+    """Return why replacing `old` with `new` needs consent, or an empty string.
+
+    Only an append at the end of the file passes. Keeping the old text
+    somewhere inside the new text is not keeping the test: an assertion that
+    is commented out, wrapped in a string, or moved into a branch that never
+    runs is still present as text and no longer runs. Separating those from a
+    real addition needs to parse the language under test. Refusing to guess
+    costs a prompt; guessing wrong costs the assertion.
+    """
     markers = find_new_markers(old, new)
     if markers:
         return f"introduces {', '.join(markers)}, which disables or weakens a test"
-    if old not in new:
-        return "removes or rewrites existing test content"
+    if not is_appended(old, new):
+        return "rewrites existing test content, which can disable an assertion while keeping its text"
+    if not content.endswith(old):
+        return "adds to the middle of the file, where the gate cannot confirm the existing tests still run"
     if count_assertions(new) < count_assertions(old):
         return "drops an assertion"
     return ""
@@ -159,10 +185,12 @@ def find_gate_reason(tool_name: str, tool_input: dict, target: str) -> str:
         return ""
     if tool_name == "NotebookEdit":
         return "rewrites a cell in an existing test notebook"
+    content = read_text(target)
     for old, new in collect_edits(tool_name, tool_input, target):
-        reason = classify_edit(old, new)
+        reason = classify_edit(old, new, content)
         if reason:
             return reason
+        content = content.replace(old, new, 1)
     return ""
 
 

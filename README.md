@@ -248,9 +248,13 @@ other recursive delete, the `--force-with-lease` family, `git push --mirror`,
 command first, so equivalent spellings (`rm -Rf`, `git -C dir push --force`,
 `--force-with-lease=main:<oid>`) are caught rather than read past, and a
 command it cannot parse is gated rather than cleared.
-`require_consent.py` sends an edit that removes, rewrites, or weakens
-existing test content to the same prompt; adding a test, or appending one to
-an existing file, passes untouched. Both are heuristics rather than a
+`require_consent.py` sends any write to an existing test file to the same
+prompt, except a verified append at the end of it: the new text must begin
+with the old text, the addition must start on a new line, and the old text
+must sit at the end of the file. A new test file passes untouched. Edits that
+keep the old text are still gated, because an assertion that is commented
+out, wrapped in a string, or moved into a branch that never runs keeps its
+text and loses its effect. Both are heuristics rather than a
 sandbox, and neither sees a file written through a Bash redirect, which is
 what the protected-file review in `docs/protected-file-review.md` covers.
 

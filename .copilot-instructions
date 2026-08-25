@@ -215,7 +215,7 @@ If a test is wrong, stop, report it, and wait for a human decision.
 Disclosure is not a substitute for stopping. Writing the violation into a plan file, a commit message, or a pull request body does not convert a stop condition into a disclosure obligation.
 Neither does judging that the rule's purpose does not reach this case. A comment recording why a test asserts what it asserts is a person's decision written down, not an invitation to overrule it.
 Deliberately changing a specification is still this rule: the test states the current specification, so changing it is the human's call.
-Backed by `hooks/require_consent.py`, which routes an edit that removes, rewrites, or weakens existing test content to the user for a decision at the act. Adding a test, or appending one to an existing file, is not gated. `tests/` is also a protected path, so a pull request touching it needs code-owner approval.
+Backed by `hooks/require_consent.py`, which routes an edit that removes, rewrites, or weakens existing test content to the user for a decision at the act. Adding a test, or appending one at the end of an existing file, is not gated. Anything else, including an edit that keeps an assertion's text while commenting it out or moving it into a branch that never runs, is. `tests/` is also a protected path, so a pull request touching it needs code-owner approval.
 
 ### 4. Stay within the user's intent
 

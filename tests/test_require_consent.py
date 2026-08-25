@@ -190,6 +190,72 @@ class GateTest(TestFileFixture):
         self.assertIn("Approving a plan is not authorization for this edit", reason)
 
 
+class PreservedTextEvasionTest(TestFileFixture):
+    """Keeping the old text somewhere in the new text is not keeping the test.
+
+    Every case here passed the original substring check, which asked only
+    whether the old text still appeared anywhere in the new text. An
+    assertion that is commented out, wrapped in a string, or moved into a
+    branch that never runs is still present as text and no longer runs.
+    """
+
+    ASSERTION = "  assert.equal(viz.diagnostics().trackState, 'none');"
+
+    def _decision_for(self, old: str, new: str) -> str:
+        _, parsed = run_hook(edit_payload(str(self.test_file), old, new))
+        return decision_of(parsed)
+
+    def test_commenting_out_an_assertion_asks(self):
+        for old, new in (
+            ("assert authorized", "# assert authorized"),
+            ("assert.ok(authorized)", "// assert.ok(authorized)"),
+            (self.ASSERTION, "  // " + self.ASSERTION.strip()),
+        ):
+            with self.subTest(new=new):
+                self.assertEqual(self._decision_for(old, new), "ask")
+
+    def test_moving_an_assertion_into_dead_code_asks(self):
+        new = "  if (false) {\n" + self.ASSERTION + "\n  }"
+        self.assertEqual(self._decision_for(self.ASSERTION, new), "ask")
+
+    def test_guarding_an_assertion_behind_a_condition_asks(self):
+        new = "  if (process.env.CI) { assert.ok(x) }"
+        self.assertEqual(self._decision_for("assert.ok(x)", new), "ask")
+
+    def test_wrapping_an_assertion_in_a_string_asks(self):
+        new = "  const dead = `" + self.ASSERTION + "`;"
+        self.assertEqual(self._decision_for(self.ASSERTION, new), "ask")
+
+    def test_appending_to_the_same_line_asks(self):
+        """An addition that continues the last line can change its meaning."""
+        self.assertEqual(self._decision_for("assert.ok(x)", "assert.ok(x) || true"), "ask")
+
+    def test_insertion_into_the_middle_of_the_file_asks(self):
+        """Only an end-of-file append can be verified as leaving the rest intact."""
+        old = "  assert.equal(deviceBCalls, 1, 'no retry attempted');"
+        new = old + "\n  assert.equal(2, 2);"
+        self.assertEqual(self._decision_for(old, new), "ask")
+
+    def test_end_of_file_append_still_passes(self):
+        """The test-first workflow must stay unprompted for the normal case."""
+        old = "});\n"
+        new = "});\n\ntest('a new case', function () {\n  assert.equal(1, 1);\n});\n"
+        self.assertEqual(self._decision_for(old, new), "")
+
+    def test_whole_file_append_via_write_passes(self):
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "permission_mode": "default",
+            "tool_input": {
+                "file_path": str(self.test_file),
+                "content": EXISTING_TEST + "\ntest('added', function () {\n  assert.ok(1);\n});\n",
+            },
+        }
+        _, parsed = run_hook(payload)
+        self.assertEqual(decision_of(parsed), "")
+
+
 class FailClosedTest(TestFileFixture):
     """Absence of a human is absence of consent."""
 

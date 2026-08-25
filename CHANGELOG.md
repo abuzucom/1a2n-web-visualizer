@@ -8,7 +8,12 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 - Added `hooks/require_consent.py` and `.claude/settings.json`, wiring two Claude Code
-  gates that run before a tool call. An edit that removes or rewrites existing test
+  gates that run before a tool call. The only unprompted edit to an existing test file
+  is a verified append at the end of it: the new text must begin with the old text, the
+  addition must start on a new line, and the old text must sit at the end of the file.
+  An earlier form of this check asked only whether the old text still appeared somewhere
+  in the new text, which passed an assertion that had been commented out, wrapped in a
+  string, moved into a branch that never runs, or extended on the same line. An edit that removes or rewrites existing test
   content, drops an assertion, or introduces a skip marker now goes to a permission
   prompt (AGENTS.md Rule 3), so the decision lands with a person at the act rather
   than with an agent that has talked itself into it. Adding a test, or appending one
