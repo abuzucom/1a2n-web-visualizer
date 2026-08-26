@@ -4,13 +4,15 @@
 MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 18,013 deduplicated presets: 373 from four butterchurn preset packs, 14,408 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, and 3,232 experimental NestDrop presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
-`/fullscreen.html`, and `/mobile.html`). GitHub Actions deploys it from the
+`/fullscreen.html`, `/demo.html`, and `/mobile.html`). GitHub Actions deploys
+it from the
 `develop` branch.
 
 All entry points share one controller module:
 
 - `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel.
 - `src/fullscreen.html`: Provides a keyboard-controlled interface with no visible UI. It shows a five-second startup indicator, selects a random resident vendored preset, hides the cursor, and shuffles presets by default. Use it for window capture or secondary displays.
+- `src/demo.html`: Runs the fullscreen build against a synthetic audio track generated in the page, so the presets react with no microphone permission and no virtual audio cable. The track is silent. It shares `fullscreen.css` and `fullscreen-ui.js` with the fullscreen build and adds genre, tempo, and intensity keys.
 - `src/mobile.html`: Provides a touch-first browser interface with shuffle, visit history, interval, and hyperspeed controls. It does not request browser fullscreen or expose curation controls.
 
 The UI follows the brand visual system across all entry points. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`), Charcoal (`#242424`), Concrete (`#A6A39D`), and Dull Silver (`#74777A`). Libre Franklin provides display and editorial text, with Helvetica, Neue Haas Grotesk, and Arial fallbacks. Cousine provides utility text, with IBM Plex Mono and Courier New fallbacks.
@@ -38,6 +40,7 @@ butterchurn-visualizer/
 |   +-- index.html          # Landing page
 |   +-- obs.html            # OBS browser source entry point
 |   +-- fullscreen.html     # Standalone fullscreen entry point
+|   +-- demo.html           # Synthetic-audio demo entry point
 |   +-- mobile.html         # Touch-first browser entry point
 |   +-- css/
 |   |   +-- brand.css            # shared brand palette and typography tokens
@@ -52,6 +55,7 @@ butterchurn-visualizer/
 |   |   +-- mobile-ui.js         # touch wiring
 |   |   +-- mobile-state.js      # in-memory mobile history and intervals
 |   |   +-- hyperspeed.js        # shared hyperspeed scheduler
+|   |   +-- demo-audio.js        # synthetic demo track generator
 |   +-- vendor/                  # vendored butterchurn + preset/texture packs
 |   |   +-- butterchurn.min.js
 |   |   +-- butterchurnExtraImages.min.js
@@ -172,8 +176,12 @@ npm start             # Serves ./src via the pinned `serve` package
 python3 -m http.server --directory src 8000
 ```
 
-Open <http://localhost:8000/fullscreen.html>, <http://localhost:8000/mobile.html>,
-or <http://localhost:8000/obs.html>.
+Open <http://localhost:8000/fullscreen.html>, <http://localhost:8000/demo.html>,
+<http://localhost:8000/mobile.html>, or <http://localhost:8000/obs.html>.
+
+**Demo mode:** <http://localhost:8000/demo.html> needs no audio setup at all. It
+generates its own track and drives the presets from that, so it is the quickest
+way to check the visualizer works. See [Demo mode](#demo-demohtml).
 
 **OBS Integration:** See [`docs/obs-setup.md`](docs/obs-setup.md) for setup instructions.
 
@@ -192,6 +200,7 @@ GitHub Pages hosts the production environment at **`visualizer.1a2n.net`**:
 ```text
 https://visualizer.1a2n.net/obs.html
 https://visualizer.1a2n.net/fullscreen.html
+https://visualizer.1a2n.net/demo.html
 https://visualizer.1a2n.net/mobile.html
 ```
 
@@ -318,6 +327,29 @@ workflow and deployment linking behavior.
 | <kbd>Escape</kbd> | Close the excluded-presets or favorites panel |
 | <kbd>?</kbd> | Show/hide the help menu |
 
+### Demo (`demo.html`)
+
+Same keys as the fullscreen build, with three differences: <kbd>D</kbd> does
+nothing (there is no capture device), the audio guard has nothing to guard, and
+these are added.
+
+| Key | Action |
+| --- | --- |
+| <kbd>B</kbd> | Cycle genre and tempo: house 87, trance 140, liquid drum and bass 174 |
+| <kbd>,</kbd> / <kbd>.</kbd> | Nudge tempo in 4 BPM steps |
+| <kbd>-</kbd> / <kbd>=</kbd> | Intensity in 10% steps |
+
+Each tempo is its own pattern rather than the same loop played faster, so the
+presets get recognizably different music to react to. Add `?demo=1` to
+`fullscreen.html` for the same behavior on that page.
+
+The generated audio is silent: it reaches the speakers only through a gain of
+zero, which exists so the synthetic sources sit on the destination-connected
+graph the browser is guaranteed to render. Your tab may still show the audio
+indicator, which is the background-rendering keepalive tone described in
+[`docs/background-rendering.md`](docs/background-rendering.md), not the demo
+track.
+
 ### OBS Panel (`obs.html`)
 
 Use the on-screen graphical controls. Press <kbd>H</kbd> to toggle the control panel's visibility.
@@ -336,6 +368,10 @@ The application visualizes audio from a system input device, such as a
 microphone. To visualize system output, route it through a virtual audio cable
 and select that device as the input. See [`docs/audio-routing.md`](docs/audio-routing.md)
 for platform-specific instructions.
+
+To see the visualizer working without configuring any of that, open
+`demo.html`, which drives the presets from a track generated in the page. It
+never requests microphone permission.
 
 ## Dependencies
 

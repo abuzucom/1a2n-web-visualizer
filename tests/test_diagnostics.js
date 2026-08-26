@@ -179,3 +179,21 @@ test('diagnostics overlay tolerates missing stats', function () {
   assert.equal(harness.overlay.isVisible(), true);
   assert.ok(harness.text().length > 0);
 });
+
+test('the demo row stays hidden until there is something to report', function () {
+  const harness = createHarness({ fps: 60, device: 'Built-in Microphone' });
+  harness.overlay.show();
+  const rows = harness.body.children[0].children;
+  const demoRow = rows.find(function (row) {
+    return row.children[0].textContent === 'Demo';
+  });
+
+  assert.ok(demoRow, 'the overlay always builds the row');
+  assert.equal(demoRow.hidden, true, 'it is hidden with no demo stats');
+
+  harness.setStats({ fps: 60, device: 'Synthetic demo track', demo: 'trance 140 BPM 60%' });
+  harness.overlay.update();
+
+  assert.equal(demoRow.hidden, false);
+  assert.equal(demoRow.children[1].textContent, 'trance 140 BPM 60%');
+});

@@ -21,6 +21,12 @@
   display: none;
 }
 
+/* An author display rule beats the user agent's [hidden] rule, so a row hidden
+   from script needs this to actually disappear. */
+.diag-row[hidden] {
+  display: none;
+}
+
 .diag-row {
   display: flex;
   gap: 12px;

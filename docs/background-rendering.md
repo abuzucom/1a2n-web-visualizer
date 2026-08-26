@@ -61,6 +61,30 @@ resumes a suspended `AudioContext`, and optionally recovers a lost input. See
 
 **5. The diagnostics overlay** shows you whether all of the above is working.
 
+## Demo mode
+
+`demo.html` has no capture input at all, which changes two things here.
+
+The keepalive stays **on**. Its suppression exists for one hazard: the page
+emits a tone, a loopback input captures it, and it re-enters the analysis FFT.
+Demo mode never calls `getUserMedia`, and `visualizer-core.js` refuses every
+device request while it is active, so that hazard is structurally impossible
+rather than merely unlikely. Suppressing the tone anyway would leave the demo
+page *less* resistant to throttling than the microphone build, because the demo
+track itself cannot do the keepalive's job: it reaches the destination only
+through a gain of exactly zero, which is bit-exact digital silence and does not
+register with the browser's audibility detector. So the tab audio indicator you
+see on `demo.html` is the keepalive tone, not the demo track.
+
+The note scheduler is fed from two places. Its own timer runs at 25 ms with two
+seconds of lookahead, which survives the ordinary hidden-tab throttle to about
+1 Hz on its own. On top of that, `renderOnce` pumps it every frame, so while the
+page is hidden it inherits the same audio-thread tick source the renderer uses
+and is not subject to timer throttling at all. If the main thread stalls long
+enough that the queue falls more than four seconds behind, the missed steps are
+dropped rather than played late, so returning to the tab resumes the track in
+time instead of firing a stacked burst of notes.
+
 ## The feedback guard
 
 The keepalive outputs audio. Most setups here capture a loopback or monitor
