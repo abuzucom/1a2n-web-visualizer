@@ -19,6 +19,7 @@
     { key: 'Wake lock', read: function (s) { return s.wakeLock ? 'held' : 'none'; } },
     { key: 'Keepalive', read: function (s) { return s.keepalive || 'off'; } },
     { key: 'Input', read: function (s) { return s.device || 'unknown'; } },
+    { key: 'Demo', read: function (s) { return s.demo || ''; } },
     { key: 'Track', read: function (s) { return s.trackState || 'unknown'; } },
     { key: 'Recoveries', read: function (s) { return String(s.recoveries || 0); } },
   ];
@@ -87,7 +88,11 @@
     renderGuard(state, stats);
     renderCountdown(state, stats);
     state.cells.forEach(function (entry) {
-      entry.cell.value.textContent = entry.definition.read(stats);
+      const text = entry.definition.read(stats);
+      // A row that reports nothing stays out of the way. Only the demo build
+      // has a Demo readout, and the other three pages share this overlay.
+      entry.cell.row.hidden = text === '';
+      entry.cell.value.textContent = text;
     });
   }
 

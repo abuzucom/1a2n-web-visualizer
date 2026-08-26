@@ -11,6 +11,7 @@ const SUPPORT_SCRIPTS = [
   'src/js/render-driver.js',
   'src/js/audible-keepalive.js',
   'src/js/audio-watchdog.js',
+  'src/js/demo-audio.js',
 ];
 
 // Mimic the vendored bundle's equation compilation. Use a SPACE before
@@ -43,6 +44,7 @@ function createFakeMediaDevices(devices, options) {
   const list = devices || [{ kind: 'audioinput', deviceId: 'default', label: 'Voicemeeter Out B1' }];
   const openCounts = new Map();
   const calls = [];
+  const enumerateCalls = [];
   function notReadable() {
     const err = new Error('Could not start audio source');
     err.name = 'NotReadableError';
@@ -62,8 +64,12 @@ function createFakeMediaDevices(devices, options) {
   }
   return {
     calls: calls,
+    enumerateCalls: enumerateCalls,
     openCountFor: function (deviceId) { return openCounts.get(deviceId) || 0; },
-    enumerateDevices: async function () { return list.slice(); },
+    enumerateDevices: async function () {
+      enumerateCalls.push(true);
+      return list.slice();
+    },
     getUserMedia: async function (constraints) {
       const wanted = constraints && constraints.audio && constraints.audio.deviceId
         ? constraints.audio.deviceId.exact : (opts.defaultDeviceId || null);
@@ -89,7 +95,8 @@ function createHarness(presets, initialWebglErrors, deviceOpts) {
     timer.unref();
     return timer;
   };
-  canvas.addEventListener = function () {};
+  const canvasHandlers = new Map();
+  canvas.addEventListener = function (event, handler) { canvasHandlers.set(event, handler); };
   const webglErrors = (initialWebglErrors || []).slice();
   const webgl = {
     NO_ERROR: 0,
@@ -138,18 +145,58 @@ function createHarness(presets, initialWebglErrors, deviceOpts) {
     },
     clearInterval: clearInterval,
   };
+  // Full enough for demo-audio.js to build its graph: connect() must return
+  // its target so chains work, and every AudioParam needs its scheduling
+  // methods, not just a value.
+  const audioContexts = [];
+  function fakeParam() {
+    return {
+      value: 0,
+      setValueAtTime: function (v) { this.value = v; return this; },
+      linearRampToValueAtTime: function () { return this; },
+      exponentialRampToValueAtTime: function () { return this; },
+      setTargetAtTime: function (v) { this.value = v; return this; },
+      cancelScheduledValues: function () { return this; },
+    };
+  }
+  function fakeNode(extra) {
+    return Object.assign({
+      connect: function (target) { return target; },
+      disconnect: function () {},
+      start: function () {},
+      stop: function () {},
+    }, extra || {});
+  }
   window.AudioContext = function () {
+    const context = this;
+    audioContexts.push(context);
+    this.currentTime = 0;
+    this.sampleRate = 48000;
+    this.state = 'running';
+    this.destination = fakeNode({});
     this.resume = async function () {};
     this.close = async function () {};
-    this.createMediaStreamSource = function () { return {}; };
-    // Only exercised when the keepalive actually engages, i.e. a non-loopback
-    // device label; present so that path doesn't warn on an incomplete fake.
+    this.createMediaStreamSource = function () { return fakeNode({}); };
     this.createOscillator = function () {
-      return { frequency: { value: 0 }, connect: function () {}, start: function () {} };
+      return fakeNode({ type: '', frequency: fakeParam(), detune: fakeParam() });
     };
-    this.createGain = function () { return { gain: { value: 0 }, connect: function () {} }; };
+    this.createGain = function () { return fakeNode({ gain: fakeParam() }); };
+    this.createBiquadFilter = function () {
+      return fakeNode({ type: '', frequency: fakeParam(), Q: fakeParam() });
+    };
+    this.createBufferSource = function () {
+      return fakeNode({ buffer: null, loop: false, playbackRate: fakeParam() });
+    };
+    this.createBuffer = function (channels, length, rate) {
+      return {
+        numberOfChannels: channels, length: length, sampleRate: rate || context.sampleRate,
+        getChannelData: function () { return new Float32Array(length); },
+      };
+    };
   };
   let renderCount = 0;
+  const audioConnects = [];
+  const audioDisconnects = [];
   window.butterchurn = {
     createVisualizer: function () {
       return {
@@ -161,8 +208,8 @@ function createHarness(presets, initialWebglErrors, deviceOpts) {
           loadCalls.push(preset);
         },
         render: function () { renderCount += 1; },
-        connectAudio: function () {},
-        disconnectAudio: function () {},
+        connectAudio: function (node) { audioConnects.push(node); },
+        disconnectAudio: function (node) { audioDisconnects.push(node); },
       };
     },
   };
@@ -201,6 +248,14 @@ function createHarness(presets, initialWebglErrors, deviceOpts) {
     window: window,
     mediaDevices: mediaDevices,
     loadCalls: loadCalls,
+    audioConnects: audioConnects,
+    audioDisconnects: audioDisconnects,
+    audioContexts: audioContexts,
+    fireCanvas: function (event) {
+      const handler = canvasHandlers.get(event);
+      if (!handler) throw new Error('no handler registered for ' + event);
+      handler({ preventDefault: function () {} });
+    },
     chunkLoads: function () { return chunkLoads; },
     imagePartLoads: function () { return imagePartLoads; },
     intervalCalls: function () { return intervalCalls; },
@@ -624,4 +679,138 @@ test('deviceIdx syncs to whichever device the initial default connect resolved t
   // first enumerated device; deviceIdx must reflect the device that actually
   // connected, not stay at its initial 0.
   assert.equal(viz.currentDeviceId(), 'dev-b');
+});
+
+test('demo mode never touches the microphone or the device list', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { demo: true, cycleOn: false });
+  await viz.start();
+  await sleep(5);
+
+  assert.equal(viz.isStarted(), true);
+  assert.equal(viz.isDemo(), true);
+  assert.equal(harness.mediaDevices.calls.length, 0, 'getUserMedia must never be reached');
+  assert.equal(harness.mediaDevices.enumerateCalls.length, 0, 'enumerateDevices must never be reached');
+});
+
+test('demo mode feeds the visualizer the synthetic node', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { demo: true, cycleOn: false });
+  await viz.start();
+  await sleep(5);
+
+  assert.equal(harness.audioConnects.length, 1, 'exactly one source is connected');
+  const connected = harness.audioConnects[0];
+  assert.ok(connected && connected.gain, 'the synthetic source is the demo master gain');
+});
+
+test('demo mode reports itself in the diagnostics', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { demo: true, cycleOn: false });
+  await viz.start();
+  await sleep(5);
+  const stats = viz.diagnostics();
+
+  assert.equal(stats.device, 'Synthetic demo track');
+  assert.equal(stats.trackState, 'synthetic');
+  assert.match(stats.demo, /trance 140 BPM/);
+  // The keepalive must engage: demo mode has no capture path, so its tone
+  // cannot feed back, and without it a hidden demo tab gets throttled.
+  assert.equal(stats.keepalive, 'active');
+  assert.equal(stats.audioLost, false, 'a page with no stream has no input to lose');
+});
+
+test('demo mode keeps the device API inert even with the guard armed', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { demo: true, cycleOn: false });
+  await viz.start();
+  await sleep(5);
+  viz.setAudioGuard(true);
+
+  assert.equal(await viz.nextDevice(), null);
+  // Length, not deepEqual: the array comes from the vm realm, so it has a
+  // different Array.prototype and would fail a strict structural compare.
+  assert.equal((await viz.getDevices()).length, 0);
+  assert.equal(await viz.useDeviceById('default'), null);
+  assert.equal(viz.currentDeviceId(), '');
+  assert.equal(harness.mediaDevices.calls.length, 0, 'an armed guard must not reconnect to a device');
+  assert.equal(harness.mediaDevices.enumerateCalls.length, 0);
+});
+
+test('the demo API is a safe no-op when demo mode is off', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+  await viz.start();
+  await sleep(5);
+
+  assert.equal(viz.isDemo(), false);
+  assert.equal(viz.getDemoTempo(), 0);
+  assert.equal(viz.setDemoTempo(140), 0);
+  assert.equal(viz.cycleDemoTempo(), 0);
+  assert.equal(viz.getDemoIntensity(), 0);
+  assert.equal(viz.setDemoIntensity(0.5), 0);
+  assert.equal(viz.diagnostics().demo, '');
+});
+
+test('the demo tempo and intensity API clamps and cycles genres', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { demo: true, cycleOn: false });
+  await viz.start();
+  await sleep(5);
+  const limits = harness.window.BCDemoAudio;
+
+  assert.equal(viz.getDemoTempo(), limits.DEFAULT_BPM);
+  assert.equal(viz.cycleDemoTempo(), 87);
+  assert.match(viz.diagnostics().demo, /house 87 BPM/);
+  assert.equal(viz.cycleDemoTempo(), 174);
+  assert.match(viz.diagnostics().demo, /liquid 174 BPM/);
+  assert.equal(viz.cycleDemoTempo(), limits.DEFAULT_BPM);
+  assert.equal(viz.setDemoTempo(99999), limits.MAX_BPM);
+  assert.equal(viz.setDemoIntensity(9), limits.MAX_INTENSITY);
+  assert.equal(viz.setDemoIntensity(-9), limits.MIN_INTENSITY);
+});
+
+test('a missing demo module leaves the visualizer running', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const toasts = [];
+  delete harness.window.BCDemoAudio;
+  const viz = harness.window.BCViz.create(harness.canvas, {
+    demo: true, cycleOn: false, onToast: function (message) { toasts.push(message); },
+  });
+  await viz.start();
+  await sleep(5);
+
+  assert.equal(viz.isStarted(), true);
+  assert.ok(toasts.some(function (m) { return /Demo audio unavailable/.test(m); }));
+  assert.equal(harness.mediaDevices.calls.length, 0, 'a demo failure must not fall back to the microphone');
+});
+
+test('a WebGL recovery reconnects the audio source', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+  await viz.start();
+  await sleep(5);
+  assert.equal(harness.audioConnects.length, 1);
+  const original = harness.audioConnects[0];
+
+  harness.fireCanvas('webglcontextlost');
+  harness.fireCanvas('webglcontextrestored');
+
+  assert.equal(harness.audioConnects.length, 2, 'the rebuilt visualizer must be reconnected');
+  assert.equal(harness.audioConnects[1], original, 'the same source node is reattached');
+});
+
+test('a WebGL recovery reconnects the synthetic source too', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { demo: true, cycleOn: false });
+  await viz.start();
+  await sleep(5);
+  const original = harness.audioConnects[0];
+
+  harness.fireCanvas('webglcontextlost');
+  harness.fireCanvas('webglcontextrestored');
+
+  assert.equal(harness.audioConnects.length, 2);
+  assert.equal(harness.audioConnects[1], original);
+  assert.equal(harness.mediaDevices.calls.length, 0);
 });
