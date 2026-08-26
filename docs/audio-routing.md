@@ -7,6 +7,10 @@ virtual input device and select it in the visualizer.
 Select the device by pressing <kbd>D</kbd> in the fullscreen build, or via the
 dropdown in the OBS panel build.
 
+If you only want to see the visualizer working, none of this is needed:
+`demo.html` generates its own track inside the page. Come back here when you
+want the presets reacting to real audio.
+
 ## Windows
 
 - **VB-Cable** (free): set your music player's / system output to "CABLE Input",
@@ -43,3 +47,6 @@ set the cable as default playback and monitor it back to your speakers.
   permission for the first time; start once, then re-open the picker.
 - **No reaction:** confirm audio is actually playing to the selected device
   (check your OS mixer / `pavucontrol` recording tab).
+- **Still no reaction:** open `demo.html`. If the presets react there, the
+  visualizer and your GPU are fine and the problem is the routing, which
+  narrows the search considerably.

@@ -34,6 +34,8 @@
   const CYCLE_STEP_THRESHOLD = 10;
   const CYCLE_STEP_SMALL = 1;
   const CYCLE_STEP_LARGE = 5;
+  const TEMPO_STEP_BPM = 4;
+  const INTENSITY_STEP = 0.1;
   function say(msg) {
     const s = msg.length > MAX_TOAST_LENGTH ? msg.slice(0, TRUNCATED_TOAST_LENGTH) + '\u2026' : msg;
     toast.textContent = s;
@@ -59,7 +61,13 @@
     return (name ? name + ': ' : '') + message + hint;
   }
 
-  const viz = BCViz.create(canvas, { onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true, randomFirst: true });
+  /* demo.html sets the attribute; ?demo=1 turns any fullscreen page into the
+   * same synthetic-audio build, following the ?diag and ?guard convention. */
+  const DEMO_MODE = document.body.getAttribute('data-demo') === '1'
+    || window.BCDiagnostics.hasFlag(location.search, 'demo');
+  const viz = BCViz.create(canvas, {
+    onToast: say, cycleSecs: 20, cycleOn: true, shuffle: true, randomFirst: true, demo: DEMO_MODE,
+  });
   const hyperspeed = window.BCHyperspeed.create({
     shuffle: function () { if (viz.isStarted() && !viz.isChunkLoading()) viz.random(); },
     intervalMs: 100,
@@ -75,6 +83,40 @@
   });
   if (window.BCDiagnostics.hasFlag(location.search, 'diag')) diagnostics.show();
   if (window.BCDiagnostics.hasFlag(location.search, 'guard')) viz.setAudioGuard(true);
+
+  /* Finer steps near the bottom of the range: 1s at or below 10s, 5s above.
+   * Stepping down tests <= and stepping up tests <, so 10s steps down by 1s
+   * but up by 5s. That asymmetry is deliberate; keep it. */
+  function stepCycle(direction) {
+    const current = viz.getCycleSecs();
+    const nearBottom = direction < 0
+      ? current <= CYCLE_STEP_THRESHOLD
+      : current < CYCLE_STEP_THRESHOLD;
+    const step = nearBottom ? CYCLE_STEP_SMALL : CYCLE_STEP_LARGE;
+    say('Cycle: ' + viz.setCycleSecs(current + direction * step) + 's');
+  }
+
+  function sayDemo() {
+    say('\u266A ' + viz.diagnostics().demo);
+  }
+
+  function cycleDemoGenre() {
+    if (!viz.isDemo()) return;
+    viz.cycleDemoTempo();
+    sayDemo();
+  }
+
+  function nudgeDemoTempo(delta) {
+    if (!viz.isDemo()) return;
+    viz.setDemoTempo(viz.getDemoTempo() + delta);
+    sayDemo();
+  }
+
+  function nudgeDemoIntensity(delta) {
+    if (!viz.isDemo()) return;
+    viz.setDemoIntensity(viz.getDemoIntensity() + delta);
+    sayDemo();
+  }
 
   function toggleAudioGuard() {
     say(viz.toggleAudioGuard()
@@ -237,22 +279,17 @@
           ? '\uD83D\uDD00 Shuffle cycle on'
           : '\u27A1 Sequential cycle');
         break;
-      // finer steps near the bottom of the range: 1s at/below 10s, 5s above
-      case '[':
-        say('Cycle: ' + viz.setCycleSecs(
-          viz.getCycleSecs() - (
-            viz.getCycleSecs() <= CYCLE_STEP_THRESHOLD ? CYCLE_STEP_SMALL : CYCLE_STEP_LARGE
-          )
-        ) + 's');
-        break;
-      case ']':
-        say('Cycle: ' + viz.setCycleSecs(
-          viz.getCycleSecs() + (
-            viz.getCycleSecs() < CYCLE_STEP_THRESHOLD ? CYCLE_STEP_SMALL : CYCLE_STEP_LARGE
-          )
-        ) + 's');
-        break;
+      case '[': stepCycle(-1); break;
+      case ']': stepCycle(1); break;
+      // Demo build only; no-ops elsewhere. Shifted variants included so the
+      // keys work without checking the modifier.
+      case 'b': case 'B': cycleDemoGenre(); break;
+      case ',': case '<': nudgeDemoTempo(-TEMPO_STEP_BPM); break;
+      case '.': case '>': nudgeDemoTempo(TEMPO_STEP_BPM); break;
+      case '-': case '_': nudgeDemoIntensity(-INTENSITY_STEP); break;
+      case '=': case '+': nudgeDemoIntensity(INTENSITY_STEP); break;
       case 'd': case 'D':
+        if (viz.isDemo()) { say('Demo mode: synthetic audio, no input device'); break; }
         viz.nextDevice().catch(function (error) { say('Audio device error: ' + describeDeviceError(error)); });
         break;
       case 'f': case 'F': toggleFullscreen(); break;

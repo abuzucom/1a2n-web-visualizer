@@ -4,6 +4,47 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.0]
+
+### Added
+- Added a demo build (`src/demo.html`) that drives the visualizer from a
+  synthetic audio track generated in the page, so the presets react with no
+  microphone permission, no virtual audio cable, and no input device. It shares
+  `css/fullscreen.css` and `js/fullscreen-ui.js` with the fullscreen build and
+  is selected by `data-demo="1"` on `<body>`; `?demo=1` turns `fullscreen.html`
+  into the same build. Listed as a fourth card on the landing page.
+- Added `src/js/demo-audio.js`, the track generator: kick, snare, bass, chord
+  pad and filtered-noise hats on a two-second lookahead scheduler, with a slow
+  filter LFO running as an audio-thread modulation edge so the drift continues
+  while the page is hidden. Three tempos, each its own pattern rather than the
+  same loop played faster: house at 87, trance at 140, and liquid drum and bass
+  at 174, the last a two-step break over half-time harmony.
+- Made the generated audio silent. It reaches `destination` only through a gain
+  of exactly zero, which is bit-exact digital silence. That tap exists because
+  butterchurn's analyser chain never connects to the destination itself, so the
+  synthetic sources would otherwise depend on an engine's automatic-pull
+  behavior for an output-unconnected `AnalyserNode`.
+- Added <kbd>B</kbd> to cycle genre and tempo, <kbd>,</kbd>/<kbd>.</kbd> to
+  nudge tempo, and <kbd>-</kbd>/<kbd>=</kbd> for intensity, plus a `Demo` row in
+  the diagnostics overlay that stays hidden on the other three pages.
+- Added the `demo` option to `BCViz.create` and six methods to its API:
+  `isDemo`, `getDemoTempo`, `setDemoTempo`, `cycleDemoTempo`,
+  `getDemoIntensity`, and `setDemoIntensity`. All are additive and report `0`
+  rather than throwing when demo mode is off.
+
+### Fixed
+- Fixed the watchdog reporting a lost audio input, and reconnecting to a device
+  when armed, on a page that never opened a stream. `visualizer-core.js` passed
+  a `handleLostInput` option that `audio-watchdog.js` does not read; the option
+  it honors is `isMonitoring`, which was never passed and so defaulted to
+  monitoring everything. The `hadStream` guard the code intended was dead. This
+  already misfired whenever `getUserMedia` failed, and an armed guard would
+  escalate it into a device reconnect.
+- Fixed the audio source not being reconnected after a WebGL context recovery.
+  `recoverVisualizer` builds a fresh butterchurn instance with a fresh internal
+  analyser chain, and nothing called `connectAudio` again, so a recovered
+  visualizer rendered against dead audio for the rest of the session.
+
 ## [1.8.1]
 
 ### Fixed

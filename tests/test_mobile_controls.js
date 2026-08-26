@@ -160,7 +160,13 @@ function createFullscreenHarness(vizOverrides, options) {
     };
   });
   const document = {
-    body: { classList: bodyClassList, appendChild: function () {} },
+    body: {
+      classList: bodyClassList,
+      appendChild: function () {},
+      getAttribute: function (name) {
+        return name === 'data-demo' && opts.demo ? '1' : null;
+      },
+    },
     documentElement: {},
     fullscreenElement: null,
     createElement: function () {
@@ -177,6 +183,10 @@ function createFullscreenHarness(vizOverrides, options) {
     },
   };
   let toggles = 0;
+  const captured = { opts: null };
+  let demoTempo = 140;
+  let demoIntensity = 0.6;
+  let demoCycles = 0;
   const window = {
     BCHyperspeed: {
       create: function () {
@@ -213,13 +223,24 @@ function createFullscreenHarness(vizOverrides, options) {
     setCycleSecs: function (seconds) { return seconds; },
     getCycleSecs: function () { return 20; },
     nextDevice: function () { return Promise.resolve(); },
+    isDemo: function () { return Boolean(opts.demo); },
+    getDemoTempo: function () { return demoTempo; },
+    setDemoTempo: function (bpm) { demoTempo = bpm; return demoTempo; },
+    cycleDemoTempo: function () { demoCycles += 1; demoTempo = 87; return demoTempo; },
+    getDemoIntensity: function () { return demoIntensity; },
+    setDemoIntensity: function (value) { demoIntensity = value; return demoIntensity; },
   }, vizOverrides || {});
   const context = {
     window: window,
     document: document,
     navigator: {},
     location: { search: opts.search || '' },
-    BCViz: { create: function () { return viz; } },
+    BCViz: {
+      create: function (canvas, createOpts) {
+        captured.opts = createOpts;
+        return viz;
+      },
+    },
     setTimeout: window.setTimeout,
     clearTimeout: window.clearTimeout,
     setInterval: window.setInterval,
@@ -233,6 +254,10 @@ function createFullscreenHarness(vizOverrides, options) {
     elements: elements,
     viz: viz,
     toggles: function () { return toggles; },
+    demoTempo: function () { return demoTempo; },
+    demoIntensity: function () { return demoIntensity; },
+    demoCycles: function () { return demoCycles; },
+    createOpts: function () { return captured.opts; },
   };
 }
 
@@ -301,4 +326,84 @@ test('fullscreen ?guard=1 pre-arms the audio guard at load', function () {
 
   const plain = createFullscreenHarness(null, { search: '?diag=1' });
   assert.equal(plain.viz.isAudioGuardArmed(), false);
+});
+
+function pressKeys(harness, keys) {
+  keys.forEach(function (key) {
+    harness.listeners.keydown.forEach(function (handler) {
+      handler({ key: key, repeat: false, preventDefault: function () {} });
+    });
+  });
+}
+
+test('demo keys change genre, tempo and intensity on the demo build', function () {
+  const harness = createFullscreenHarness({
+    diagnostics: function () { return { armed: false, demo: 'house 87 BPM 60%' }; },
+  }, { demo: true });
+
+  pressKeys(harness, ['B']);
+  assert.equal(harness.demoCycles(), 1, 'B cycles the genre');
+
+  pressKeys(harness, ['.', '.']);
+  assert.equal(harness.demoTempo(), 95, 'two nudges up move tempo by 8 BPM');
+  pressKeys(harness, [',']);
+  assert.equal(harness.demoTempo(), 91);
+
+  pressKeys(harness, ['=']);
+  assert.ok(harness.demoIntensity() > 0.6, '= raises intensity');
+  pressKeys(harness, ['-', '-']);
+  assert.ok(harness.demoIntensity() < 0.6, '- lowers it again');
+});
+
+test('shifted demo keys work without checking the modifier', function () {
+  const harness = createFullscreenHarness({
+    diagnostics: function () { return { armed: false, demo: 'trance 140 BPM 60%' }; },
+  }, { demo: true });
+
+  pressKeys(harness, ['>']);
+  assert.equal(harness.demoTempo(), 144);
+  pressKeys(harness, ['<']);
+  assert.equal(harness.demoTempo(), 140);
+  pressKeys(harness, ['+']);
+  assert.ok(harness.demoIntensity() > 0.6);
+  pressKeys(harness, ['_']);
+  assert.ok(Math.abs(harness.demoIntensity() - 0.6) < 1e-9);
+});
+
+test('demo keys are inert on the ordinary fullscreen build', function () {
+  const harness = createFullscreenHarness();
+
+  pressKeys(harness, ['B', '.', ',', '=', '-']);
+
+  assert.equal(harness.demoCycles(), 0);
+  assert.equal(harness.demoTempo(), 140, 'tempo is untouched without demo mode');
+  assert.equal(harness.demoIntensity(), 0.6);
+});
+
+test('D reports demo mode instead of switching devices', function () {
+  let deviceCalls = 0;
+  const harness = createFullscreenHarness({
+    nextDevice: function () { deviceCalls += 1; return Promise.resolve(); },
+    diagnostics: function () { return { armed: false, demo: 'trance 140 BPM 60%' }; },
+  }, { demo: true });
+
+  pressKeys(harness, ['D']);
+  assert.equal(deviceCalls, 0, 'the demo build never asks for another device');
+
+  const plain = createFullscreenHarness({
+    nextDevice: function () { deviceCalls += 1; return Promise.resolve(); },
+  });
+  pressKeys(plain, ['D']);
+  assert.equal(deviceCalls, 1, 'the fullscreen build still switches devices');
+});
+
+test('?demo=1 turns the fullscreen page into the demo build', function () {
+  const flagged = createFullscreenHarness({}, { search: '?demo=1' });
+  assert.equal(flagged.createOpts().demo, true, 'the query flag switches the build');
+
+  const attributed = createFullscreenHarness({}, { demo: true });
+  assert.equal(attributed.createOpts().demo, true, 'so does data-demo on the body');
+
+  const plain = createFullscreenHarness();
+  assert.equal(plain.createOpts().demo, false, 'and the plain page is unchanged');
 });
