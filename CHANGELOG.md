@@ -145,8 +145,13 @@ All notable changes to this project are documented here. Format loosely follows
   behavior is still available through the new `pauseWhenHidden` option.
 
 ## [Unreleased]
-
 ### Added
+- Added `hooks/_gate_core.py`, which both shell gates and the consent gate import, so a decision has one definition rather than one per gate.
+- Added `hooks/block_destructive_powershell.py` under a `PowerShell` matcher. The Bash matcher covered only Bash, so `Remove-Item -Recurse -Force` on a Windows session met no gate at all.
+- Added `tests/test_gate_parity.py`, which feeds both gates an equivalent corpus and fails when their verdicts differ, and asserts neither gate defines a decision function of its own.
+- Added a `windows-latest` job. No Linux job can show that the configured launcher resolves on Windows, and the gates had never run there.
+- Added `tools/run-python.js`, which probes `python3`, `python`, then `py -3` by running each rather than trusting the name. `npm run test:py` and `dev` named `python3`, which does not exist on Windows, while `lint` named `python`, which may be absent or Python 2 on Debian.
+- Added the data-destruction policy: drive roots, system directories, formatting and repair tools, `dd`, `hdparm`, truncating redirects, pipes into interpreters, alias definitions, `crontab -r`, recovery destruction, and `gh repo delete` are refused; recursive deletes, privilege escalation, process termination, shell profile writes, and forced pushes route to the user.
 - Added an `html-css-validation` job to `.github/workflows/checks.yml` that
   runs the [Nu Html Checker](https://github.com/validator/validator) against
   `src/*.html` and `src/css/*.css` on every pull request and push to
@@ -203,6 +208,10 @@ All notable changes to this project are documented here. Format loosely follows
 - Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Changed
+- Removed the end-of-file append carve-out from the consent gate. Every edit to a test file that already exists now asks. A textual append check cannot tell a new test from a statement that neutralizes every test above it.
+- Launched hooks as `python` rather than `python3`, and added a test asserting the configured string resolves. The behavioral tests run hooks through `sys.executable`, so they passed against a configuration that never started on Windows.
+- Gated Bash writes that reach a test file through a redirect, a here-document, `tee`, `sed -i`, `cp`, or `mv`. Rule 3 applied to the same act through one tool and not the other.
+- Rendered every value reaching a permission prompt or stderr as printable ASCII. A filename carrying newlines or terminal control could rewrite the prompt the user reads to decide.
 - Reduced `checks.yml` CI minute usage: `validate-presets` now skips its two
   `npm run validate:*` steps (which otherwise parse all of
   `src/presets-extra/`) unless the diff touches preset data or the

@@ -48,23 +48,48 @@ import os
 import shlex
 import sys
 
-INTERACTIVE_MODES = frozenset({"default", "plan", "acceptEdits", "auto"})
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    import _gate_core as core
+except ImportError as error:  # pragma: no cover - exercised by the adoption test
+    # Fail closed. Claude Code treats any non-zero exit other than 2 as a
+    # non-blocking error, so an unhandled ImportError would wave the command
+    # through in exactly the repos that installed this gate.
+    _REASON = f"hooks/_gate_core.py could not be imported ({error}), so the gate cannot clear this command"
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": _REASON,
+    }}))
+    print(_REASON, file=sys.stderr)
+    sys.exit(2)
+
+_CWD = [""]
+GATE = "block_destructive_bash.py"
+GATED_KEYWORDS = core.gated_keywords()
 OPERATOR_CHARS = frozenset("&|;")
 GROUPING = frozenset({"(", ")", "\n"})
-WRAPPERS = frozenset({"sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs"})
-AMBIGUOUS_MARKERS = ("$", "`")
-FILESYSTEM_ROOTS = frozenset({"/", "//", "/*"})
-HOME_PREFIXES = ("~", "$HOME", "${HOME}")
-GIT_VALUE_OPTIONS = frozenset({
-    "-C", "-c", "--exec-path", "--git-dir", "--work-tree", "--namespace",
-    "--config-env", "--super-prefix",
-})
-HISTORY_SUBCOMMANDS = {
-    "rebase": "git rebase: this rewrites history",
-    "filter-branch": "git filter-branch: this rewrites history",
-    "filter-repo": "git filter-repo: this rewrites history",
+WRAPPERS = frozenset({"sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs", "timeout"})
+# A shell handed a command string is a wrapper whose payload is another
+# command. Reading only the program name sees "bash" and stops there.
+INTERPRETERS = frozenset({"bash", "sh", "zsh", "dash", "ksh", "busybox",
+                          "cmd", "cmd.exe"})
+INTERPRETER_PAYLOAD_FLAGS = frozenset({"-c", "--command", "/c", "/k"})
+# Wrapper options that consume the token after them. Without these,
+# `sudo -u root rm -rf /` leaves `root` as the apparent program.
+WRAPPER_VALUE_OPTIONS = {
+    "sudo": frozenset({"-u", "-g", "-p", "-C", "-h", "-U", "-r", "-t",
+                       "--user", "--group", "--prompt", "--close-from", "--host", "--role", "--type"}),
+    "doas": frozenset({"-u", "-C"}),
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "xargs": frozenset({"-n", "-I", "-L", "-P", "-s", "-d", "-E", "-a",
+                        "--max-args", "--replace", "--max-procs", "--delimiter", "--arg-file"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
 }
-STRENGTH = {"": 0, "ask": 1, "deny": 2}
+REDIRECTION_CHARS = frozenset("<>&0123456789")
+IMPLAUSIBLE_PROGRAM_CHARS = frozenset("<>&|;")
 
 
 def _tokenize(command: str):
@@ -100,31 +125,74 @@ def _is_env_assignment(token: str) -> bool:
     return token.split("=", 1)[0].isidentifier()
 
 
+def _is_redirection(token: str) -> bool:
+    """Return True if the token is a redirection operator such as > or 2>&1."""
+    return bool(token) and ("<" in token or ">" in token) and set(token) <= REDIRECTION_CHARS
+
+
+def _is_plausible_program(token: str) -> bool:
+    """Return True if the token could name a command.
+
+    A leading flag, a bare file descriptor, or a stray operator means the
+    prefix strip did not reach the real program, so the caller fails closed
+    rather than reporting that nothing gated was found.
+    """
+    if not token or token.startswith("-") or token.isdigit():
+        return False
+    return not (set(token) & IMPLAUSIBLE_PROGRAM_CHARS)
+
+
+def _consumes_value(wrapper: str, token: str) -> bool:
+    """Return True if this wrapper option takes the following token as its value."""
+    if "=" in token:
+        return False
+    return token in WRAPPER_VALUE_OPTIONS.get(wrapper, frozenset())
+
+
+def _redirect_targets(tokens: list) -> list:
+    """Return the files this segment redirects into.
+
+    Both spellings matter: `> path` arrives as two tokens under
+    punctuation_chars, and `>path` as one.
+    """
+    targets = []
+    for index, token in enumerate(tokens):
+        if _is_redirection(token) and index + 1 < len(tokens):
+            targets.append(tokens[index + 1])
+        elif ">" in token and not _is_redirection(token):
+            _, _, tail = token.partition(">")
+            if tail:
+                targets.append(tail)
+    return targets
+
+
 def _strip_prefixes(tokens: list) -> list:
-    """Drop leading environment assignments and command wrappers."""
+    """Drop leading redirections, environment assignments, and wrappers.
+
+    A wrapper's own options are consumed too. Stopping at the first token
+    that begins with a dash left `-n` as the program of `sudo -n rm -rf /`,
+    which is how an unguarded root delete read as an unknown command.
+    """
     index = 0
+    wrapper = ""
     while index < len(tokens):
         token = tokens[index]
-        if _is_env_assignment(token) or os.path.basename(token) in WRAPPERS:
+        if _is_redirection(token):
+            index += 2
+            continue
+        if _is_env_assignment(token):
             index += 1
+            continue
+        name = os.path.basename(token)
+        if name in WRAPPERS:
+            wrapper = name
+            index += 1
+            continue
+        if wrapper and token.startswith("-"):
+            index += 2 if _consumes_value(wrapper, token) else 1
             continue
         break
     return tokens[index:]
-
-
-def _is_ambiguous(token: str) -> bool:
-    """Return True if the token hides its value behind shell expansion."""
-    return any(marker in token for marker in AMBIGUOUS_MARKERS)
-
-
-def _is_short_group(token: str) -> bool:
-    """Return True if the token is a bundle of short flags such as -Rf."""
-    return token.startswith("-") and not token.startswith("--") and len(token) > 1
-
-
-def _is_root_target(token: str) -> bool:
-    """Return True if the token names the filesystem root or the home directory."""
-    return token in FILESYSTEM_ROOTS or token.startswith(HOME_PREFIXES)
 
 
 def _rm_targets(args: list) -> tuple:
@@ -137,7 +205,7 @@ def _rm_targets(args: list) -> tuple:
             parsing = False
         elif parsing and token.startswith("--"):
             recursive = recursive or token == "--recursive"
-        elif parsing and _is_short_group(token):
+        elif parsing and core.is_short_group(token):
             recursive = recursive or "r" in token or "R" in token
         else:
             operands.append(token)
@@ -147,98 +215,102 @@ def _rm_targets(args: list) -> tuple:
 def _rm_verdict(args: list) -> tuple:
     """Return (decision, reason) for an rm argument list."""
     recursive, operands = _rm_targets(args)
-    if not recursive:
-        return "", ""
-    if any(_is_root_target(operand) for operand in operands):
-        return "deny", "recursive rm targeting / or the home directory"
-    return "ask", "recursive rm: Rule 2 gates every target, including one this session created"
+    return core.delete_verdict(recursive, operands, "recursive rm")
 
 
-def _git_subcommand(args: list) -> tuple:
-    """Return (subcommand, remaining args) after skipping git's global options."""
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if not token.startswith("-"):
-            return token, args[index + 1:]
-        if token.split("=", 1)[0] in GIT_VALUE_OPTIONS and "=" not in token:
-            index += 2
-        else:
-            index += 1
-    return "", []
+def _interpreter_verdict(program: str, args: list) -> tuple:
+    """Return (decision, reason) for a shell handed a command string.
 
-
-def _push_ask_reason(token: str, name: str) -> str:
-    """Return why a single git push argument needs consent, or an empty string."""
-    if name.startswith("--force"):
-        return "git push with a --force variant: a lease is not consent to rewrite pushed history"
-    if name == "--mirror":
-        return "git push --mirror: this overwrites and deletes published refs"
-    if name == "--delete" or (_is_short_group(token) and "d" in token):
-        return "git push --delete: this removes a published ref"
-    if not token.startswith("-") and token.startswith("+"):
-        return "git push with a forced refspec: this rewrites pushed history"
-    return ""
-
-
-def _push_verdict(args: list) -> tuple:
-    """Return (decision, reason) for a git push argument list."""
-    ask = ""
-    for token in args:
-        name = token.split("=", 1)[0]
-        if name == "--force" or (_is_short_group(token) and "f" in token):
-            return "deny", "git push --force"
-        ask = ask or _push_ask_reason(token, name)
-    return ("ask", ask) if ask else ("", "")
-
-
-def _git_verdict(args: list) -> tuple:
-    """Return (decision, reason) for a git argument list."""
-    subcommand, rest = _git_subcommand(args)
-    if not subcommand or _is_ambiguous(subcommand):
-        return "ask", "git with an unresolved subcommand: the gate cannot tell what this runs"
-    if subcommand == "push":
-        return _push_verdict(rest)
-    if subcommand == "reset" and "--hard" in rest:
-        return "deny", "git reset --hard"
-    if subcommand == "commit" and "--amend" in rest:
-        return "ask", "git commit --amend: this rewrites a commit"
-    if subcommand in HISTORY_SUBCOMMANDS:
-        return "ask", HISTORY_SUBCOMMANDS[subcommand]
+    Only the payload after -c, /c, or /k is another command. A shell
+    invoked without one runs a script or a REPL, which this gate cannot
+    read either way, so it is not gated on the interpreter's own name.
+    """
+    for index, token in enumerate(args):
+        lowered = token.lower()
+        if lowered in INTERPRETER_PAYLOAD_FLAGS:
+            rest = args[index + 1:]
+            if not rest:
+                return "", ""
+            # A POSIX shell takes one string after -c. CMD takes the whole
+            # remainder of the line after /c or /k.
+            if lowered.startswith("/"):
+                return classify(" ".join(rest))
+            return classify(rest[0])
+        # busybox sh -c: the applet name precedes the flag
+        if not token.startswith(("-", "/")) and lowered in INTERPRETERS:
+            return _interpreter_verdict(lowered, args[index + 1:])
+        # a combined short group such as -lc still carries the payload
+        if token.startswith("-") and not token.startswith("--") and "c" in token:
+            payload = args[index + 1:index + 2]
+            return classify(payload[0]) if payload else ("", "")
     return "", ""
 
 
 def _segment_verdict(tokens: list) -> tuple:
-    """Return (decision, reason) for one command segment."""
+    """Return (decision, reason) for one command segment.
+
+    The privilege verdict is folded into whatever the wrapped command
+    yields, so `sudo ls` asks and `sudo rm -rf /` still denies.
+    """
+    privileged = core.privilege_verdict(tokens)
+    redirects = _redirect_targets(tokens)
     tokens = _strip_prefixes(tokens)
+    return core.strongest(privileged, _program_verdict(tokens, redirects))
+
+
+def _program_verdict(tokens: list, redirects: list) -> tuple:
+    """Return (decision, reason) for the program this segment runs."""
     if not tokens:
-        return "", ""
+        return core.strongest(
+            core.truncation_verdict("", [], redirects),
+            core.test_write_verdict("", [], redirects))
     program = os.path.basename(tokens[0])
+    if program.lower() in INTERPRETERS:
+        return _interpreter_verdict(program, tokens[1:])
     if program == "rm":
         return _rm_verdict(tokens[1:])
     if program == "git":
-        return _git_verdict(tokens[1:])
+        return core.git_verdict(tokens[1:], _CWD[0])
+    args = tokens[1:]
+    for verdict in (core.destruction_verdict(program, args),
+                    core.alias_verdict(program, args),
+                    core.mode_change_verdict(program, args),
+                    core.truncation_verdict(program, args, redirects),
+                    core.process_verdict(program, args),
+                    core.schedule_verdict(program, args),
+                    core.forge_verdict(program, args),
+                    core.filesystem_repair_verdict(program, args),
+                    core.profile_verdict(program, args, redirects),
+                    core.cmd_delete_verdict(program, args),
+                    core.test_write_verdict(program, args, redirects)):
+        if verdict[0]:
+            return verdict
+    if not _is_plausible_program(program) and _mentions_gated_command(tokens):
+        return "ask", ("the command boundaries could not be interpreted, so "
+                       "the gate cannot clear it")
     return "", ""
 
 
-def _unparseable_verdict(command: str) -> tuple:
-    """Fail closed when a destructive-looking command will not tokenize."""
-    if "rm" in command or "git" in command:
-        return "ask", "this command could not be parsed, so the gate cannot clear it"
-    return "", ""
+def _mentions_gated_command(tokens: list) -> bool:
+    """Return True if any token in the segment names a command this gate covers."""
+    return any(os.path.basename(token) in GATED_KEYWORDS for token in tokens)
 
 
 def classify(command: str) -> tuple:
     """Return the strongest (decision, reason) across the command's segments."""
-    tokens = _tokenize(command)
-    if tokens is None:
-        return _unparseable_verdict(command)
-    strongest = ("", "")
-    for segment in _segments(tokens):
-        verdict = _segment_verdict(segment)
-        if STRENGTH[verdict[0]] > STRENGTH[strongest[0]]:
-            strongest = verdict
-    return strongest
+    if not isinstance(command, str):
+        return "ask", "the command is not a string, so the gate cannot read it"
+    verdict = ("", "")
+    for line in command.splitlines():
+        tokens = _tokenize(line)
+        if tokens is None:
+            return core.unparseable_verdict(command, GATED_KEYWORDS)
+        segments = _segments(tokens)
+        verdict = core.strongest(
+            verdict, core.remote_execution_verdict(segments))
+        for segment in segments:
+            verdict = core.strongest(verdict, _segment_verdict(segment))
+    return verdict
 
 
 def find_reason(command: str) -> str:
@@ -254,47 +326,12 @@ def find_consent_reason(command: str) -> str:
 
 
 def emit(decision: str, reason: str) -> int:
-    """Print the hook's decision and return the exit code it needs."""
-    message = f"blocked by hooks/block_destructive_bash.py: {reason}"
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": decision,
-            "permissionDecisionReason": message,
-        }
-    }
-    print(json.dumps(output))
-    if decision == "deny":
-        print(message, file=sys.stderr)
-        return 2
-    return 0
-
-
-def _read_payload():
-    """Return the stdin payload, or None when it cannot be parsed.
-
-    A gate that crashes on its input is a gate that is not there: Claude Code
-    treats a hook that exits non-zero for any reason other than 2 as a
-    non-blocking error, so an unhandled exception waves the command through.
-    """
-    try:
-        parsed = json.loads(sys.stdin.read())
-    except (OSError, ValueError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
-def _decide(payload: dict, decision: str, reason: str) -> int:
-    """Emit the decision, turning an ask nobody can answer into a deny."""
-    if decision == "deny":
-        return emit("deny", reason)
-    if payload.get("permission_mode") in INTERACTIVE_MODES:
-        return emit("ask", reason)
-    return emit("deny", f"{reason}. No interactive session is available to consent.")
+    """Print the gate's decision and return the exit code it needs."""
+    return core.emit(GATE, decision, reason)
 
 
 def main() -> int:
-    payload = _read_payload()
+    payload = core.read_payload()
     if payload is None:
         return emit("deny", "the hook payload could not be parsed, so the gate cannot clear this command")
     if payload.get("tool_name") != "Bash":
@@ -302,10 +339,14 @@ def main() -> int:
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict):
         return emit("deny", "the tool input is malformed, so the gate cannot read this command")
-    decision, reason = classify(tool_input.get("command", ""))
+    _CWD[0] = core.project_dir(payload)
+    command = core.require_str(tool_input.get("command", ""))
+    if command is None:
+        return emit("deny", "the command field is not a string, so the gate cannot read it")
+    decision, reason = classify(command)
     if not decision:
         return 0
-    return _decide(payload, decision, reason)
+    return core.decide(GATE, payload, decision, reason)
 
 
 if __name__ == "__main__":

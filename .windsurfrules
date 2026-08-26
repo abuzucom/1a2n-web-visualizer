@@ -3,7 +3,7 @@
 ## Non-negotiable: read first
 
 1. Never build SQL, shell commands, or code from untrusted input; parameterize.
-2. Never drop tables, delete user data, or purge directories; get explicit authorization first.
+2. Never drop tables, delete user data, or purge directories; get explicit authorization first, restate the command before running it, and record what authorized it.
 3. Never edit, weaken, skip, or delete a test to make code pass; report instead.
 4. Do only what was asked; flag improvements and bugs, ask before acting.
 5. Always draft PRs/MRs, no exception; never push to protected branches, mark ready, or merge without consent.
@@ -205,12 +205,32 @@ Applies to all injection sinks: SQL/NoSQL, shell, eval/exec, LDAP, XPath, and fi
 
 **NEVER** drop tables, delete user data, or purge directories (e.g., `rm -rf *`) without explicit user authorization. Task instructions do not imply consent; ask each time.
 The rule carries no scope qualifier. A scratch directory, a temporary profile, or a clone this session created itself is gated like any other target.
-Backed by `hooks/block_destructive_bash.py`, which denies `rm -rf` aimed at `/`, `~`, or `$HOME` and routes every other recursive delete to the user.
+
+**No guessing.** If there is any uncertainty about what a command deletes or overwrites, stop and ask for specific approval. "I think it is safe" is never acceptable.
+
+**Safer alternatives first.** When cleanup or a rollback is needed, ask to use a non-destructive option first: `git status`, `git diff`, `git stash`, or a copy to a backup. Propose the destructive command only after those are ruled out.
+
+**Restate before executing.** Explicit authorization is not the last step. Restate the command verbatim, list exactly what it affects, and wait for confirmation that the understanding is correct. Execute only then. If anything remains ambiguous, refuse and escalate.
+
+**Document the confirmation.** When running an approved destructive command, record the exact user text that authorized it, the command actually run, and the time it ran. Absent that record, treat the operation as not having happened.
+
+Those four are instructions, not checks. No tool verifies that a command was restated or that an authorization was recorded, because no mechanical signal distinguishes a restatement from any other sentence.
+
+What is enforced, by `hooks/block_destructive_bash.py` and
+`hooks/block_destructive_powershell.py`, is which commands reach the user at all:
+
+- **Refused outright**, with no prompt offered: a delete targeting a drive root, a UNC share root, or a system directory (`/`, `/bin`, `/boot`, `/dev`, `/etc`, `/home`, `/lib*`, `/media`, `/mnt`, `/opt`, `/proc`, `/root`, `/run`, `/sbin`, `/srv`, `/sys`, `/tmp`, `/usr`, `/var`, and the macOS equivalents); `git reset --hard`; filesystem formatting and repair (`mkfs`, `diskpart`, `format`, `fdisk`, `fsck`); `dd` in any form; `hdparm`; a bare redirect or a redirect from `/dev/null`, which empties a file with no delete in the line; any redirect onto a device; `mv` to `/dev/null` or `/dev/random`; `chmod 000`; `chmod`, `chown`, or `chgrp` on a root; anything piped into an interpreter, including `curl | bash` and `history | sh`; defining a command alias; `crontab -r`; recovery destruction through `vssadmin`, `wbadmin`, `wmic`, or `bcdedit`; and `gh repo delete`.
+- **Routed to the user**: every other recursive delete, whatever the target; `git push --force`, `--force-with-lease`, `--mirror`, `--delete`, `--prune`, and a forced or empty refspec; `git commit --amend`, `git rebase`, `git filter-branch`, `git clean -fdx`, and `git branch -D`; `sudo`, `su`, `doas`, and `pkexec`; `kill`, `killall`, and `pkill`; `shred` and `sdelete`; `find -delete` and `-exec`; writes to a shell startup file; a git read command in a repository whose config names a program git runs; and any write reaching a test file, including through a redirect.
+
+An unattended session turns every prompt into a refusal, since consent cannot be given where nobody is present.
+
+The gates read a command's shape, not a stream of events. Rate and volume analytics, "N deletions in M minutes" and correlation with login anomalies, need telemetry a per-call hook does not have. A command behind an alias to a shell function, a wrapper script on `PATH`, or a variable holding a program name is invisible to them.
 
 ### 3. Do not change tests to make code pass
 
 Never edit, weaken, skip, or delete a test to get a pass. Do not soften assertions, widen tolerances, or mock away behavior under test.
 If a test is wrong, stop, report it, and wait for a human decision.
+Backed by `hooks/require_consent.py`, which routes every edit to a test file that already exists to the user at the act. Creating a new test file is the only exemption. `scripts/check_protected_files.py` is the server-side backstop, since a local hook cannot vouch for itself: whoever edits it or `.claude/settings.json` before it runs decides what it does.
 
 Disclosure is not a substitute for stopping. Writing the violation into a plan file, a commit message, or a pull request body does not convert a stop condition into a disclosure obligation.
 Neither does judging that the rule's purpose does not reach this case. A comment recording why a test asserts what it asserts is a person's decision written down, not an invitation to overrule it.

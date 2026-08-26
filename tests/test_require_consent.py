@@ -16,6 +16,7 @@ otherwise pass every behavioral test in this file.
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -72,6 +73,22 @@ def edit_payload(file_path: str, old: str, new: str, mode: str = "default") -> d
     }
 
 
+def _symlinks_available(directory: str) -> bool:
+    """Return True when this platform lets an unprivileged process link.
+
+    Windows raises WinError 1314 without Developer Mode or elevation, so
+    an unconditional symlink fixture fails the suite for an ordinary
+    contributor on a supported platform.
+    """
+    probe = Path(directory) / "_symlink_probe"
+    try:
+        probe.symlink_to(directory)
+    except (OSError, NotImplementedError):
+        return False
+    probe.unlink()
+    return True
+
+
 class TestFileFixture(unittest.TestCase):
     """Base class providing a real test file on disk."""
 
@@ -109,13 +126,19 @@ class AllowTest(TestFileFixture):
         self.assertEqual(code, 0)
         self.assertEqual(decision_of(parsed), "")
 
-    def test_appending_a_test_passes(self):
-        """The test-first workflow must stay frictionless."""
+    def test_appending_a_test_asks(self):
+        """Appending to a file that exists is still an edit to it.
+
+        The carve-out this replaces cleared an append textually, which
+        cannot tell a new test from a statement that neutralizes every
+        test above it. Creating a new file stays unprompted, so the
+        test-first workflow keeps its exemption where it is verifiable.
+        """
         old = "});\n"
         new = "});\n\ntest('a new case', function () {\n  assert.equal(1, 1);\n});\n"
         code, parsed = run_hook(edit_payload(str(self.test_file), old, new))
         self.assertEqual(code, 0)
-        self.assertEqual(decision_of(parsed), "")
+        self.assertEqual(decision_of(parsed), "ask")
 
 
 class GateTest(TestFileFixture):
@@ -238,13 +261,13 @@ class PreservedTextEvasionTest(TestFileFixture):
         new = old + "\n  assert.equal(2, 2);"
         self.assertEqual(self._decision_for(old, new), "ask")
 
-    def test_end_of_file_append_still_passes(self):
-        """The test-first workflow must stay unprompted for the normal case."""
+    def test_end_of_file_append_asks(self):
+        """An end-of-file append can still disable the tests above it."""
         old = "});\n"
         new = "});\n\ntest('a new case', function () {\n  assert.equal(1, 1);\n});\n"
-        self.assertEqual(self._decision_for(old, new), "")
+        self.assertEqual(self._decision_for(old, new), "ask")
 
-    def test_whole_file_append_via_write_passes(self):
+    def test_whole_file_append_via_write_asks(self):
         payload = {
             "hook_event_name": "PreToolUse",
             "tool_name": "Write",
@@ -255,7 +278,7 @@ class PreservedTextEvasionTest(TestFileFixture):
             },
         }
         _, parsed = run_hook(payload)
-        self.assertEqual(decision_of(parsed), "")
+        self.assertEqual(decision_of(parsed), "ask")
 
 
 class FailClosedTest(TestFileFixture):
@@ -311,11 +334,17 @@ class PathAliasTest(unittest.TestCase):
         return decision_of(parsed)
 
     def test_symlink_with_an_innocuous_name_is_still_a_test(self):
+        if not _symlinks_available(self.tmp.name):
+            self.skipTest("this platform needs elevation to create symlinks; "
+                          "HardLinkTest covers alias resolution without it")
         alias = Path(self.root) / "notes.txt"
         alias.symlink_to(self.test_file)
         self.assertEqual(self._edit(str(alias)), "ask")
 
     def test_test_named_symlink_pointing_outside_the_root_is_gated(self):
+        if not _symlinks_available(self.tmp.name):
+            self.skipTest("this platform needs elevation to create symlinks; "
+                          "HardLinkTest covers alias resolution without it")
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)
         target = Path(os.path.realpath(outside.name)) / "payload.js"
@@ -373,6 +402,129 @@ class OverrideScopeTest(unittest.TestCase):
 
     def test_grant_does_not_release_a_matching_suffix_elsewhere(self):
         self.assertEqual(self._edit(self.other), "ask")
+
+
+TWO_TESTS = """test('a', function () {
+  assert.ok(1);
+});
+
+test('b', function () {
+  assert.ok(2);
+});
+"""
+
+
+class OccurrenceCountTest(unittest.TestCase):
+    """An append is verifiable only when the old text occurs once, at the end.
+
+    The hook ignored `replace_all`, so it validated one replacement at the
+    end of the file while the tool rewrote every occurrence. The same hole
+    exists without the flag: when the old text appears twice, a plain Edit
+    replaces the first, which is mid-file, while `content.endswith(old)`
+    still reported an append.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = os.path.realpath(self.tmp.name)
+        os.makedirs(os.path.join(self.root, "tests"))
+        self.target = Path(self.root) / "tests" / "test_two.js"
+        self.target.write_text(TWO_TESTS, encoding="utf-8")
+
+    def _edit(self, old, new, replace_all=None):
+        payload = edit_payload(str(self.target), old, new)
+        payload["cwd"] = self.root
+        if replace_all is not None:
+            payload["tool_input"]["replace_all"] = replace_all
+        _, parsed = run_hook(payload)
+        return decision_of(parsed)
+
+    APPEND = "});\n\ntest('c', function () {\n  assert.ok(3);\n});\n"
+
+    def test_repeated_old_text_gates_with_replace_all(self):
+        self.assertEqual(self._edit("});\n", self.APPEND, replace_all=True), "ask")
+
+    def test_repeated_old_text_gates_without_replace_all(self):
+        """A plain Edit replaces the first occurrence, which is not the end."""
+        self.assertEqual(self._edit("});\n", self.APPEND), "ask")
+
+    def test_single_occurrence_at_the_end_now_gates(self):
+        """The append carve-out is gone: an existing test file always asks."""
+        tail = "  assert.ok(2);\n});\n"
+        self.assertEqual(
+            self._edit(tail, tail + "\ntest('c', function () {});\n"), "ask")
+
+    def test_single_occurrence_gates_under_replace_all(self):
+        tail = "  assert.ok(2);\n});\n"
+        new = tail + "\ntest('c', function () {});\n"
+        self.assertEqual(self._edit(tail, new, replace_all=True), "ask")
+
+    def test_multiedit_on_an_existing_test_gates(self):
+        """Every edit to an existing test file asks, MultiEdit included."""
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "MultiEdit",
+            "permission_mode": "default",
+            "cwd": self.root,
+            "tool_input": {
+                "file_path": str(self.target),
+                "edits": [
+                    {"old_string": "assert.ok(1)", "new_string": "assert.ok(11)", "replace_all": True},
+                    {"old_string": "});\n", "new_string": self.APPEND},
+                ],
+            },
+        }
+        _, parsed = run_hook(payload)
+        self.assertEqual(decision_of(parsed), "ask")
+
+
+class HardLinkTest(unittest.TestCase):
+    """realpath resolves a symlink. A hard link has no target to resolve."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = os.path.realpath(self.tmp.name)
+        os.makedirs(os.path.join(self.root, "tests"))
+        self.test_file = Path(self.root) / "tests" / "test_auth.js"
+        self.test_file.write_text(EXISTING_TEST, encoding="utf-8")
+
+    def _edit(self, target):
+        payload = edit_payload(str(target), "  assert.equal(deviceBCalls, 1, 'no retry attempted');", "")
+        payload["cwd"] = self.root
+        _, parsed = run_hook(payload)
+        return decision_of(parsed)
+
+    def test_hard_link_under_an_innocuous_name_is_gated(self):
+        alias = Path(self.root) / "notes.txt"
+        os.link(self.test_file, alias)
+        self.assertEqual(self._edit(alias), "ask")
+
+    def test_unrelated_multiply_linked_file_is_not_gated(self):
+        source = Path(self.root) / "src.js"
+        source.write_text("export function create() {}\n", encoding="utf-8")
+        os.link(source, Path(self.root) / "src-alias.js")
+        payload = edit_payload(str(source), "create() {}", "create() { return 1; }")
+        payload["cwd"] = self.root
+        _, parsed = run_hook(payload)
+        self.assertEqual(decision_of(parsed), "")
+
+
+class PathFieldTypeTest(unittest.TestCase):
+    """A path that is not a string must deny rather than crash."""
+
+    def test_non_string_path_denies(self):
+        for value in (5, ["tests/test_x.js"], {"path": "x"}):
+            with self.subTest(value=value):
+                code, parsed = run_hook({
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Edit",
+                    "permission_mode": "default",
+                    "tool_input": {"file_path": value, "old_string": "a", "new_string": "b"},
+                })
+                self.assertEqual(code, BLOCKING_EXIT_CODE)
+                self.assertEqual(decision_of(parsed), "deny")
 
 
 class FailClosedInputTest(unittest.TestCase):
@@ -531,6 +683,55 @@ class SettingsWiringTest(unittest.TestCase):
     def test_example_settings_register_the_hook(self):
         self._assert_registered(EXAMPLE_SETTINGS)
 
+    HOOK_MATCHERS = {
+        "block_destructive_bash.py": {"Bash"},
+        "block_destructive_powershell.py": {"PowerShell"},
+        "require_consent.py": {EDIT_MATCHER},
+    }
+
+    def test_configured_launcher_resolves_on_this_platform(self):
+        """A launcher that does not resolve makes every gate fail open.
+
+        Claude Code spawns the exec form directly, with no shell, so
+        `command` must name a real executable on PATH. A startup failure
+        exits non-zero but not 2, which Claude Code treats as a
+        non-blocking error, and the gate waves the call through.
+
+        Asserting on the configured string is the point: the behavioral
+        tests launch hooks through `sys.executable`, so they keep passing
+        against a configuration that never starts.
+        """
+        for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
+            settings = json.loads(path.read_text(encoding="utf-8"))
+            launchers = {
+                entry.get("command", "")
+                for event in settings.get("hooks", {}).values()
+                for matcher in event
+                for entry in matcher.get("hooks", [])
+            }
+            for launcher in launchers:
+                with self.subTest(path=path.name, launcher=launcher):
+                    self.assertIsNotNone(
+                        shutil.which(launcher),
+                        f"{path.name} launches hooks as {launcher!r}, which "
+                        f"does not resolve here. Windows has no python3.exe; "
+                        f"use 'python' or 'py'. Debian without "
+                        f"python-is-python3 has no 'python'; use 'python3'.",
+                    )
+
+    def test_every_registered_hook_declares_its_matchers(self):
+        """A PreToolUse hook absent from the table above is unreviewed wiring."""
+        for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
+            settings = json.loads(path.read_text(encoding="utf-8"))
+            for matcher in settings["hooks"]["PreToolUse"]:
+                for entry in matcher.get("hooks", []):
+                    invocation = " ".join(
+                        [entry.get("command", "")] + list(entry.get("args", [])))
+                    with self.subTest(path=path.name, command=invocation):
+                        self.assertTrue(
+                            any(name in invocation for name in self.HOOK_MATCHERS),
+                            f"{invocation} is registered but not declared")
+
     def test_entries_use_the_exec_form(self):
         """Shell form splits a project path containing spaces and the hook never runs."""
         for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
@@ -538,9 +739,19 @@ class SettingsWiringTest(unittest.TestCase):
             for event in ("SessionStart", "PreToolUse"):
                 for matcher in settings["hooks"][event]:
                     for entry in matcher.get("hooks", []):
-                        with self.subTest(path=path.name, command=entry.get("command")):
-                            self.assertEqual(entry.get("command"), "python3")
+                        command = entry.get("command", "")
+                        with self.subTest(path=path.name, command=command):
                             self.assertTrue(entry.get("args"), "exec form requires args")
+                            self.assertTrue(command, "no launcher configured")
+                            # A launcher carrying a space or a shell
+                            # metacharacter is shell form wearing exec
+                            # form's shape. Which program it names is
+                            # asserted by the launcher-resolution test,
+                            # which requires it to exist on PATH.
+                            self.assertNotIn(" ", command)
+                            self.assertFalse(
+                                set(command) & set("$\"'|&;<>()"),
+                                "launcher carries shell syntax")
 
     def test_destructive_bash_hook_is_registered(self):
         """The incident's rm -rf and force-push ran because nothing wired this."""

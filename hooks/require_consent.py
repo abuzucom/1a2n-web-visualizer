@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Route rule-governed writes through a per-act human decision.
+"""Route writes to existing test files through a per-act human decision.
 
 Not part of AGENTS.md, which stays tool-agnostic and is synced to non-Claude
 tools verbatim. This is a Claude-Code-specific hook under hooks/, wired via
 `.claude/settings.json` (live in this repo) or
 hooks/claude-code-settings.example.json (for adopting repos). One file serves
-three registrations, dispatched on `hook_event_name` and `tool_name`.
+two registrations, dispatched on `hook_event_name` and `tool_name`.
 
 `PreToolUse` on Edit, Write, MultiEdit, and NotebookEdit gates writes to test
 files. AGENTS.md Rule 3 says an agent that finds a test wrong stops, reports,
@@ -13,78 +13,89 @@ and waits for a human decision. An agent can talk itself out of that rule by
 deciding the rule's purpose does not cover this case; it cannot talk itself
 past a permission prompt. So the gate returns `ask` and the human answers.
 
-The gate stays out of the way of the mandated test-first workflow. A new test
-file passes, and so does an append at the end of an existing test file. That
-is the whole carve-out. An edit that rewrites existing content, inserts into
-the middle of a file, drops an assertion, or introduces a skip marker is
-gated.
+Creating a test file that does not exist yet is the only exemption, and it is
+the one the mandated test-first workflow needs. Every edit to a file that
+already exists asks, in any language.
 
-The carve-out is an end-of-file append rather than "the old text still appears
-somewhere in the new text", because the latter is not a test that the old
-behavior survived. Commenting an assertion out, wrapping it in a string, or
-moving it into a branch that never runs all preserve its text while removing
-its effect. Telling those apart from a real addition needs to parse the
-language under test, so the gate does not try: anything it cannot verify as
-an append goes to the human. Existing test content is a human's recorded decision, and a
-comment explaining why a test asserts what it asserts is the strongest form
-of that signal, not a license to overrule it.
-
-`PreToolUse` on AskUserQuestion injects a checklist and never a decision. A
-question that hides the rule-governed cost of an option, and labels it
-Recommended, takes the choice away from the user before any gate can fire.
-The checklist is a reminder, not enforcement. The edit gate is what makes the
-omission survivable.
+An earlier form cleared an end-of-file append as additive. Textual checks
+cannot carry that claim: appending `ExistingTest.__unittest_skip__ = True`,
+or rebinding the class to `None`, leaves every assertion above it present and
+inert. Enumerating those spellings is a denylist over text an attacker
+chooses, so the carve-out is gone rather than patched. The cost is real: an
+iteration on an existing test now prompts.
 
 `SessionStart` states which gates are live.
 
 An `ask` needs a human to answer it. When `permission_mode` reports an
 unattended session, or a mode this hook does not recognize, the ask becomes a
-deny: absence of a human is absence of consent.
+deny: absence of a human is absence of consent. The unrecognized value is
+named in the reason, so a mode Claude Code adds later is visible rather than
+silently denied.
 
 Paths are resolved before anything is decided about them. A path is only as
-trustworthy as the file it reaches, so classification runs on both the name
-given and its canonical target: a symlink called notes.txt still reaches a
-test, and a test-named symlink pointing outside the project root is gated
-rather than followed.
+trustworthy as the file it reaches, so classification runs on the name given,
+its canonical target, and, when the file has more than one link, the inodes
+of the project's test tree: `realpath` resolves a symlink but a hard link has
+no target to resolve.
 
 For headless runs a human sets AGENTS_CONSENT_GRANTED at launch to a
-comma-separated list of paths the gate may release, matched on the canonical
-path so that one grant releases one file. The model cannot forge it, since Bash tool calls do not
-persist shell state and this hook inherits Claude Code's environment rather
-than the model's shell.
+comma-separated list of paths the gate may release, each bound to the
+content the file held when the grant was written (`path@sha256:<digest>`).
+A bare path is accepted and releases only the current content.
 
-Known gap: a Bash call can still write a test file through a redirect or a
-here-document, which no Edit or Write matcher sees. The CI backstop covers
-that case by requiring code-owner approval on the pull request.
+The variable is not reachable from Bash tool calls, which do not persist
+shell state. It is not a security boundary against a party who can edit this
+hook or `.claude/settings.json`: whoever writes those before the hook runs
+decides what it does. This gate raises the cost of the casual path. Closing
+it needs a server-side check on those paths, which an adopting repo supplies
+and this template does not.
+
+A Bash call can also write a test file, through a redirect, a
+here-document, `tee`, `sed -i`, `cp`, or `mv`, where no Edit or Write
+matcher sees it. hooks/block_destructive_bash.py routes those to the same
+decision, using the classifier both gates share in _gate_core.py. A write
+through a program neither gate knows still passes.
 """
+import hashlib
 import json
 import os
-import re
 import sys
 
-INTERACTIVE_MODES = frozenset({"default", "plan", "acceptEdits", "auto"})
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+GATE = "require_consent.py"
+
+try:
+    import _gate_core as core
+except ImportError as error:  # pragma: no cover - exercised by the adoption test
+    # Fail closed. Claude Code treats any non-zero exit other than 2 as a
+    # non-blocking error, so an unhandled ImportError would wave the write
+    # through in exactly the repos that installed this gate.
+    _REASON = (f"hooks/_gate_core.py could not be imported ({error}), "
+               "so the gate cannot clear this call")
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": _REASON,
+    }}))
+    print(_REASON, file=sys.stderr)
+    sys.exit(2)
+
 GATED_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
-TEST_DIR_PARTS = frozenset({"tests", "test", "__tests__", "spec"})
-TEST_NAME = re.compile(
-    r"^test_.+\.(py|js|mjs|cjs|ts|jsx|tsx|ipynb)$"
-    r"|_test\.(py|js|mjs|cjs|ts|go|rb)$"
-    r"|\.(test|spec)\.(js|mjs|cjs|jsx|ts|tsx)$"
-)
 PATH_KEYS = ("file_path", "notebook_path")
-ASSERTION_TOKENS = ("assert", "expect(", "should.")
-WEAKENING_MARKERS = (
-    ".skip(", ".only(", "xit(", "xdescribe(", "test.todo", "it.todo",
-    "skip: true", "todo: true", "@unittest.skip", "self.skipTest(",
-    "@pytest.mark.skip", "@pytest.mark.xfail", "t.Skip(",
-)
+PROTECTED_PARTS = ("hooks", ".claude")
 OVERRIDE_ENV = "AGENTS_CONSENT_GRANTED"
+SKIP_WALK_DIRS = frozenset({".git", "node_modules", ".venv", "__pycache__"})
+MAX_INODE_WALK = 20000
 
 SESSION_NOTICE = """Consent gates are live in this repository.
 
-Edits that remove, rewrite, or weaken existing test content route to the user
-for a decision at the act (AGENTS.md Rule 3). Destructive and history
-rewriting Bash commands do the same (Rule 2). Adding a new test, or appending
-one at the end of an existing file, is not gated.
+Every edit to a test file that already exists routes to the user for a
+decision at the act (AGENTS.md Rule 3), in any language. Creating a new test
+file is not gated, so the test-first workflow keeps its exemption where it is
+verifiable. Destructive and history rewriting Bash commands route the same way
+(Rule 2). Writes to hooks/ and .claude/ route the same way, because they
+decide whether these gates run at all.
 
 Approval of a plan is not authorization for the individual acts inside it.
 
@@ -103,129 +114,71 @@ This arrives now rather than when a question is asked, because by the time a
 question reaches a hook its options are already written."""
 
 
-def _read_payload():
-    """Return the stdin payload, or None when it cannot be parsed.
-
-    Empty stdin is the SessionStart invocation and yields an empty dict.
-    Anything else that will not parse is a refusal, not a shrug: a gate that
-    answers "fine" to input it could not read is worse than no gate.
-    """
-    try:
-        raw = sys.stdin.read()
-    except (OSError, ValueError):
-        return None
-    if not raw.strip():
-        return {}
-    try:
-        parsed = json.loads(raw)
-    except ValueError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
-def _project_dir(payload: dict) -> str:
-    """Return the repository root, preferring Claude Code's own variable."""
-    return os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
-
-
 def is_test_path(path: str) -> bool:
-    """Return True if `path` names a test file by directory or by filename."""
-    normalized = os.path.normpath(path).replace(os.sep, "/")
-    parts = normalized.split("/")
-    if TEST_DIR_PARTS.intersection(parts[:-1]):
-        return True
-    return bool(TEST_NAME.search(parts[-1]))
+    """Return True if `path` names a test file, per the shared classifier."""
+    return core.is_test_path(path)
 
 
-def count_assertions(text: str) -> int:
-    """Return how many assertion tokens `text` contains."""
-    return sum(text.count(token) for token in ASSERTION_TOKENS)
-
-
-def find_new_markers(old: str, new: str) -> list:
-    """Return the skip or todo markers `new` introduces that `old` lacks."""
-    return [marker for marker in WEAKENING_MARKERS if marker in new and marker not in old]
-
-
-def is_appended(old: str, new: str) -> bool:
-    """Return True if `new` is `old` followed only by whole added lines."""
-    if not new.startswith(old):
+def is_protected_path(target: str, project_dir: str) -> bool:
+    """Return True if `target` is a file that decides whether gates run."""
+    root = os.path.realpath(project_dir)
+    if not (target == root or target.startswith(root + os.sep)):
         return False
-    remainder = new[len(old):]
-    return remainder == "" or remainder.startswith("\n")
+    relative = os.path.relpath(target, root).replace(os.sep, "/")
+    head = relative.split("/", 1)[0].lower()
+    return head in PROTECTED_PARTS
 
 
-def classify_edit(old: str, new: str, content: str) -> str:
-    """Return why replacing `old` with `new` needs consent, or an empty string.
-
-    Only an append at the end of the file passes. Keeping the old text
-    somewhere inside the new text is not keeping the test: an assertion that
-    is commented out, wrapped in a string, or moved into a branch that never
-    runs is still present as text and no longer runs. Separating those from a
-    real addition needs to parse the language under test. Refusing to guess
-    costs a prompt; guessing wrong costs the assertion.
-    """
-    markers = find_new_markers(old, new)
-    if markers:
-        return f"introduces {', '.join(markers)}, which disables or weakens a test"
-    if not is_appended(old, new):
-        return "rewrites existing test content, which can disable an assertion while keeping its text"
-    if not content.endswith(old):
-        return "adds to the middle of the file, where the gate cannot confirm the existing tests still run"
-    if count_assertions(new) < count_assertions(old):
-        return "drops an assertion"
-    return ""
+def _same_file(first: os.stat_result, second: os.stat_result) -> bool:
+    """Return True if two stat results name one file on disk."""
+    return (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino)
 
 
-def read_text(path: str):
-    """Return the file's contents, or None when it cannot be read as text.
+def reaches_a_test_inode(target: str, project_dir: str) -> bool:
+    """Return True if `target` is hard-linked to a file in the test tree.
 
-    None and "" are different answers. An empty file is a file the gate has
-    read; a file it could not decode is one it knows nothing about, and
-    treating that as empty made every edit look like an append.
+    `realpath` resolves a symlink because a symlink has a target. A hard
+    link has none: two names are the same file with equal standing, so a
+    test can be edited through a name that looks like anything. Compare
+    inodes instead.
+
+    Only files with more than one link are walked, so the ordinary case
+    costs one stat. A test file outside the scanned tree is not matched,
+    and a tree larger than MAX_INODE_WALK entries stops early: the hook
+    budget is finite and a gate that times out fails open.
     """
     try:
-        with open(path, encoding="utf-8") as handle:
-            return handle.read()
-    except (OSError, UnicodeDecodeError):
-        return None
+        target_stat = os.stat(target)
+    except OSError:
+        return False
+    if target_stat.st_nlink <= 1:
+        return False
+
+    seen = 0
+    for current, dirnames, filenames in os.walk(os.path.realpath(project_dir)):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_WALK_DIRS]
+        for name in filenames:
+            seen += 1
+            if seen > MAX_INODE_WALK:
+                return False
+            candidate = os.path.join(current, name)
+            if not is_test_path(os.path.relpath(candidate, project_dir)):
+                continue
+            try:
+                if _same_file(target_stat, os.stat(candidate)):
+                    return True
+            except OSError:
+                continue
+    return False
 
 
-def collect_edits(tool_name: str, tool_input: dict, content: str) -> list:
-    """Return the (old, new) text pairs this tool call would apply."""
-    if tool_name == "MultiEdit":
-        return [
-            (edit.get("old_string", ""), edit.get("new_string", ""))
-            for edit in tool_input.get("edits", [])
-        ]
-    if tool_name == "Write":
-        return [(content, tool_input.get("content", ""))]
-    return [(tool_input.get("old_string", ""), tool_input.get("new_string", ""))]
-
-
-def find_gate_reason(tool_name: str, tool_input: dict, target: str) -> str:
-    """Return why this write needs the user's consent, or an empty string."""
-    if not os.path.exists(target):
-        return ""
-    if tool_name == "NotebookEdit":
-        return "rewrites a cell in an existing test notebook"
-    content = read_text(target)
-    if content is None:
-        return "cannot be read as text, so the gate cannot confirm what this edit changes"
-    for old, new in collect_edits(tool_name, tool_input, content):
-        reason = classify_edit(old, new, content)
-        if reason:
-            return reason
-        content = content.replace(old, new, 1)
-    return ""
-
-
-def given_path(tool_input: dict) -> str:
-    """Return the path the tool call names, before any resolution."""
+def given_path(tool_input: dict):
+    """Return the path the tool call names, or None when it is not a string."""
     for key in PATH_KEYS:
         raw = tool_input.get(key)
-        if raw:
-            return raw
+        if raw is None or raw == "":
+            continue
+        return core.require_str(raw)
     return ""
 
 
@@ -235,20 +188,30 @@ def resolve_target(raw: str, project_dir: str) -> str:
     return os.path.realpath(candidate)
 
 
-def names_a_test(raw: str, target: str) -> bool:
-    """Return True if the named path or the file it reaches is a test.
+def names_a_test(raw: str, target: str, project_dir: str) -> bool:
+    """Return True if the named path, its target, or its inode is a test.
 
-    Both are checked because either one alone can be made to lie. A symlink
-    called notes.txt reaches a test file, and a symlink called
-    tests/test_x.js reaches whatever its author chose.
+    Each is checked because any one alone can be made to lie. A symlink
+    called notes.txt reaches a test file, a test-named symlink reaches
+    whatever its author chose, and a hard link resolves to itself.
     """
-    return is_test_path(raw) or is_test_path(target)
+    return (is_test_path(raw)
+            or is_test_path(target)
+            or reaches_a_test_inode(target, project_dir))
 
 
 def escapes_root(target: str, project_dir: str) -> bool:
-    """Return True if `target` sits outside the project root."""
+    """Return True if `target` sits outside the project root.
+
+    commonpath rather than a string prefix: Windows short names and \\\\?\\
+    prefixes make two spellings of one directory compare unequal.
+    """
     root = os.path.realpath(project_dir)
-    return target != root and not target.startswith(root + os.sep)
+    try:
+        return os.path.commonpath([root, target]) != root
+    except ValueError:
+        # Different drives on Windows, so the target is not in the tree.
+        return True
 
 
 def is_redirected(raw: str, project_dir: str, target: str) -> bool:
@@ -258,40 +221,75 @@ def is_redirected(raw: str, project_dir: str, target: str) -> bool:
 
 
 def escape_reason(raw: str, target: str, project_dir: str) -> str:
-    """Return why an out-of-tree path cannot be cleared, or an empty string.
-
-    Any test file resolving outside the project root is gated, whether a
-    link redirected it there or the caller named it directly. The gate
-    reasons about one tree and can only speak for that tree; a file outside
-    it is one the person running the session should be asked about. A
-    redirected path is named separately because a link that leaves the tree
-    is the tree being used to reach something it does not contain.
-    """
+    """Return why an out-of-tree path cannot be cleared, or an empty string."""
     if not escapes_root(target, project_dir):
         return ""
     if is_redirected(raw, project_dir, target):
-        return "follows a link to a test file outside the project root, which the gate cannot vouch for"
-    return "names a test file outside the project root, which the gate cannot vouch for"
+        return ("follows a link to a test file outside the project root, "
+                "which the gate cannot vouch for")
+    return ("names a test file outside the project root, which the gate "
+            "cannot vouch for")
+
+
+def content_digest(target: str):
+    """Return a digest of the file's bytes, or None when it cannot be read."""
+    try:
+        with open(target, "rb") as handle:
+            # SHA-256: binds a consent grant to the content it was given for.
+            return hashlib.sha256(handle.read()).hexdigest()
+    except OSError:
+        return None
 
 
 def is_override_granted(target: str, project_dir: str) -> bool:
-    """Return True if a human released exactly this file at launch.
+    """Return True if a human released this file at this content.
 
-    Comparison is on the canonical path. Matching a suffix would let one
-    grant for tests/test_auth.py release every other file whose path happens
-    to end the same way.
+    A grant reads `path` or `path@sha256:<digest>`. Comparison is on the
+    canonical path, since matching a suffix would let one grant for
+    tests/test_auth.py release every path ending the same way. The digest
+    binds the grant to one edit: consenting to a change is not consenting
+    to whatever follows it.
     """
+    digest = content_digest(target)
     for entry in os.environ.get(OVERRIDE_ENV, "").split(","):
         cleaned = entry.strip()
-        if cleaned and resolve_target(cleaned, project_dir) == target:
+        if not cleaned:
+            continue
+        path_part, _, want = cleaned.partition("@sha256:")
+        if resolve_target(path_part, project_dir) != target:
+            continue
+        if not want:
+            return True
+        if digest is not None and want.lower() == digest:
             return True
     return False
+
+
+def find_gate_reason(tool_name: str, target: str) -> str:
+    """Return why this write needs consent, or an empty string.
+
+    The only unprompted write is to a path that does not exist. Opening
+    once and branching on the result avoids a check-then-act window in
+    which a file appears between the test and the write.
+    """
+    try:
+        handle = os.open(target, os.O_RDONLY)
+    except FileNotFoundError:
+        return ""
+    except OSError as error:
+        return (f"cannot be opened ({core.sanitize(error.strerror)}), so the "
+                "gate cannot confirm what this edit changes")
+    os.close(handle)
+    if tool_name == "NotebookEdit":
+        return "rewrites a cell in an existing test notebook"
+    return ("rewrites a test file that already exists, where the gate cannot "
+            "confirm the existing tests still run")
 
 
 def build_reason(target: str, reason: str) -> str:
     """Return the text the user reads on the permission prompt."""
     return (
-        f"{os.path.basename(target)}: this edit {reason}. "
+        f"{core.sanitize(os.path.basename(target))}: this edit {reason}. "
         "AGENTS.md Rule 3 says stop, report it, and wait for a human decision. "
         "Approving a plan is not authorization for this edit; consent is per act. "
         "Allow it only if you decided this test should change."
@@ -300,15 +298,14 @@ def build_reason(target: str, reason: str) -> str:
 
 def emit(decision: str, reason: str) -> int:
     """Print the hook's decision and return the exit code it needs."""
-    message = f"gated by hooks/require_consent.py: {reason}"
-    output = {
+    message = f"gated by hooks/{GATE}: {reason}"
+    print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": decision,
             "permissionDecisionReason": message,
         }
-    }
-    print(json.dumps(output))
+    }))
     if decision == "deny":
         print(message, file=sys.stderr)
         return 2
@@ -324,27 +321,38 @@ def emit_context(event: str, context: str) -> int:
 
 
 def _decide(payload: dict, target: str, reason: str) -> int:
-    """Emit the gate decision, turning an ask nobody can answer into a deny."""
+    """Emit the decision, turning an ask nobody can answer into a deny."""
     message = build_reason(target, reason)
-    if payload.get("permission_mode") in INTERACTIVE_MODES:
+    mode = core.require_str(payload.get("permission_mode"))
+    if mode in core.INTERACTIVE_MODES:
         return emit("ask", message)
-    return emit("deny", f"{message} No interactive session is available to consent.")
+    return emit("deny", f"{message} No interactive session is available to "
+                        f"consent (permission_mode {core.sanitize(mode)}).")
 
 
 def _handle_write(payload: dict, project_dir: str) -> int:
-    """Gate a write that would weaken an existing test."""
+    """Gate a write to an existing test file or to the gates' own files."""
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict):
-        return emit("deny", "the tool input is malformed, so the gate cannot read what this call writes")
+        return emit("deny", "the tool input is malformed, so the gate cannot "
+                            "read what this call writes")
     raw = given_path(tool_input)
+    if raw is None:
+        return emit("deny", "the file path is not a string, so the gate "
+                            "cannot read it")
     if not raw:
         return 0
     target = resolve_target(raw, project_dir)
-    if not names_a_test(raw, target):
+
+    if is_protected_path(target, project_dir):
+        reason = ("writes to a file that decides whether these gates run at "
+                  "all")
+    elif names_a_test(raw, target, project_dir):
+        reason = (escape_reason(raw, target, project_dir)
+                  or find_gate_reason(payload.get("tool_name", ""), target))
+    else:
         return 0
-    reason = escape_reason(raw, target, project_dir) or find_gate_reason(
-        payload.get("tool_name", ""), tool_input, target
-    )
+
     if not reason:
         return 0
     if is_override_granted(target, project_dir):
@@ -354,20 +362,32 @@ def _handle_write(payload: dict, project_dir: str) -> int:
 
 def _handle_pre_tool_use(payload: dict, project_dir: str) -> int:
     """Dispatch on the tool the session is about to call."""
-    tool_name = payload.get("tool_name", "")
-    if tool_name in GATED_TOOLS:
+    if payload.get("tool_name") in GATED_TOOLS:
         return _handle_write(payload, project_dir)
     return 0
 
 
-def main() -> int:
-    payload = _read_payload()
+def _run() -> int:
+    """Read one payload and answer it."""
+    payload = core.read_payload(empty_is_session_start=True)
     if payload is None:
-        return emit("deny", "the hook payload could not be parsed, so the gate cannot clear this call")
-    project_dir = _project_dir(payload)
+        return emit("deny", "the hook payload could not be parsed, so the "
+                            "gate cannot clear this call")
     if payload.get("hook_event_name") == "PreToolUse":
-        return _handle_pre_tool_use(payload, project_dir)
+        return _handle_pre_tool_use(payload, core.project_dir(payload))
     return emit_context("SessionStart", SESSION_NOTICE)
+
+
+def main() -> int:
+    try:
+        return _run()
+    except Exception:  # noqa: BLE001 - the boundary is the point
+        # Claude Code treats any non-zero exit other than 2 as a
+        # non-blocking error, so an unhandled exception waves the write
+        # through. Emit a fixed reason: a traceback here would carry
+        # internal paths into the prompt the user reads.
+        return emit("deny", "the gate raised an unexpected error, so it "
+                            "cannot clear this call")
 
 
 if __name__ == "__main__":
