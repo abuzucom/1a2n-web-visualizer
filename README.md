@@ -307,7 +307,7 @@ not the other fails the other's suite.
 | `scripts/check_weak_hashing.py` | No weak hashing in security-sensitive contexts | Yes |
 | `scripts/check_dockerfile_root.py` | No root containers without explicit consent | Yes |
 | `scripts/check_secrets_heuristic.py` | No secrets in version control (heuristic, not entropy-based) | Yes |
-| `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Available, not wired into CI: this repo's existing prose (`CHANGELOG.md`, `README.md`) uses spaced hyphens outside the scope the rule targets |
+| `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Wired into CI against `README.md`, `CHANGELOG.md`, `SECURITY.md`, and `docs/`. It reads prose, so a table delimiter row, a list marker, and an inline code span spanning two lines are excluded from the dash rule rather than rewritten |
 
 Protected-file review runs from the trusted default branch through
 `.github/workflows/protected-files.yml`. It covers agent instructions,

@@ -7,6 +7,16 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Wired `scripts/check_ascii.py` into CI against `README.md`,
+  `CHANGELOG.md`, `SECURITY.md`, and `docs/`, and fixed the 37 spaced
+  hyphens it found. Version headings parenthesize their date,
+  `## [1.2.3] (2026-01-01)`, and definition bullets use a colon. The
+  checker had been available and unwired, so the repo failed a rule it
+  ships.
+- Added `tests/test_check_ascii.py`, 13 tests shared with
+  `abuzucom/agents`. Six pin what the dash rule still catches, since a fix
+  to a linter's false positives is one edit away from a fix to its true
+  ones.
 - Fixed a crash in the PowerShell gate's `-ArgumentList` handler, which
   called `unparseable_verdict` with one argument against a two-parameter
   function. A payload that would not tokenize raised `TypeError` rather
@@ -121,6 +131,13 @@ All notable changes to this project are documented here. Format loosely follows
   is not an exception to the pushed-history rule.
 
 ### Changed
+- Closed three false positives in `check_ascii.py` and `lint_style.py`.
+  A Markdown table delimiter row tripped the dash rule, so did a list
+  marker opening its own line, and an inline code span opening on one line
+  and closing on the next leaked its contents. The last one flagged the
+  preset name `Optiks - Nerve` in a 1.6.2 entry, where satisfying the
+  checker would have meant rewriting the name and falsifying the record of
+  which preset was removed.
 - Brought the shared gates under this repository's ruff ruleset. `lint` had
   been red on every commit of this branch: `npx eslint .` passes, and the
   `astral-sh/ruff-action` install step runs `ruff check` over the whole
@@ -235,7 +252,7 @@ All notable changes to this project are documented here. Format loosely follows
   preserving this repo's Commands, Do not touch, Architecture, Gotchas, and
   Read before touching orientation. Also added an explicit non-root `user:`
   to the Docker Compose service, matching the image's existing runtime user.
-- `tools/split-extra-images.py` - splits the experimental texture bundle
+- `tools/split-extra-images.py`: splits the experimental texture bundle
   into deterministic lazy-loaded part files and losslessly optimizes the
   embedded images, verifying every optimized variant pixel-for-pixel.
 - Added a touch-first mobile visualizer entry point with branded controls for
@@ -369,7 +386,7 @@ All notable changes to this project are documented here. Format loosely follows
   replacement failures, while resolving generated chunks from the authoritative
   index instead of stale inventory metadata.
 
-## [1.7.1] - 2026-07-16
+## [1.7.1] (2026-07-16)
 
 ### Fixed
 - Drained queued WebGL errors after failed shader loads so one invalid preset
@@ -377,7 +394,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Loaded the initial preset during audio startup instead of waiting for later
   navigation or auto-cycle activity.
 
-## [1.7.0] - 2026-07-15
+## [1.7.0] (2026-07-15)
 
 ### Added
 - Jira Cloud synchronization for approved pull requests and successful GitHub
@@ -413,13 +430,13 @@ All notable changes to this project are documented here. Format loosely follows
 - Documented the single-maintainer branch protection model without requiring
   global GitHub Code Owner approval.
 
-## [1.6.6] - 2026-07-15
+## [1.6.6] (2026-07-15)
 
 ### Changed
 - Audited and simplified the README and local-hosting guide. Corrected current
   preset counts, commands, controls, tooling, security notes, and provenance.
 
-## [1.6.5] - 2026-07-15
+## [1.6.5] (2026-07-15)
 
 ### Fixed
 - Prevented Butterchurn equation compilation failures caused by missing empty
@@ -430,7 +447,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Added runtime diagnostics for broken preset loads, including the preset name,
   logical chunk ID, physical chunk file, and caught exception.
 
-## [1.6.4] - 2026-07-15
+## [1.6.4] (2026-07-15)
 
 ### Security
 - Added a lodash version override of `>=4.17.12` to prevent the known
@@ -442,17 +459,17 @@ All notable changes to this project are documented here. Format loosely follows
   mapping without updating the chunks' registration callbacks, causing valid
   `[EXP]` presets to be reported as unavailable at runtime.
 
-## [1.6.3] - 2026-07-11
+## [1.6.3] (2026-07-11)
 
 ### Added
-- `tools/remove_presets.js` - removes a given list of exact preset names
+- `tools/remove_presets.js`: removes a given list of exact preset names
   from `src/presets-extra/index.js`, their backing chunk files, any
   vendored `.min.js` pack that contains them, and the matching
   `preset-inventory.csv` rows, with a pre-flight existence check (aborts
   with nothing written if any name isn't found) and a post-edit
   consistency check. Productionizes the manual curation procedure so it
   doesn't need to be reconstructed for each batch.
-- `tools/analyze_curation_history.js` - reconstructs the full history of
+- `tools/analyze_curation_history.js`: reconstructs the full history of
   presets curated out of this repo from `git log` and prints neutral word
   /bigram/contributor-prefix frequency statistics over their names, with
   no built-in notion of "risky" content, so anyone using this repo can
@@ -469,12 +486,12 @@ All notable changes to this project are documented here. Format loosely follows
   `src/presets-extra/` (38 chunk files) and the vendored
   `butterchurnPresetsExtra`/`butterchurnPresetsExtra2` packs, with the
   matching `preset-inventory.csv` rows dropped. Same intentional editorial
-  curation as prior batches - see the *Curation* section in the README.
+  curation as prior batches; see the *Curation* section in the README.
   Ships 14,770 deduplicated presets now (378 vendored + 14,392
   lazy-loaded from 14,458 index names minus 66 that duplicate a vendored
   name).
 
-## [1.6.2] - 2026-07-11
+## [1.6.2] (2026-07-11)
 
 ### Removed
 - 32 more presets curated out of `src/presets-extra/` (removed from
@@ -485,12 +502,12 @@ All notable changes to this project are documented here. Format loosely follows
   edit colors2`, `Optiks - Nerve`), plus every preset whose name contains
   "seizure" or "sezure" (28 presets, mostly `Eo.S. + Phat` /
   `Bdrv`/`beta106`/`bdrv + al` "recursion frustum" and "Let_go_Wana_Sezure"
-  variants). Same intentional editorial curation as prior batches - see the
+  variants). Same intentional editorial curation as prior batches; see the
   *Curation* section in the README. Ships 14,954 deduplicated presets now
   (381 vendored + 14,573 lazy-loaded from 14,640 index names minus 67 that
   duplicate a vendored name).
 
-## [1.6.1] - 2026-07-10
+## [1.6.1] (2026-07-10)
 
 ### Security
 - The Docker + Caddy self-hosting container now also sends a
@@ -499,15 +516,15 @@ All notable changes to this project are documented here. Format loosely follows
   place if that Caddyfile is ever put behind TLS termination instead of
   served as plain HTTP on `localhost`.
 
-## [1.6.0] - 2026-07-07
+## [1.6.0] (2026-07-07)
 
 ### Added
-- `preset-inventory.csv` - a full inventory of every preset name and the pack
+- `preset-inventory.csv`: a full inventory of every preset name and the pack
   that provides it (a vendored pack, or the lazy-loaded `presets-extra`
   collection with its chunk id), generated with the same dedup/precedence
   rules `visualizer-core.js` applies at runtime. Reflects the curated set
   (14,770 rows).
-- `tools/fetch-extra-presets-curated.py` - regenerates `src/presets-extra/`
+- `tools/fetch-extra-presets-curated.py`: regenerates `src/presets-extra/`
   like `fetch-extra-presets.py`, but diffs a fresh upstream pull against the
   currently committed `index.js` and re-excludes anything present upstream
   but missing from the current tree, so running it preserves curation
@@ -526,7 +543,7 @@ All notable changes to this project are documented here. Format loosely follows
   `butterchurnPresetsMD1`), with the matching `preset-inventory.csv` rows
   removed. These removals are an **intentional content-curation choice for
   this deployment**, independent of the upstream collection and the butterchurn
-  libraries - not an upstream change. `tools/fetch-extra-presets-curated.py`
+  libraries, not an upstream change. `tools/fetch-extra-presets-curated.py`
   (above) now re-applies this curation automatically on regeneration; the
   plain `fetch-extra-presets.py` still rebuilds `src/presets-extra/` from
   upstream verbatim and will reintroduce these presets (see the *Curation*
@@ -534,7 +551,7 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Fixed
 - Corrected the documented preset counts to match the current curated packs:
-  14,770 deduplicated presets total - 378 vendored (100 base + 135 new from
+  14,770 deduplicated presets total: 378 vendored (100 base + 135 new from
   Extra + 116 new from Extra2 + 27 new from MD1, after merge-order dedup)
   plus 14,392 lazy-loaded (14,458 index names minus 66 that duplicate a
   vendored name). Replaces the stale 15,330 / 15,264 totals and 387 / 385
@@ -546,7 +563,7 @@ All notable changes to this project are documented here. Format loosely follows
   `index.js` always produced an empty `src/presets-extra/`. Fixed by
   distinguishing "no prior curation state" from "current state is empty."
 
-## [1.5.0] - 2026-07-05
+## [1.5.0] (2026-07-05)
 
 ### Added
 - ~15k extra presets from
@@ -558,7 +575,7 @@ All notable changes to this project are documented here. Format loosely follows
   offline, and under the strict CSP; an in-memory LRU keeps at most 16
   chunks resident. If the folder is removed the app falls back to the 387
   vendored presets.
-- `tools/fetch-extra-presets.py` - stdlib-only generator that downloads the
+- `tools/fetch-extra-presets.py`: stdlib-only generator that downloads the
   pinned, sha256-verified upstream zip and regenerates `src/presets-extra/`,
   excluding presets that reference custom textures the app can't supply
   (`tools/butterchurn-image-names.json` lists the vendored textures).
@@ -567,7 +584,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Broken or unloadable presets are skipped automatically at runtime and
   removed from rotation for the session.
 
-## [1.4.0] - 2026-07-04
+## [1.4.0] (2026-07-04)
 
 ### Added
 - Internal-only self-hosting via Docker + Caddy: `Dockerfile`,
@@ -577,7 +594,7 @@ All notable changes to this project are documented here. Format loosely follows
 - `docs/local-hosting.md` covering all three local modes: `file://`, dev
   server, and the Docker container (including its security hardening).
 
-## [1.3.1] - 2026-07-04
+## [1.3.1] (2026-07-04)
 
 ### Changed
 - The GitHub Pages deploy workflow now retries the deployment step once
@@ -587,7 +604,7 @@ All notable changes to this project are documented here. Format loosely follows
   `https://visualizer.1a2n.net/`, the vendored (CDN-free) libraries, and the
   `src/vendor/` layout.
 
-## [1.3.0] - 2026-07-04
+## [1.3.0] (2026-07-04)
 
 ### Added
 - Shuffle mode for the auto-cycle: picks a random preset (never the current
@@ -600,7 +617,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Fullscreen <kbd>[</kbd> / <kbd>]</kbd> adjust the cycle interval in 1s steps
   at/below 10s and 5s steps above, instead of a fixed 5s step.
 
-## [1.2.0] - 2026-07-04
+## [1.2.0] (2026-07-04)
 
 ### Added
 - Vendored three additional preset packs from `butterchurn-presets@2.4.7`
@@ -612,7 +629,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Custom textures are passed to butterchurn via `loadExtraImages` so the
   handful of texture-using presets render fully.
 
-## [1.1.0] - 2026-07-04
+## [1.1.0] (2026-07-04)
 
 ### Changed
 - Vendored `butterchurn` and `butterchurn-presets` into `src/vendor/` instead of
@@ -631,19 +648,19 @@ All notable changes to this project are documented here. Format loosely follows
 - Pressing <kbd>H</kbd> while typing in a panel input no longer toggles the panel.
 - Bare modifier keypresses no longer trigger start on the fullscreen page.
 
-## [1.0.1] - 2026-06-27
+## [1.0.1] (2026-06-27)
 
 ### Added
 - Cleaned up HTML
 - Added `index.html` to avoid 404 when accessing the root folder on web
 
-## [1.0.0] - 2026-06-26
+## [1.0.0] (2026-06-26)
 
 ### Added
 - Shared `visualizer-core.js` controller (`window.BCViz`) holding all butterchurn
   setup, preset cycling, and audio-device handling.
-- `obs.html` - OBS browser-source page with a hideable control panel.
-- `fullscreen.html` - standalone keyboard-only fullscreen page.
+- `obs.html`: OBS browser-source page with a hideable control panel.
+- `fullscreen.html`: standalone keyboard-only fullscreen page.
 - Per-page CSS (`panel.css`, `fullscreen.css`) and UI wiring
   (`obs-ui.js`, `fullscreen-ui.js`).
 - Docs: OBS setup and audio-routing guides.

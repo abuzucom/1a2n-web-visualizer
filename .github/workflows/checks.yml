@@ -55,6 +55,9 @@ jobs:
       - name: Check AGENTS.md style
         run: python3 scripts/lint_style.py
 
+      - name: Check dashes and ASCII in this repo's own prose
+        run: python3 scripts/check_ascii.py README.md CHANGELOG.md SECURITY.md docs/*.md
+
       - name: Check AGENTS.md American spelling
         run: python3 scripts/check_us_spelling.py AGENTS.md
 
