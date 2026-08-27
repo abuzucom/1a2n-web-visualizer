@@ -12,7 +12,13 @@ This file owns what differs locally and why. The template owns the rest:
 of what this repository took versus declined. This file does not restate
 either.
 
-Nothing verifies any of it.
+One part of this is mechanical. `scripts/sync.py --check-shared` compares the
+seven files carrying gate decisions against `shared-files.json`, a manifest of
+SHA-256 digests committed in both repositories, and it runs in CI here. A gate
+fix landing upstream and not here fails this repository's check on the next
+run.
+
+Everything below that manifest is a convention. Nothing verifies it.
 
 ## What differs, and why
 
@@ -23,6 +29,8 @@ Lists only the hooks this repository runs. The template's copy also registers
 adopted here. Expected to differ.
 
 ### `tests/test_require_consent.py`
+
+Deliberately outside the shared manifest, for the reason below.
 
 Carries `HOOK_MATCHERS` and `test_configured_launcher_resolves_on_this_platform`,
 which upstream live in `tests/test_enforce_branch_name.py`. That suite is not

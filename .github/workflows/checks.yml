@@ -46,6 +46,8 @@ jobs:
 
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
+      - name: Check the shared gate files against the manifest
+        run: python3 scripts/sync.py --check-shared
 
       - name: Check GitHub Actions are pinned
         run: python3 scripts/check_action_pins.py

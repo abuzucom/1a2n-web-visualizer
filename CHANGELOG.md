@@ -7,6 +7,15 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Added `shared-files.json` and `scripts/sync.py --check-shared`, run in
+  CI. `sync.py` copies the AGENTS.md family and can copy nothing living in
+  a repository it cannot see, which is how this repo's `check_ascii.py` and
+  `lint_style.py` improvements sat unnoticed upstream for weeks. The seven
+  files carrying gate decisions are now compared against SHA-256 digests
+  committed in both repositories, so a fix landing in one and not the other
+  fails the other's check. `tests/test_require_consent.py` stays off the
+  list: it holds two wiring assertions moved from a suite this repo
+  declined, recorded in `docs/template-drift.md`.
 - Added `tests/gate_corpus.py`, shared byte-identical with
   `abuzucom/agents`: one table of every known gate bypass with the verdict
   it must reach and the reason the row exists, imported by the Bash,
