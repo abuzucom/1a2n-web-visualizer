@@ -6,6 +6,14 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [1.9.0]
 
+### Changed
+- Replaced the spaced hyphen in `require_consent.py`'s `# pragma: no cover` and
+  `# noqa: BLE001` comments with parentheses, matching the template. The house
+  style reads a spaced hyphen as an em-dash substitute.
+- Imported `unittest.mock` in `tests/test_require_consent.py` rather than
+  importing `unittest` twice, once plainly and once with `from`, which a
+  code-quality bot flagged on this pull request.
+
 ### Added
 - Measured the coverage baseline where CI measures it. A mode 000 file is
   readable for root, so the two `OSError` branches in `require_consent.py`

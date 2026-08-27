@@ -58,7 +58,7 @@ GATE = "require_consent.py"
 
 try:
     import _gate_core as core
-except ImportError as error:  # pragma: no cover - exercised by the adoption test
+except ImportError as error:  # pragma: no cover (exercised by the adoption test)
     # Fail closed. Claude Code treats any non-zero exit other than 2 as a
     # non-blocking error, so an unhandled ImportError would wave the write
     # through in exactly the repos that installed this gate.
@@ -348,7 +348,7 @@ def _run() -> int:
 def main() -> int:
     try:
         return _run()
-    except Exception:  # noqa: BLE001 - the boundary is the point
+    except Exception:  # noqa: BLE001 (the boundary is the point)
         # Claude Code treats any non-zero exit other than 2 as a
         # non-blocking error, so an unhandled exception waves the write
         # through. Emit a fixed reason: a traceback here would carry

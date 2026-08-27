@@ -5,7 +5,7 @@
     "hooks/_gate_core.py": "c20905812c13b979630b3e0b51f6890dfc0bb4a619ac980318654258dadad940",
     "hooks/block_destructive_bash.py": "8f0cb20e9668f2674e8dd2a42fe295f5a265022ad96a6b85ae9768ffa5255d2c",
     "hooks/block_destructive_powershell.py": "4f86d193959d85846ca629ef49ebe9b8b9e3d3d3d5c11a3f58ddc56f0a6aa651",
-    "hooks/require_consent.py": "57847cefbbaf34ed7b6b434719371b8200c42093d16dbcc906d3222238c57beb",
+    "hooks/require_consent.py": "6f11efa1a90267eea49f410addb7ef7edb1b727dbddb483ac109dbbe2441dc60",
     "tests/gate_corpus.py": "ff3638d2fa929d2b2d4365cc4bce7d5257d173c0cddb65c3fb441f4439d30511",
     "tests/test_block_destructive_bash.py": "0875c3042165cf6a8e939efb4cc5e693b9cda5f775c487183ece342a1a6bf005",
     "tests/test_block_destructive_powershell.py": "6b4635a5e5df1e882e90ab862f97d197c802ec9ddf4ebaa0b4221ed5e292a011"

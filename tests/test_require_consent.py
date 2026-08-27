@@ -22,7 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
+import unittest.mock
 
 # discover -s tests puts this directory on the path; a direct
 # `unittest tests.<module>` run does not, and CI uses both.
@@ -493,7 +493,7 @@ class HardLinkTest(unittest.TestCase):
             onerror(OSError("walk denied"))
             return []
 
-        with mock.patch.object(module.os, "walk", side_effect=failed_walk):
+        with unittest.mock.patch.object(module.os, "walk", side_effect=failed_walk):
             self.assertIsNone(module.reaches_a_test_inode(target, self.root))
 
     def test_candidate_stat_error_gates_the_alias(self):
@@ -508,7 +508,7 @@ class HardLinkTest(unittest.TestCase):
                 raise OSError("stat denied")
             return real_stat(path)
 
-        with mock.patch.object(module.os, "stat", side_effect=failed_stat):
+        with unittest.mock.patch.object(module.os, "stat", side_effect=failed_stat):
             self.assertIsNone(module.reaches_a_test_inode(target, self.root))
 
     @staticmethod
@@ -559,7 +559,7 @@ class PathReasonTest(unittest.TestCase):
     def test_open_os_error_reports_that_the_target_cannot_be_confirmed(self):
         target = self.root / "tests" / "test_unreadable.py"
         error = PermissionError(13, "permission denied")
-        with mock.patch.object(self.module.os, "open", side_effect=error):
+        with unittest.mock.patch.object(self.module.os, "open", side_effect=error):
             reason = self.module.find_gate_reason("Edit", str(target))
         self.assertEqual(
             reason,
