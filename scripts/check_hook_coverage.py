@@ -137,7 +137,20 @@ def read_baseline(root: str) -> dict:
 
 
 def write_baseline(root: str, counts: dict) -> int:
-    """Record `counts` as the baseline and return an exit code."""
+    """Record `counts` as the baseline and return an exit code.
+
+    Refuses to run as root. Permission-dependent branches do not fire for
+    root, which reads a mode 000 file happily, so a baseline written here
+    records fewer unreached statements than CI finds and fails the check
+    it was written to satisfy. Two OSError branches in require_consent.py
+    behave exactly this way.
+    """
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        print("refusing to write a baseline as root: a mode 000 file is "
+              "readable for root, so the permission-dependent branches this "
+              "records would not fire, and the result would not match CI. "
+              "Run this as an ordinary user.", file=sys.stderr)
+        return 1
     body = {
         "note": ("Statements in hooks/ that the suite, subprocesses included, "
                  "does not run, counted per function. Regenerate with "
@@ -167,6 +180,11 @@ def main(argv: list) -> int:
         return 0
     for line in problems:
         print(line, file=sys.stderr)
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        print("Running as root. A mode 000 file is readable for root, so the "
+              "permission-dependent branches read as unreached here and do "
+              "not in CI, which is where this baseline was measured. Compare "
+              "as an ordinary user before believing this.", file=sys.stderr)
     print("Add a test, or record the limit: run "
           "scripts/check_hook_coverage.py --write-baseline and say in "
           "docs/gate-threat-model.md why the statement is unreachable.",

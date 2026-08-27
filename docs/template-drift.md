@@ -51,6 +51,8 @@ It is not: it follows from a declined file.
 
 Per repo by nature, not drift. The baseline records what the suite leaves unrun in `hooks/`, and this repository declined `tests/test_enforce_branch_name.py` and `tests/test_enforce_git_identity.py`, which upstream drive `_gate_core.resolved_under` and `_gate_core.sanitize`. Its baseline therefore records 66 unreached statements where the template records 61. A shared baseline would be wrong in both.
 
+Both baselines are measured in CI, and the tool refuses to write one as root: a mode 000 file is readable for root, so the two `OSError` branches a permission denial takes never fire in a root shell.
+
 ### GitHub Actions pinning
 
 This repository pins every action to a full commit SHA and enforces it with

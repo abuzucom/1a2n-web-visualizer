@@ -7,6 +7,11 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Measured the coverage baseline where CI measures it. A mode 000 file is
+  readable for root, so the two `OSError` branches in `require_consent.py`
+  that a permission denial takes never fire in a root shell and do fire in
+  CI. The tool now refuses to write a baseline as root rather than
+  producing one that cannot match.
 - Named the tracer directory `tools/hook-trace`. `coverage/` is one of the
   commonest `.gitignore` entries and this repo carries it, so the first
   commit of the gate silently left the tracer out. Without it the gate

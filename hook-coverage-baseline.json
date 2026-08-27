@@ -33,9 +33,7 @@
     "block_destructive_powershell.py::classify": 2,
     "block_destructive_powershell.py::main": 1,
     "require_consent.py::_handle_write": 1,
-    "require_consent.py::content_digest": 1,
     "require_consent.py::escapes_root": 1,
-    "require_consent.py::find_gate_reason": 1,
     "require_consent.py::given_path": 1,
     "require_consent.py::main": 1,
     "require_consent.py::reaches_a_test_inode": 3
