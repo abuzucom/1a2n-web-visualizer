@@ -3,8 +3,8 @@
 
 The gates run as subprocesses, so ordinary in-process coverage sees
 almost none of their decision code and reports the opposite of the truth.
-This runs the suite with tools/coverage on PYTHONPATH, which traces every
-interpreter, and compares what went unrun against a committed baseline.
+This runs the suite with tools/hook-trace on PYTHONPATH, which traces
+every interpreter, and compares what went unrun against a committed baseline.
 
 The baseline is per function rather than per line, so an edit above a
 function does not churn it. A function gaining unreached statements fails
@@ -25,7 +25,11 @@ import tempfile
 
 BASELINE = "hook-coverage-baseline.json"
 TARGET = "hooks"
-TRACER_DIR = os.path.join("tools", "coverage")
+# Not tools/coverage: a "coverage/" line is one of the commonest
+# .gitignore entries, and it silently excluded this file from an
+# adopting repository, which leaves the gate reporting every statement
+# as unreached.
+TRACER_DIR = os.path.join("tools", "hook-trace")
 
 
 def is_docstring(node, parent) -> bool:

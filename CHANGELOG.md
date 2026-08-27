@@ -7,7 +7,14 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
-- Added `scripts/check_hook_coverage.py`, `tools/coverage/sitecustomize.py`
+- Named the tracer directory `tools/hook-trace`. `coverage/` is one of the
+  commonest `.gitignore` entries and this repo carries it, so the first
+  commit of the gate silently left the tracer out. Without it the gate
+  reads no traced lines and reports every statement in `hooks/` as
+  unreached, which arrives as a wall of noise rather than as the one
+  missing file it is. Fixed upstream too, since any adopter with that line
+  would have hit it.
+- Added `scripts/check_hook_coverage.py`, `tools/hook-trace/sitecustomize.py`
   and `hook-coverage-baseline.json`, run in CI. The gates execute as
   subprocesses, so ordinary in-process coverage sees almost none of their
   decision code; Python imports `sitecustomize` in every interpreter it
