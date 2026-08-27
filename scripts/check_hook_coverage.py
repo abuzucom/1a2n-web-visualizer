@@ -24,6 +24,7 @@ import tempfile
 
 BASELINE = "hook-coverage-baseline.json"
 TARGET = "hooks"
+TRACE_RECORD_FIELDS = 2
 # Not tools/coverage: a "coverage/" line is one of the commonest
 # .gitignore entries, and it silently excluded this file from an
 # adopting repository, which leaves the gate reporting every statement
@@ -70,7 +71,8 @@ def traced_lines(out_dir: str) -> set:
         if not isinstance(records, list):
             raise ValueError("trace file must contain a list")
         for record in records:
-            valid = (isinstance(record, list) and len(record) == 2
+            valid = (isinstance(record, list)
+                     and len(record) == TRACE_RECORD_FIELDS
                      and isinstance(record[0], str)
                      and isinstance(record[1], int)
                      and not isinstance(record[1], bool))

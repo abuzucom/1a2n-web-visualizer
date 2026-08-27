@@ -15,6 +15,8 @@ All notable changes to this project are documented here. Format loosely follows
   previously hid destructive commands from the gate.
 - Included `scripts/` in the shell-write consent paths because repository hooks
   execute branch-name and identity checkers from that directory.
+- Named the two-field JSON trace-record length required by this repository's
+  stricter repo-wide Ruff configuration.
 - Replaced the spaced hyphen in `require_consent.py`'s `# pragma: no cover` and
   `# noqa: BLE001` comments with parentheses, matching the template. The house
   style reads a spaced hyphen as an em-dash substitute.
