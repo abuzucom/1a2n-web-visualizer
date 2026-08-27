@@ -17,7 +17,6 @@ import ast
 import io
 import json
 import os
-import pickle
 import shutil
 import subprocess
 import sys
@@ -66,8 +65,18 @@ def traced_lines(out_dir: str) -> set:
     """Return every (path, line) any traced interpreter executed."""
     hit = set()
     for name in os.listdir(out_dir):
-        with open(os.path.join(out_dir, name), "rb") as handle:
-            hit.update(pickle.load(handle))
+        with io.open(os.path.join(out_dir, name), encoding="utf-8") as handle:
+            records = json.load(handle)
+        if not isinstance(records, list):
+            raise ValueError("trace file must contain a list")
+        for record in records:
+            valid = (isinstance(record, list) and len(record) == 2
+                     and isinstance(record[0], str)
+                     and isinstance(record[1], int)
+                     and not isinstance(record[1], bool))
+            if not valid:
+                raise ValueError("trace file contains an invalid line record")
+            hit.add((record[0], record[1]))
     return hit
 
 

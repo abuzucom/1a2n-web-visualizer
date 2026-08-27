@@ -14,7 +14,7 @@ PUNCTUATION_CHARS = "();<>|&`"
 REDIRECTION_CHARS = frozenset("<>&0123456789")
 WRAPPERS = frozenset({
     "sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs",
-    "timeout",
+    "timeout", "exec",
 })
 WRAPPER_VALUE_OPTIONS = {
     "sudo": frozenset({
@@ -29,6 +29,7 @@ WRAPPER_VALUE_OPTIONS = {
     }),
     "nice": frozenset({"-n", "--adjustment"}),
     "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
+    "exec": frozenset({"-a"}),
 }
 
 

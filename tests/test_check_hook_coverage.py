@@ -92,6 +92,20 @@ class StatementAccountingTest(unittest.TestCase):
         self.assertEqual(sorted(owned), [2, 3])
 
 
+class TracedLineFileTest(unittest.TestCase):
+    """Trace files use data-only serialization."""
+
+    def test_json_trace_file_is_read(self):
+        with tempfile.TemporaryDirectory() as out_dir:
+            path = str(REPO_ROOT / "hooks" / "example.py")
+            trace_file = Path(out_dir) / "trace.json"
+            trace_file.write_text(
+                json.dumps([[path, 7], [path, 11]]), encoding="utf-8")
+
+            self.assertEqual(
+                gate.traced_lines(out_dir), {(path, 7), (path, 11)})
+
+
 class BaselineFileTest(unittest.TestCase):
     """The committed baseline stays readable and matches this tree's shape.
 

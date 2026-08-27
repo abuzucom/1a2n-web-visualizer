@@ -9,8 +9,8 @@ Inert unless both environment variables are set, so putting this
 directory on PYTHONPATH for other work costs nothing.
 """
 import atexit
+import json
 import os
-import pickle
 import sys
 import threading
 import trace
@@ -36,9 +36,9 @@ if TARGET_DIR and OUT_DIR:
         }
         if not counts:
             return
-        path = os.path.join(OUT_DIR, "%s.pickle" % uuid.uuid4().hex)
-        with open(path, "wb") as handle:
-            pickle.dump(counts, handle)
+        path = os.path.join(OUT_DIR, "%s.json" % uuid.uuid4().hex)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(sorted(counts), handle)
 
     atexit.register(_dump)
     sys.settrace(_tracer.globaltrace)

@@ -7,6 +7,14 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Changed
+- Replaced pickle hook-coverage trace files with validated JSON. Test processes
+  influence the trace directory, so loading those files with `pickle.load`
+  allowed a crafted test artifact to execute code in the coverage checker.
+- Classified command strings passed to Bash `eval`, treated `exec` as a command
+  prefix, and routed unresolved `eval` expansions to the user. These builtins
+  previously hid destructive commands from the gate.
+- Included `scripts/` in the shell-write consent paths because repository hooks
+  execute branch-name and identity checkers from that directory.
 - Replaced the spaced hyphen in `require_consent.py`'s `# pragma: no cover` and
   `# noqa: BLE001` comments with parentheses, matching the template. The house
   style reads a spaced hyphen as an em-dash substitute.

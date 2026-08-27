@@ -203,8 +203,10 @@ class TestWriteTest(unittest.TestCase):
     def test_gate_file_writes_ask(self):
         commands = (
             "Write-Output x > hooks/new.py",
+            "Write-Output x > scripts/check_branch_name.py",
             "Set-Content hooks/new.py x",
             "Add-Content .claude/settings.json x",
+            "Set-Content scripts/check_git_identity.py x",
             "Copy-Item source.py hooks/new.py",
             "Move-Item source.py .claude/new.json",
             "Out-File .claude/settings.json -InputObject x",

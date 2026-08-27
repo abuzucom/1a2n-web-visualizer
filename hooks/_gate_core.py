@@ -600,7 +600,7 @@ POWERSHELL_WRITE_PARAMETERS = {
     "copy-item": COPY_PARAMETERS, "cpi": COPY_PARAMETERS,
     "move-item": COPY_PARAMETERS, "mi": COPY_PARAMETERS,
 }
-PROTECTED_PATH_PARTS = frozenset({"hooks", ".claude"})
+PROTECTED_PATH_PARTS = frozenset({"hooks", ".claude", "scripts"})
 
 
 def strip_windows_decorations(name: str) -> str:
@@ -684,7 +684,7 @@ def _known_write_targets(program: str, args: list, redirects: list) -> list:
 
 
 def _protected_path(path: str, cwd: str) -> bool:
-    """Return True when a literal path is under hooks/ or .claude/."""
+    """Return True when a literal path is under a protected gate directory."""
     cleaned = path.strip().strip('"').strip("'")
     if not cleaned or is_ambiguous(cleaned):
         return False
@@ -706,7 +706,7 @@ def protected_write_verdict(program: str, args: list,
     """Gate known shell writes to repository-controlled hook files."""
     for target in _known_write_targets(program, args, redirects):
         if _protected_path(target, cwd):
-            return "ask", ("a known shell write to hooks/ or .claude/. "
+            return "ask", ("a known shell write to hooks/, .claude/, or scripts/. "
                            "These prompts are best-effort workflow checks")
     return "", ""
 

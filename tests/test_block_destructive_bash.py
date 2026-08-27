@@ -417,6 +417,20 @@ class InterpreterWrapperTest(unittest.TestCase):
                 _, decision = run_hook(command)
                 self.assertEqual(decision, "")
 
+    def test_eval_and_exec_payloads_are_classified(self):
+        cases = (
+            ("eval", ""),
+            ("eval 'rm -rf /tmp/x'", "ask"),
+            ("eval 'rm -rf /'", "deny"),
+            ('eval "$COMMAND"', "ask"),
+            ("exec rm -rf /tmp/x", "ask"),
+            ("exec rm -rf /", "deny"),
+        )
+        for command, expected in cases:
+            with self.subTest(command=command):
+                _, decision = run_hook(command)
+                self.assertEqual(decision, expected)
+
     def test_encoded_powershell_payload_is_classified(self):
         import base64
         command = "Remove-Item -Recurse -Force /etc"
@@ -472,8 +486,10 @@ class BashWriteToTestTest(unittest.TestCase):
         commands = (
             "echo x > hooks/new.py",
             "echo x >> .claude/settings.json",
+            "echo x > scripts/check_branch_name.py",
             "tee hooks/new.py",
             "sed -i 's/a/b/' .claude/settings.json",
+            "sed -i 's/a/b/' scripts/check_git_identity.py",
             "cp source.py hooks/new.py",
             "mv source.py .claude/new.json",
         )

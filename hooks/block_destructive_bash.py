@@ -162,6 +162,15 @@ def _interpreter_verdict(program: str, args: list, depth: int) -> tuple:
     return "", ""
 
 
+def _eval_verdict(args: list, depth: int) -> tuple:
+    """Classify the command string a shell eval executes."""
+    if not args:
+        return "", ""
+    if any(core.is_ambiguous(token) for token in args):
+        return "ask", "eval command text contains an expansion the gate cannot inspect"
+    return _nested_command_verdict(" ".join(args), depth, "eval")
+
+
 def _segment_verdict(tokens: list, depth: int) -> tuple:
     """Return (decision, reason) for one command segment.
 
@@ -185,6 +194,8 @@ def _named_program_verdict(program: str, args: list,
     so the caller runs it past every other check instead.
     """
     lowered = program.lower()
+    if lowered == "eval":
+        return _eval_verdict(args, depth)
     if lowered in INTERPRETERS:
         return _interpreter_verdict(program, args, depth)
     if lowered in core.DELETE_PROGRAMS:
