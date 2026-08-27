@@ -233,6 +233,9 @@ def _program_verdict(tokens: list, redirects: list,
                     core.test_write_verdict(program, args, redirects)):
         if verdict[0]:
             return verdict
+    if core.is_ambiguous(program):
+        return "ask", ("the command name contains an expansion the gate "
+                       "cannot inspect")
     if not _is_plausible_program(program) and _mentions_gated_command(tokens):
         return "ask", ("the command boundaries could not be interpreted, so "
                        "the gate cannot clear it")

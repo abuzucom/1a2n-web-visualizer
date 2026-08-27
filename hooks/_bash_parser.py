@@ -14,7 +14,7 @@ PUNCTUATION_CHARS = "();<>|&`"
 REDIRECTION_CHARS = frozenset("<>&0123456789")
 WRAPPERS = frozenset({
     "sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs",
-    "timeout", "exec",
+    "timeout", "exec", "builtin",
 })
 WRAPPER_VALUE_OPTIONS = {
     "sudo": frozenset({
@@ -126,8 +126,8 @@ def _is_separator(token: str) -> bool:
     return token in GROUPING or (bool(token) and set(token) <= OPERATOR_CHARS)
 
 
-def _split_segments(tokens: list) -> list:
-    """Split a token stream into command segments."""
+def _split_plain_segments(tokens: list) -> list:
+    """Split a token stream at command separators."""
     segments = [[]]
     for token in tokens:
         if _is_separator(token):
@@ -135,6 +135,35 @@ def _split_segments(tokens: list) -> list:
         else:
             segments[-1].append(token)
     return [segment for segment in segments if segment]
+
+
+def _collapse_backticks(tokens: list) -> list:
+    """Return the enclosing command with substitutions kept as markers."""
+    outer = []
+    nested = []
+    inside = False
+    for token in tokens:
+        if token != "`":
+            (nested if inside else outer).append(token)
+            continue
+        if inside:
+            outer.append("`" + " ".join(nested) + "`")
+            nested = []
+        inside = not inside
+    if inside:
+        outer.append("`" + " ".join(nested))
+    return outer
+
+
+def _split_segments(tokens: list) -> list:
+    """Split commands while preserving the context around backticks."""
+    segments = _split_plain_segments(tokens)
+    if "`" not in tokens:
+        return segments
+    for segment in _split_plain_segments(_collapse_backticks(tokens)):
+        if segment not in segments:
+            segments.append(segment)
+    return segments
 
 
 def _tokenize_line(line: str) -> tuple:

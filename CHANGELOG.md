@@ -13,6 +13,9 @@ All notable changes to this project are documented here. Format loosely follows
 - Classified command strings passed to Bash `eval`, treated `exec` as a command
   prefix, and routed unresolved `eval` expansions to the user. These builtins
   previously hid destructive commands from the gate.
+- Treated Bash `builtin` as a command prefix and retained the enclosing command
+  around backtick substitutions. Prefixing `eval` with `builtin`, or building
+  its command name through a substitution, previously bypassed classification.
 - Included `scripts/` in the shell-write consent paths because repository hooks
   execute branch-name and identity checkers from that directory.
 - Named the two-field JSON trace-record length required by this repository's

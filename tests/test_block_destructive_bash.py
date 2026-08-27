@@ -423,6 +423,12 @@ class InterpreterWrapperTest(unittest.TestCase):
             ("eval 'rm -rf /tmp/x'", "ask"),
             ("eval 'rm -rf /'", "deny"),
             ('eval "$COMMAND"', "ask"),
+            ("builtin eval rm -rf /tmp/x", "ask"),
+            ("builtin eval rm -rf /", "deny"),
+            ("builtin rm -rf /tmp/x", "ask"),
+            ("eval `echo rm` -rf /", "ask"),
+            ("eval `echo rm", "ask"),
+            ("`echo rm` -rf /tmp/x", "ask"),
             ("exec rm -rf /tmp/x", "ask"),
             ("exec rm -rf /", "deny"),
         )
