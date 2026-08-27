@@ -305,18 +305,6 @@ def classify(command: str) -> tuple:
     return verdict
 
 
-def find_reason(command: str) -> str:
-    """Return why `command` is denied outright, or an empty string if it is not."""
-    decision, reason = classify(command)
-    return reason if decision == "deny" else ""
-
-
-def find_consent_reason(command: str) -> str:
-    """Return why `command` needs the user's consent, or an empty string."""
-    decision, reason = classify(command)
-    return reason if decision == "ask" else ""
-
-
 def emit(decision: str, reason: str) -> int:
     """Print the gate's decision and return the exit code it needs."""
     return core.emit(GATE, decision, reason)

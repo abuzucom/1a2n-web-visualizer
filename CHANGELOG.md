@@ -7,6 +7,13 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Covered the digest-bound form of `AGENTS_CONSENT_GRANTED`, which no test
+  had ever run. The bare `path` grant was covered; `path@sha256:<digest>`
+  was not, so the binding the gate's docstring promises had never been
+  shown to hold. Four tests cover it, including a stale digest and a digest
+  belonging to another file. Found by a reachability pass that traces every
+  interpreter the suite launches, since the gates run as subprocesses and
+  in-process coverage sees almost none of their decision code.
 - Wired `scripts/check_ascii.py` into CI against `README.md`,
   `CHANGELOG.md`, `SECURITY.md`, and `docs/`, and fixed the 37 spaced
   hyphens it found. Version headings parenthesize their date,
@@ -131,6 +138,8 @@ All notable changes to this project are documented here. Format loosely follows
   is not an exception to the pushed-history rule.
 
 ### Changed
+- Removed `find_reason` and `find_consent_reason` from the Bash gate. Both
+  were defined and called by nothing, here or upstream.
 - Closed three false positives in `check_ascii.py` and `lint_style.py`.
   A Markdown table delimiter row tripped the dash rule, so did a list
   marker opening its own line, and an inline code span opening on one line

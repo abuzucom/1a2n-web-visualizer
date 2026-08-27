@@ -14,6 +14,7 @@ The settings tests guard the wiring: a hook nobody registered enforces
 nothing, and an edit to `.claude/settings.json` that drops an event would
 otherwise pass every behavioral test in this file.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -788,6 +789,56 @@ class CorpusTest(unittest.TestCase):
         for relative, exists, expected, why in gate_corpus.CONSENT_CASES:
             with self.subTest(path=relative, why=why):
                 self.assertEqual(self.decision_for(relative, exists), expected)
+
+
+class DigestBoundGrantTest(unittest.TestCase):
+    """A grant naming a digest releases that content and no other.
+
+    The bare-path form was covered; this form was not, so the binding the
+    docstring promises had never been shown to hold in either direction.
+    A grant that releases the wrong content is worse than no grant, since
+    it reads as consent nobody gave.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.target = self.root / "tests" / "test_auth.py"
+        self.target.parent.mkdir(parents=True)
+        self.target.write_text(EXISTING_TEST, encoding="utf-8")
+
+    def digest(self) -> str:
+        """Return the SHA-256 the gate computes for the current content."""
+        return hashlib.sha256(self.target.read_bytes()).hexdigest()
+
+    def decide(self, grant: str) -> str:
+        """Return the gate's decision for an edit under `grant`."""
+        payload = edit_payload(str(self.target), "assert", "assert not")
+        payload["cwd"] = str(self.root)
+        _, parsed = run_hook(payload, env={"AGENTS_CONSENT_GRANTED": grant})
+        return decision_of(parsed)
+
+    def test_a_matching_digest_releases_the_edit(self):
+        grant = f"{self.target}@sha256:{self.digest()}"
+        self.assertEqual(self.decide(grant), "")
+
+    def test_an_uppercase_digest_still_matches(self):
+        grant = f"{self.target}@sha256:{self.digest().upper()}"
+        self.assertEqual(self.decide(grant), "")
+
+    def test_a_stale_digest_does_not_release_the_edit(self):
+        """The binding is the point: consent to one change is not consent to the next."""
+        grant = f"{self.target}@sha256:{self.digest()}"
+        self.target.write_text(EXISTING_TEST + "\n// a later change\n",
+                               encoding="utf-8")
+        self.assertEqual(self.decide(grant), "ask")
+
+    def test_a_digest_for_another_file_does_not_release_this_one(self):
+        other = self.root / "tests" / "test_other.py"
+        other.write_text(EXISTING_TEST, encoding="utf-8")
+        grant = f"{other}@sha256:{self.digest()}"
+        self.assertEqual(self.decide(grant), "ask")
 
 
 if __name__ == "__main__":
