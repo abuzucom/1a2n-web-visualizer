@@ -8,6 +8,9 @@ const { spawn, spawnSync } = require("node:child_process");
 // Ordered by how likely each is to be a working Python 3 on a given host.
 const CANDIDATES = [["python3"], ["python"], ["py", "-3"]];
 const VERSION_PROBE = "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)";
+// process.argv[0] is the node binary and [1] is this script. Everything the
+// caller wants handed to Python starts after those two.
+const FORWARDED_ARGUMENT_START = 2;
 
 function findInterpreter(candidates = CANDIDATES) {
   // Each candidate is run rather than looked up. That is what rejects the
@@ -41,7 +44,7 @@ function main(argv) {
 }
 
 if (require.main === module) {
-  const status = main(process.argv.slice(2));
+  const status = main(process.argv.slice(FORWARDED_ARGUMENT_START));
   if (status !== null) {
     process.exit(status);
   }
