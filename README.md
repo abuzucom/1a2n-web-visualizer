@@ -251,34 +251,49 @@ AGENTS.md-specific style checks below, additive to `npm run lint` (ESLint and
 Ruff), not a replacement for it. Running `pre-commit install` after cloning
 also wires most of the same checks in as local git hooks (`.pre-commit-config.yaml`).
 
-`hooks/` holds two Claude Code hooks, wired through `.claude/settings.json`,
+`hooks/` holds three Claude Code hooks, wired through `.claude/settings.json`,
 that run before a tool call rather than after a commit.
-`block_destructive_bash.py` denies a recursive `rm` aimed at `/`, `~`, or
-`$HOME`, a bare `git push --force`, and `git reset --hard`, and routes every
-other recursive delete, the `--force-with-lease` family, `git push --mirror`,
-`git push --delete`, a forced (`+`) refspec, `git commit --amend`,
-`git rebase`, and `git filter-branch` to a permission prompt. It tokenizes the
-command first, so equivalent spellings (`rm -Rf`, `git -C dir push --force`,
-`--force-with-lease=main:<oid>`) are caught rather than read past, and a
-command it cannot parse is gated rather than cleared.
+`block_destructive_bash.py` and `block_destructive_powershell.py` gate
+destructive and history-rewriting commands on the `Bash` and `PowerShell`
+matchers. Which commands deny and which prompt is stated once, in AGENTS.md
+rule 2; a second copy here would be a second thing to disagree with.
 
-Both hooks fail closed on their own inputs: a payload that will not parse, or
-a test file that cannot be decoded as text, is denied or gated rather than
-waved through. They are registered in the exec form (`command` plus `args`),
-because in shell form a project path containing a space splits into two
-arguments and the hook silently never runs.
-`require_consent.py` sends any write to an existing test file to the same
-prompt, except a verified append at the end of it: the new text must begin
-with the old text, the addition must start on a new line, and the old text
-must sit at the end of the file. A new test file passes untouched. Edits that
-keep the old text are still gated, because an assertion that is commented
-out, wrapped in a string, or moved into a branch that never runs keeps its
-text and loses its effect. Paths are resolved before classification, so a
-symlink with an innocuous name cannot carry an edit into a test file, and any
-test file resolving outside the project root is gated whether a link
-redirected it there or the caller named it directly. Both are heuristics rather than a
-sandbox, and neither sees a file written through a Bash redirect, which is
-what the protected-file review in `docs/protected-file-review.md` covers.
+Both take every decision from `hooks/_gate_core.py`, so only the parsing is
+shell-specific, and `tests/test_gate_parity.py` fails when the two disagree.
+Each reads the other shell's interpreter names, so a command handed across
+(`powershell -Command '...'` from Bash, `bash -c '...'` from PowerShell) is
+read rather than passed. Commands are tokenized first, so equivalent spellings
+(`rm -Rf`, `git -C dir push --force`, `--force-with-lease=main:<oid>`) are
+caught rather than read past, and a command that will not parse is gated rather
+than cleared.
+
+`require_consent.py` sends every write to a test file that already exists to a
+permission prompt. Creating a new test file is the only exemption, so the
+mandated test-first workflow keeps the one exemption that is verifiable. The
+gate reads the path, never the content: an earlier version cleared a verified
+end-of-file append, and appending `ExistingTest.__unittest_skip__ = True`
+satisfies every structural condition such a check can state while leaving every
+assertion above it inert. Bash writes reaching a test file go to the same
+prompt, through a redirect, a here-document, `tee`, `sed -i`, `cp`, or `mv`.
+
+Paths are resolved before classification, so a symlink with an innocuous name
+cannot carry an edit into a test file, hard links are matched by inode, and any
+test file resolving outside the project root is gated whether a link redirected
+it there or the caller named it directly.
+
+All three fail closed on their own inputs: a payload that will not parse, a
+malformed tool input, or a test file that cannot be decoded as text is denied
+or gated rather than waved through. They are registered in the exec form
+(`command` plus `args`), because in shell form a project path containing a
+space splits into two arguments and the hook silently never runs.
+
+They are heuristics rather than a sandbox. A local hook cannot vouch for
+itself: whoever edits it or `.claude/settings.json` before it runs decides what
+it does, which is what the protected-file review in
+`docs/protected-file-review.md` covers. `tests/gate_corpus.py` holds every
+known bypass as a row with the verdict it must reach, and is shared
+byte-identical with `abuzucom/agents`, so a fix landing in one repository and
+not the other fails the other's suite.
 
 | Script | Backs | Blocking? |
 |---|---|---|

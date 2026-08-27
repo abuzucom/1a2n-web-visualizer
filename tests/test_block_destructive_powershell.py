@@ -6,9 +6,15 @@ which is the limit of what this suite proves: it has not been exercised
 against a live PowerShell tool call.
 """
 import json
+import os
 import subprocess
 import sys
 import unittest
+
+# discover -s tests puts this directory on the path; a direct
+# `unittest tests.<module>` run does not, and CI uses both.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gate_corpus
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -175,3 +181,13 @@ class FailClosedTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CorpusTest(unittest.TestCase):
+    """Every known PowerShell bypass reaches the verdict the corpus records."""
+
+    def test_every_corpus_row_reaches_its_verdict(self):
+        for command, expected, why in gate_corpus.POWERSHELL_CASES:
+            with self.subTest(command=command, why=why):
+                _, decision = run_hook(command)
+                self.assertEqual(decision or gate_corpus.ALLOW, expected)

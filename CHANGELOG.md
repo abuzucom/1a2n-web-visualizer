@@ -7,6 +7,25 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Added `tests/gate_corpus.py`, shared byte-identical with
+  `abuzucom/agents`: one table of every known gate bypass with the verdict
+  it must reach and the reason the row exists, imported by the Bash,
+  PowerShell, and consent suites. A fix landing in one repository and not
+  the other fails the other's suite.
+- Closed five gate bypasses the corpus found. Each gate knew only its own
+  shell's interpreters, so `powershell -Command 'Remove-Item -Recurse
+  -Force /etc'` crossed the Bash gate and `bash -c 'rm -rf /etc'` crossed
+  the PowerShell gate, both untouched; on Windows both lines run. A
+  PowerShell script block put a brace where a program name goes, so
+  `& { Remove-Item -Recurse -Force /etc }` was read as a program named `{`.
+  `Start-Process -ArgumentList` handed a CMD line to a program through a
+  parameter no gate recognized. All three delete readings, POSIX `rm`,
+  PowerShell `Remove-Item`, and the CMD verbs, now live in
+  `hooks/_gate_core.py` and are tried together, so neither gate can learn a
+  spelling the other does not.
+- Named the unrecognized `permission_mode` in the deny reason the shell
+  gates emit. An interactive mode Claude Code adds later denies here, and
+  the reason read identically to a genuinely unattended session.
 - Added `docs/template-drift.md`, recording what this repository's copies of
   the `abuzucom/agents` template files differ in and why. `sync.py` keeps only
   the AGENTS.md family in step, so every `scripts/`, `hooks/`, and `tests/`
@@ -82,6 +101,12 @@ All notable changes to this project are documented here. Format loosely follows
   is not an exception to the pushed-history rule.
 
 ### Changed
+- Rewrote the README hook section and dropped a contradicting sentence from
+  AGENTS.md rule 3. Both described the gates two revisions back: two hooks
+  where there are three, `git push --force` as a refusal after it moved to
+  a prompt, the append carve-out as live after it came out, and the Bash
+  redirect as an open gap after the shell gate closed it. Rule 3 carried
+  both the corrected sentence and the stale one, which disagreed.
 - Excluded merge commits from `scripts/check_commit_message.py`, and returned it to the template's advisory
   behavior so a subject violation reports rather than blocks. `git merge` writes `Merge branch 'x' into y`,
   which no author chose and which no `type: description` subject can express, so every ordinary branch update

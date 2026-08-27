@@ -52,22 +52,25 @@ except ImportError as error:  # pragma: no cover - exercised by the adoption tes
     print(_REASON, file=sys.stderr)
     sys.exit(2)
 
-GATED_KEYWORDS = core.gated_keywords() + (
-    "remove-item", "ri", "remove-itemproperty")
+GATED_KEYWORDS = core.gated_keywords() + tuple(core.DELETE_PROGRAMS)
 SEPARATORS = frozenset({";", "|", "&&", "||", "\n"})
-REMOVE_ALIASES = frozenset({"remove-item", "ri", "rm", "del", "erase", "rd",
-                            "rmdir"})
 # The call operator and the cmdlets that run a command given to them.
 WRAPPERS = frozenset({"&", "start-process", "invoke-expression", "iex",
                       "invoke-command", "sudo"})
-INTERPRETERS = frozenset({"powershell", "powershell.exe", "pwsh", "pwsh.exe",
-                          "cmd", "cmd.exe"})
-INTERPRETER_PAYLOAD_FLAGS = frozenset({"-command", "-c", "-e",
-                                       "-encodedcommand", "/c", "/k"})
+# Both shells are here, not only this one. A gate that knows only its own
+# interpreters leaves `bash -c 'rm -rf /etc'` as a hole, and on a Windows box
+# carrying Git Bash that line runs.
+INTERPRETERS = core.SHELL_INTERPRETERS
+INTERPRETER_PAYLOAD_FLAGS = core.SHELL_PAYLOAD_FLAGS
 REDIRECTIONS = frozenset({">", ">>", "2>", "2>>", "*>", "*>>", "3>", "4>",
                           "5>", "6>"})
-# -Recurse abbreviates to any unambiguous prefix, and -Force to -fo.
-RECURSE_PREFIXES = tuple(f"-{'recurse'[:n]}" for n in range(1, 8))
+# Start-Process hands its target a plain argument list rather than a command
+# string, so the payload has to be read as arguments to that program.
+ARGUMENT_LIST_FLAGS = frozenset(
+    [f"-{'argumentlist'[:n]}" for n in range(1, 13)] + ["-args"])
+FILE_PATH_FLAGS = frozenset(f"-{'filepath'[:n]}" for n in range(2, 9))
+SCRIPT_BLOCK_DELIMITERS = "{}"
+MAX_WRAPPER_DEPTH = 4
 
 
 def _tokenize(command: str):
@@ -104,27 +107,29 @@ def _redirect_targets(tokens: list) -> list:
     return targets
 
 
-def _is_recursive(token: str) -> bool:
-    """Return True if the token is a -Recurse switch in any abbreviation."""
-    return token.lower() in RECURSE_PREFIXES
+def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
+    """Return (decision, reason) for an interpreter handed a command.
 
-
-def _remove_verdict(args: list) -> tuple:
-    """Return (decision, reason) for a Remove-Item argument list."""
-    recursive = False
-    operands = []
-    for token in args:
-        if token.startswith("-"):
-            recursive = recursive or _is_recursive(token)
-        elif token.lower() not in ("-path", "-literalpath"):
-            operands.append(token)
-    return core.delete_verdict(recursive, operands, "recursive Remove-Item")
-
-
-def _interpreter_verdict(program: str, args: list) -> tuple:
-    """Return (decision, reason) for an interpreter handed a command."""
+    `depth` bounds the re-entry below, which follows one interpreter into
+    the arguments another handed it. A hostile command can nest launches
+    without limit; the gate reads a fixed number and then gives up, which
+    the unparseable path turns into a prompt rather than a pass.
+    """
+    if depth >= MAX_WRAPPER_DEPTH:
+        return "", ""
     for index, token in enumerate(args):
         lowered = token.lower()
+        if lowered in ARGUMENT_LIST_FLAGS:
+            rest = args[index + 1:]
+            if not rest:
+                return "", ""
+            # -ArgumentList carries arguments for `program`, not a command
+            # line of its own, so `/c rd /s /q C:\` has to be read as cmd's
+            # arguments. Reading it as a statement finds a program named /c.
+            nested = _tokenize(rest[0])
+            if nested is None:
+                return core.unparseable_verdict(rest[0])
+            return _interpreter_verdict(program, nested, depth + 1)
         if lowered in INTERPRETER_PAYLOAD_FLAGS:
             rest = args[index + 1:]
             if not rest:
@@ -138,15 +143,22 @@ def _interpreter_verdict(program: str, args: list) -> tuple:
 
 
 def _strip_wrappers(tokens: list) -> list:
-    """Drop the call operator and the cmdlets that run another command."""
+    """Drop the call operator, the cmdlets that run a command, and braces.
+
+    `& { Remove-Item -Recurse -Force /etc }` puts a script block where a
+    program name goes. Reading `{` as the program sees no delete at all,
+    so the braces come off with the wrapper that introduced them.
+    """
     index = 0
     while index < len(tokens):
-        name = os.path.basename(tokens[index]).lower()
-        if name in WRAPPERS:
+        token = tokens[index].strip(SCRIPT_BLOCK_DELIMITERS)
+        name = os.path.basename(token).lower()
+        if not token or name in WRAPPERS or name in FILE_PATH_FLAGS:
             index += 1
             continue
         break
-    return tokens[index:]
+    return [token.strip(SCRIPT_BLOCK_DELIMITERS) for token in tokens[index:]
+            if token.strip(SCRIPT_BLOCK_DELIMITERS)]
 
 
 def _statement_verdict(tokens: list) -> tuple:
@@ -169,13 +181,8 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
     program = os.path.basename(tokens[0]).lower()
     if program in INTERPRETERS:
         return _interpreter_verdict(program, tokens[1:])
-    if program in REMOVE_ALIASES:
-        # rd, rmdir, del, and erase name both a Remove-Item alias and a
-        # CMD verb, and the two spell recursion differently (-Recurse
-        # against /s). Take whichever reading is stronger rather than
-        # guessing which shell the caller meant.
-        return core.strongest(_remove_verdict(tokens[1:]),
-                              core.cmd_delete_verdict(program, tokens[1:]))
+    if program in core.DELETE_PROGRAMS:
+        return core.any_delete_verdict(program, tokens[1:])
     if program == "git":
         return core.git_verdict(tokens[1:], _CWD[0])
     args = tokens[1:]

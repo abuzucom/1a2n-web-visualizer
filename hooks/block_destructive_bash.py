@@ -73,9 +73,11 @@ GROUPING = frozenset({"(", ")", "\n"})
 WRAPPERS = frozenset({"sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs", "timeout"})
 # A shell handed a command string is a wrapper whose payload is another
 # command. Reading only the program name sees "bash" and stops there.
-INTERPRETERS = frozenset({"bash", "sh", "zsh", "dash", "ksh", "busybox",
-                          "cmd", "cmd.exe"})
-INTERPRETER_PAYLOAD_FLAGS = frozenset({"-c", "--command", "/c", "/k"})
+# Both shells are here, not only this one. A gate that knows only its own
+# interpreters leaves `powershell -Command 'Remove-Item -Recurse -Force /etc'`
+# as a hole, and on Windows that line runs.
+INTERPRETERS = core.SHELL_INTERPRETERS
+INTERPRETER_PAYLOAD_FLAGS = core.SHELL_PAYLOAD_FLAGS
 # Wrapper options that consume the token after them. Without these,
 # `sudo -u root rm -rf /` leaves `root` as the apparent program.
 WRAPPER_VALUE_OPTIONS = {
@@ -195,29 +197,6 @@ def _strip_prefixes(tokens: list) -> list:
     return tokens[index:]
 
 
-def _rm_targets(args: list) -> tuple:
-    """Return (recursive, operands) for an rm argument list."""
-    recursive = False
-    operands = []
-    parsing = True
-    for token in args:
-        if parsing and token == "--":
-            parsing = False
-        elif parsing and token.startswith("--"):
-            recursive = recursive or token == "--recursive"
-        elif parsing and core.is_short_group(token):
-            recursive = recursive or "r" in token or "R" in token
-        else:
-            operands.append(token)
-    return recursive, operands
-
-
-def _rm_verdict(args: list) -> tuple:
-    """Return (decision, reason) for an rm argument list."""
-    recursive, operands = _rm_targets(args)
-    return core.delete_verdict(recursive, operands, "recursive rm")
-
-
 def _interpreter_verdict(program: str, args: list) -> tuple:
     """Return (decision, reason) for a shell handed a command string.
 
@@ -267,8 +246,8 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
     program = os.path.basename(tokens[0])
     if program.lower() in INTERPRETERS:
         return _interpreter_verdict(program, tokens[1:])
-    if program == "rm":
-        return _rm_verdict(tokens[1:])
+    if program.lower() in core.DELETE_PROGRAMS:
+        return core.any_delete_verdict(program.lower(), tokens[1:])
     if program == "git":
         return core.git_verdict(tokens[1:], _CWD[0])
     args = tokens[1:]

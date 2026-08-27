@@ -327,7 +327,7 @@ def _decide(payload: dict, target: str, reason: str) -> int:
     if mode in core.INTERACTIVE_MODES:
         return emit("ask", message)
     return emit("deny", f"{message} No interactive session is available to "
-                        f"consent (permission_mode {core.sanitize(mode)}).")
+                        f"consent (permission_mode {core.mode_label(payload)}).")
 
 
 def _handle_write(payload: dict, project_dir: str) -> int:

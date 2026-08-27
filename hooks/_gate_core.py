@@ -343,10 +343,22 @@ def decide(gate: str, payload: dict, decision: str, reason: str) -> int:
         return emit(gate, "deny", reason)
     if require_str(payload.get("permission_mode")) in INTERACTIVE_MODES:
         return emit(gate, "ask", reason)
-    return emit(gate, "deny", f"{reason}. No interactive session is available to consent.")
+    return emit(gate, "deny", f"{reason}. No interactive session is available "
+                              f"to consent (permission_mode {mode_label(payload)}).")
 
 
 MAX_REASON_VALUE = 160
+
+
+def mode_label(payload: dict) -> str:
+    """Return the payload's permission_mode as text safe to put in a prompt.
+
+    INTERACTIVE_MODES is a fixed list, so an interactive mode Claude Code
+    adds later denies here. Naming the value is what separates that from a
+    genuinely unattended session, which otherwise read identically.
+    """
+    mode = require_str(payload.get("permission_mode"))
+    return sanitize(mode) if mode is not None else "absent"
 
 
 def sanitize(value) -> str:
@@ -395,6 +407,68 @@ def resolved_under(root: str, *parts: str):
 
 
 CMD_DELETE_VERBS = frozenset({"del", "erase", "rd", "rmdir"})
+# Both shells reach the other through an interpreter, so each gate has to
+# read a delete spelled the other way. The readings live here rather than in
+# a gate, so neither can learn a spelling the other does not.
+POSIX_DELETE_PROGRAMS = frozenset({"rm"})
+POWERSHELL_DELETE_PROGRAMS = frozenset({"remove-item", "ri", "remove-itemproperty"})
+DELETE_PROGRAMS = (POSIX_DELETE_PROGRAMS | POWERSHELL_DELETE_PROGRAMS
+                   | CMD_DELETE_VERBS)
+# -Recurse abbreviates to any unambiguous prefix, and -Force to -fo.
+RECURSE_PREFIXES = tuple(f"-{'recurse'[:n]}" for n in range(1, 8))
+POWERSHELL_PATH_FLAGS = frozenset({"-path", "-literalpath"})
+
+
+def posix_delete_verdict(args: list) -> tuple:
+    """Return (decision, reason) for a POSIX rm argument list."""
+    recursive = False
+    operands = []
+    parsing = True
+    for token in args:
+        if parsing and token == "--":
+            parsing = False
+        elif parsing and token.startswith("--"):
+            recursive = recursive or token == "--recursive"
+        elif parsing and is_short_group(token):
+            recursive = recursive or "r" in token or "R" in token
+        else:
+            operands.append(token)
+    return delete_verdict(recursive, operands, "recursive rm")
+
+
+def powershell_delete_verdict(args: list) -> tuple:
+    """Return (decision, reason) for a Remove-Item argument list."""
+    recursive = False
+    operands = []
+    for token in args:
+        if token.startswith("-"):
+            recursive = recursive or token.lower() in RECURSE_PREFIXES
+        elif token.lower() not in POWERSHELL_PATH_FLAGS:
+            operands.append(token)
+    return delete_verdict(recursive, operands, "recursive Remove-Item")
+
+
+def any_delete_verdict(program: str, args: list) -> tuple:
+    """Return the strongest verdict any shell's reading of a delete gives.
+
+    rd, rmdir, del, and erase name both a Remove-Item alias and a CMD verb,
+    and the three shells spell recursion differently (-r against -Recurse
+    against /s). Take whichever reading is strongest rather than guessing
+    which shell the caller meant, because guessing wrong clears the act.
+    """
+    return strongest(posix_delete_verdict(args),
+                     strongest(powershell_delete_verdict(args),
+                               cmd_delete_verdict(program, args)))
+
+
+# Interpreters reach one shell from the other. A gate that knows only its
+# own leaves `powershell -Command` and `bash -c` as holes in the other.
+SHELL_INTERPRETERS = frozenset({
+    "bash", "sh", "zsh", "dash", "ksh", "busybox",
+    "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
+})
+SHELL_PAYLOAD_FLAGS = frozenset({"-c", "--command", "-command", "-e",
+                                 "-encodedcommand", "/c", "/k"})
 CMD_RECURSIVE_FLAGS = frozenset({"/s"})
 
 
