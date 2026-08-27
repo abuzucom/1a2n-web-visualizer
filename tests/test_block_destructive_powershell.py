@@ -5,10 +5,12 @@ Runs the hook as a subprocess against synthetic Claude Code payloads,
 which is the limit of what this suite proves: it has not been exercised
 against a live PowerShell tool call.
 """
+import base64
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 # discover -s tests puts this directory on the path; a direct
@@ -22,7 +24,7 @@ HOOK_PATH = REPO_ROOT / "hooks" / "block_destructive_powershell.py"
 BLOCKING_EXIT_CODE = 2
 
 
-def run_hook(command, permission_mode: str = "default") -> tuple:
+def run_hook(command, permission_mode: str = "default", cwd: str = "") -> tuple:
     """Return the hook's (exit code, permission decision) for `command`."""
     payload = {
         "hook_event_name": "PreToolUse",
@@ -30,6 +32,8 @@ def run_hook(command, permission_mode: str = "default") -> tuple:
         "permission_mode": permission_mode,
         "tool_input": {"command": command},
     }
+    if cwd:
+        payload["cwd"] = cwd
     result = subprocess.run(
         [sys.executable, str(HOOK_PATH)],
         input=json.dumps(payload),
@@ -42,6 +46,11 @@ def run_hook(command, permission_mode: str = "default") -> tuple:
     except (ValueError, KeyError):
         decision = ""
     return result.returncode, decision
+
+
+def encoded(command: str) -> str:
+    """Return PowerShell's UTF-16LE Base64 representation of `command`."""
+    return base64.b64encode(command.encode("utf-16le")).decode("ascii")
 
 
 class RemoveItemTest(unittest.TestCase):
@@ -109,6 +118,57 @@ class WrapperTest(unittest.TestCase):
                 self.assertEqual(decision, expected)
 
 
+class EncodedCommandTest(unittest.TestCase):
+    """EncodedCommand is decoded before the nested command is classified."""
+
+    FLAGS = (
+        "-e", "-ec", "-en", "-enc", "-enco", "-encod", "-encode",
+        "-encoded", "-encodedc", "-encodedco", "-encodedcom",
+        "-encodedcomm", "-encodedcomma", "-encodedcomman",
+        "-encodedcommand",
+    )
+
+    def test_every_supported_spelling_classifies_destructive_payloads(self):
+        payload = encoded("Remove-Item -Recurse C:\\work\\build")
+        for program in ("powershell", "powershell.exe", "pwsh", "pwsh.exe"):
+            for flag in self.FLAGS:
+                with self.subTest(program=program, flag=flag):
+                    _, decision = run_hook(f"{program} {flag} {payload}")
+                    self.assertEqual(decision, "ask")
+
+    def test_benign_encoded_payload_passes(self):
+        for flag in self.FLAGS:
+            with self.subTest(flag=flag):
+                _, decision = run_hook(f"pwsh {flag} {encoded('Get-ChildItem')}")
+                self.assertEqual(decision, "")
+
+    def test_malformed_encoded_payloads_deny(self):
+        invalid_utf16 = base64.b64encode(bytes((0, 216))).decode("ascii")
+        malformed = (
+            "pwsh -enc",
+            "pwsh -enc !!!",
+            "pwsh -enc QQ==",
+            f"pwsh -enc {invalid_utf16}",
+        )
+        for command in malformed:
+            with self.subTest(command=command):
+                code, decision = run_hook(command)
+                self.assertEqual(code, BLOCKING_EXIT_CODE)
+                self.assertEqual(decision, "deny")
+
+    def test_encoded_recursion_exhaustion_denies(self):
+        command = "Get-ChildItem"
+        for _ in range(6):
+            command = f"pwsh -enc {encoded(command)}"
+        code, decision = run_hook(command)
+        self.assertEqual(code, BLOCKING_EXIT_CODE)
+        self.assertEqual(decision, "deny")
+
+    def test_e_is_not_encoded_command_for_an_unrelated_interpreter(self):
+        _, decision = run_hook("python -e not-base64")
+        self.assertEqual(decision, "")
+
+
 class GitDelegationTest(unittest.TestCase):
     """git decisions come from the shared core, so both shells agree."""
 
@@ -139,6 +199,91 @@ class TestWriteTest(unittest.TestCase):
     def test_redirect_into_a_source_file_passes(self):
         _, decision = run_hook("Write-Output x > src/app.js")
         self.assertEqual(decision, "")
+
+    def test_gate_file_writes_ask(self):
+        commands = (
+            "Write-Output x > hooks/new.py",
+            "Set-Content hooks/new.py x",
+            "Add-Content .claude/settings.json x",
+            "Copy-Item source.py hooks/new.py",
+            "Move-Item source.py .claude/new.json",
+            "Out-File .claude/settings.json -InputObject x",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                _, decision = run_hook(command)
+                self.assertEqual(decision, "ask")
+
+    def test_named_write_paths_gate_regardless_of_parameter_order(self):
+        commands = (
+            "Set-Content -Value x -Path hooks/new.py",
+            "Add-Content -Value x -LiteralPath .claude/settings.json",
+            "Out-File -InputObject x -FilePath hooks/new.py",
+            "Copy-Item -Destination hooks/new.py -Path source.py",
+            "Move-Item -Destination .claude/new.json -LiteralPath source.py",
+            "sc -Value x -Path hooks/new.py",
+            "cpi -Destination hooks/new.py -Path source.py",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(run_hook(command)[1], "ask")
+
+    def test_abbreviated_write_parameters_gate_regardless_of_order(self):
+        commands = (
+            "Set-Content -Va x -Pat hooks/new.py",
+            "Add-Content -Va x -L .claude/settings.json",
+            "Out-File -Inp x -Fi hooks/new.py",
+            "Copy-Item -Des hooks/new.py -Pat source.py",
+            "Move-Item -Des .claude/new.json -L source.py",
+            "sc -Va x -Pat hooks/new.py",
+            "cpi -Des hooks/new.py -Pat source.py",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(run_hook(command)[1], "ask")
+
+    def test_linked_directory_into_hooks_is_gated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hooks = root / "hooks"
+            hooks.mkdir()
+            linked = root / "linked"
+            try:
+                linked.symlink_to(hooks, target_is_directory=True)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(f"this platform cannot create directory links: {error}")
+            decision = run_hook(
+                "Set-Content -Va x -Pat linked/new.py", cwd=directory)[1]
+        self.assertEqual(decision, "ask")
+
+
+class GitEnvironmentTest(unittest.TestCase):
+    """Persistent PowerShell Git variables must not evade a later read."""
+
+    def test_relevant_environment_assignments_are_gated(self):
+        commands = (
+            "$env:GIT_PAGER='/tmp/evil'; git status",
+            "$env:GIT_EXTERNAL_DIFF='/tmp/evil'; git diff",
+            "$env:GIT_CONFIG_GLOBAL='/tmp/evil'; git status",
+            "$env:GIT_CONFIG_COUNT='1'; git status",
+            "$env:GIT_CONFIG_KEY_0='core.pager'; git status",
+            "$env:GIT_CONFIG_VALUE_0='/tmp/evil'; git status",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(run_hook(command)[1], "ask")
+
+    def test_provider_and_braced_environment_assignments_are_gated(self):
+        commands = (
+            "${env:GIT_PAGER}='/tmp/evil'; git status",
+            "Set-Item Env:GIT_EXTERNAL_DIFF /tmp/evil; git diff",
+            "Set-Item -Path Env:GIT_CONFIG_GLOBAL -Value /tmp/evil; git status",
+            "Set-Variable -Name env:GIT_PAGER -Value /tmp/evil; git status",
+            "sv -Name env:GIT_CONFIG_COUNT -Value 1; git status",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(run_hook(command)[1], "ask")
 
 
 class FailClosedTest(unittest.TestCase):

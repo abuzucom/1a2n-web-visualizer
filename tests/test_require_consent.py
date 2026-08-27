@@ -14,7 +14,7 @@ The settings tests guard the wiring: a hook nobody registered enforces
 nothing, and an edit to `.claude/settings.json` that drops an event would
 otherwise pass every behavioral test in this file.
 """
-import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 # discover -s tests puts this directory on the path; a direct
 # `unittest tests.<module>` run does not, and CI uses both.
@@ -48,7 +49,6 @@ EXISTING_TEST = """test('device switch failure leaves the visualizer silent', fu
 def run_hook(payload: dict, env: dict = None) -> tuple:
     """Return the hook's (exit code, parsed stdout) for `payload`."""
     environment = dict(os.environ)
-    environment.pop("AGENTS_CONSENT_GRANTED", None)
     environment.pop("CLAUDE_PROJECT_DIR", None)
     if env:
         environment.update(env)
@@ -67,6 +67,14 @@ def run_hook(payload: dict, env: dict = None) -> tuple:
 def decision_of(parsed: dict) -> str:
     """Return the permission decision in `parsed`, or an empty string."""
     return parsed.get("hookSpecificOutput", {}).get("permissionDecision", "")
+
+
+def load_hook_module(name: str):
+    """Load a distinct consent-hook module for direct OS-boundary tests."""
+    spec = importlib.util.spec_from_file_location(name, HOOK_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def edit_payload(file_path: str, old: str, new: str, mode: str = "default") -> dict:
@@ -298,25 +306,6 @@ class FailClosedTest(TestFileFixture):
                 self.assertEqual(code, BLOCKING_EXIT_CODE)
                 self.assertEqual(decision_of(parsed), "deny")
 
-    def test_override_releases_only_the_named_path(self):
-        old = "  assert.equal(viz.diagnostics().trackState, 'none');\n"
-        granted = {"AGENTS_CONSENT_GRANTED": "tests/test_bcviz_api.js"}
-        payload = edit_payload(str(self.test_file), old, "", "bypassPermissions")
-        payload["cwd"] = self.tmp.name
-        code, parsed = run_hook(payload, granted)
-        self.assertEqual(code, 0)
-        self.assertEqual(decision_of(parsed), "")
-
-    def test_override_does_not_release_other_paths(self):
-        other = Path(self.tmp.name) / "tests" / "test_other.js"
-        other.write_text(EXISTING_TEST, encoding="utf-8")
-        granted = {"AGENTS_CONSENT_GRANTED": "tests/test_bcviz_api.js"}
-        payload = edit_payload(str(other), "  assert.equal(viz.diagnostics().trackState, 'none');\n", "")
-        code, parsed = run_hook(payload, granted)
-        self.assertEqual(code, 0)
-        self.assertEqual(decision_of(parsed), "ask")
-
-
 class PathAliasTest(unittest.TestCase):
     """A path is only as trustworthy as what it resolves to.
 
@@ -376,38 +365,6 @@ class PathAliasTest(unittest.TestCase):
         payload["cwd"] = self.root
         _, parsed = run_hook(payload)
         self.assertEqual(decision_of(parsed), "")
-
-
-class OverrideScopeTest(unittest.TestCase):
-    """A grant names one file, not every file whose path ends the same way."""
-
-    GRANT = {"AGENTS_CONSENT_GRANTED": "tests/test_auth.js"}
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = os.path.realpath(self.tmp.name)
-        self.granted = self._make_test("tests")
-        self.other = self._make_test(os.path.join("elsewhere", "tests"))
-
-    def _make_test(self, relative_dir: str) -> Path:
-        directory = Path(self.root) / relative_dir
-        directory.mkdir(parents=True)
-        path = directory / "test_auth.js"
-        path.write_text(EXISTING_TEST, encoding="utf-8")
-        return path
-
-    def _edit(self, target: Path) -> str:
-        payload = edit_payload(str(target), "  assert.equal(deviceBCalls, 1, 'no retry attempted');", "")
-        payload["cwd"] = self.root
-        _, parsed = run_hook(payload, self.GRANT)
-        return decision_of(parsed)
-
-    def test_grant_releases_the_named_file(self):
-        self.assertEqual(self._edit(self.granted), "")
-
-    def test_grant_does_not_release_a_matching_suffix_elsewhere(self):
-        self.assertEqual(self._edit(self.other), "ask")
 
 
 TWO_TESTS = """test('a', function () {
@@ -516,6 +473,51 @@ class HardLinkTest(unittest.TestCase):
         _, parsed = run_hook(payload)
         self.assertEqual(decision_of(parsed), "")
 
+    def test_inode_walk_budget_exhaustion_gates_the_alias(self):
+        alias = Path(self.root) / "notes.txt"
+        os.link(self.test_file, alias)
+        spec = importlib.util.spec_from_file_location("require_consent_budget", HOOK_PATH)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.MAX_INODE_WALK = 0
+        target = module.resolve_target(str(alias), self.root)
+        self.assertTrue(module.names_a_test(str(alias), target, self.root))
+
+    def test_inode_walk_traversal_error_gates_the_alias(self):
+        alias = Path(self.root) / "notes.txt"
+        os.link(self.test_file, alias)
+        module = self._load_module("require_consent_walk_error")
+        target = module.resolve_target(str(alias), self.root)
+
+        def failed_walk(_root, onerror=None):
+            onerror(OSError("walk denied"))
+            return []
+
+        with mock.patch.object(module.os, "walk", side_effect=failed_walk):
+            self.assertIsNone(module.reaches_a_test_inode(target, self.root))
+
+    def test_candidate_stat_error_gates_the_alias(self):
+        alias = Path(self.root) / "notes.txt"
+        os.link(self.test_file, alias)
+        module = self._load_module("require_consent_stat_error")
+        target = module.resolve_target(str(alias), self.root)
+        real_stat = module.os.stat
+
+        def failed_stat(path):
+            if os.path.realpath(path) == os.path.realpath(self.test_file):
+                raise OSError("stat denied")
+            return real_stat(path)
+
+        with mock.patch.object(module.os, "stat", side_effect=failed_stat):
+            self.assertIsNone(module.reaches_a_test_inode(target, self.root))
+
+    @staticmethod
+    def _load_module(name: str):
+        spec = importlib.util.spec_from_file_location(name, HOOK_PATH)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
 
 class PathFieldTypeTest(unittest.TestCase):
     """A path that is not a string must deny rather than crash."""
@@ -531,6 +533,39 @@ class PathFieldTypeTest(unittest.TestCase):
                 })
                 self.assertEqual(code, BLOCKING_EXIT_CODE)
                 self.assertEqual(decision_of(parsed), "deny")
+
+
+class PathReasonTest(unittest.TestCase):
+    """Out-of-tree and unreadable paths explain why consent is required."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "project"
+        self.root.mkdir()
+        self.module = load_hook_module("require_consent_path_reasons")
+
+    def test_redirected_out_of_root_path_names_the_link_boundary(self):
+        raw = self.root / "linked" / "test_external.py"
+        target = Path(self.tmp.name) / "outside" / "test_external.py"
+        reason = self.module.escape_reason(
+            str(raw), str(target), str(self.root))
+        self.assertEqual(
+            reason,
+            "follows a link to a test file outside the project root, "
+            "which the gate cannot vouch for",
+        )
+
+    def test_open_os_error_reports_that_the_target_cannot_be_confirmed(self):
+        target = self.root / "tests" / "test_unreadable.py"
+        error = PermissionError(13, "permission denied")
+        with mock.patch.object(self.module.os, "open", side_effect=error):
+            reason = self.module.find_gate_reason("Edit", str(target))
+        self.assertEqual(
+            reason,
+            "cannot be opened (permission denied), so the gate cannot confirm "
+            "what this edit changes",
+        )
 
 
 class FailClosedInputTest(unittest.TestCase):
@@ -789,56 +824,6 @@ class CorpusTest(unittest.TestCase):
         for relative, exists, expected, why in gate_corpus.CONSENT_CASES:
             with self.subTest(path=relative, why=why):
                 self.assertEqual(self.decision_for(relative, exists), expected)
-
-
-class DigestBoundGrantTest(unittest.TestCase):
-    """A grant naming a digest releases that content and no other.
-
-    The bare-path form was covered; this form was not, so the binding the
-    docstring promises had never been shown to hold in either direction.
-    A grant that releases the wrong content is worse than no grant, since
-    it reads as consent nobody gave.
-    """
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.target = self.root / "tests" / "test_auth.py"
-        self.target.parent.mkdir(parents=True)
-        self.target.write_text(EXISTING_TEST, encoding="utf-8")
-
-    def digest(self) -> str:
-        """Return the SHA-256 the gate computes for the current content."""
-        return hashlib.sha256(self.target.read_bytes()).hexdigest()
-
-    def decide(self, grant: str) -> str:
-        """Return the gate's decision for an edit under `grant`."""
-        payload = edit_payload(str(self.target), "assert", "assert not")
-        payload["cwd"] = str(self.root)
-        _, parsed = run_hook(payload, env={"AGENTS_CONSENT_GRANTED": grant})
-        return decision_of(parsed)
-
-    def test_a_matching_digest_releases_the_edit(self):
-        grant = f"{self.target}@sha256:{self.digest()}"
-        self.assertEqual(self.decide(grant), "")
-
-    def test_an_uppercase_digest_still_matches(self):
-        grant = f"{self.target}@sha256:{self.digest().upper()}"
-        self.assertEqual(self.decide(grant), "")
-
-    def test_a_stale_digest_does_not_release_the_edit(self):
-        """The binding is the point: consent to one change is not consent to the next."""
-        grant = f"{self.target}@sha256:{self.digest()}"
-        self.target.write_text(EXISTING_TEST + "\n// a later change\n",
-                               encoding="utf-8")
-        self.assertEqual(self.decide(grant), "ask")
-
-    def test_a_digest_for_another_file_does_not_release_this_one(self):
-        other = self.root / "tests" / "test_other.py"
-        other.write_text(EXISTING_TEST, encoding="utf-8")
-        grant = f"{other}@sha256:{self.digest()}"
-        self.assertEqual(self.decide(grant), "ask")
 
 
 if __name__ == "__main__":

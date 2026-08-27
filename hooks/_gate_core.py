@@ -18,10 +18,13 @@ this module must fail closed rather than crash, because Claude Code treats a
 non-zero exit other than 2 as a non-blocking error, which waves the command
 through.
 """
+import base64
+import binascii
 import json
 import os
 import posixpath
 import re
+import shlex
 import sys
 
 INTERACTIVE_MODES = frozenset({"default", "plan", "acceptEdits", "auto"})
@@ -31,8 +34,9 @@ FILESYSTEM_ROOTS = frozenset({"/", "//", "/*"})
 # root is two characters, C:. Both name a whole volume, not a path in one.
 UNC_SHARE_ROOT_PARTS = 2
 DRIVE_ROOT_LENGTH = 2
-# git reads -ckey=value glued, so a longer token carries the setting.
-GIT_CONFIG_FLAG_LENGTH = 2
+MAX_GIT_CONFIG_COUNT = 1000
+MAX_GIT_ALIAS_DEPTH = 10
+GIT_SHORT_OPTION_VALUE_INDEX = 2
 # section.subsection.key, the only shape a driver name takes.
 GIT_CONFIG_SUBSECTION_PARTS = 3
 # Latin-1 renders as \\xNN; everything above it needs \\uNNNN.
@@ -221,22 +225,6 @@ KNOWN_SUBCOMMANDS = frozenset({
 }) | READ_SUBCOMMANDS
 
 
-def cleared_config_keys(args: list) -> set:
-    """Return the config keys this invocation neutralizes with -c key=."""
-    cleared = set()
-    for index, token in enumerate(args):
-        if token == "-c" and index + 1 < len(args):
-            setting = args[index + 1]
-        elif token.startswith("-c") and len(token) > GIT_CONFIG_FLAG_LENGTH:
-            setting = token[2:]
-        else:
-            continue
-        key, separator, value = setting.partition("=")
-        if separator and not value:
-            cleared.add(key.strip().lower())
-    return cleared
-
-
 def _git_alias_verdict(subcommand: str, rest: list, cwd: str) -> tuple:
     """Return (decision, reason) for a subcommand git does not define."""
     expansion = resolve_alias(cwd, subcommand)
@@ -252,7 +240,7 @@ def _git_alias_verdict(subcommand: str, rest: list, cwd: str) -> tuple:
 
 
 def _git_resolution_verdict(subcommand: str, rest: list, args: list,
-                            cwd: str) -> tuple:
+                            cwd: str, environment: list) -> tuple:
     """Return a verdict for a subcommand needing resolution, else None.
 
     None means git defines the subcommand and it is not a read, so the
@@ -262,7 +250,7 @@ def _git_resolution_verdict(subcommand: str, rest: list, args: list,
         return "ask", ("git with an unresolved subcommand: the gate cannot "
                        "tell what this runs")
     if subcommand in READ_SUBCOMMANDS:
-        return repo_executes_on_read(cwd, cleared_config_keys(args))
+        return git_read_verdict(args, cwd, environment)
     if subcommand in KNOWN_SUBCOMMANDS:
         return None
     return _git_alias_verdict(subcommand, rest, cwd)
@@ -313,10 +301,11 @@ GIT_SUBCOMMAND_READERS = {
 }
 
 
-def git_verdict(args: list, cwd: str = "") -> tuple:
+def git_verdict(args: list, cwd: str = "", environment: list = None) -> tuple:
     """Return (decision, reason) for a git argument list."""
     subcommand, rest = git_subcommand(args)
-    resolved = _git_resolution_verdict(subcommand, rest, args, cwd)
+    resolved = _git_resolution_verdict(
+        subcommand, rest, args, cwd, environment or [])
     if resolved is not None:
         return resolved
     if subcommand == "push":
@@ -521,9 +510,45 @@ SHELL_INTERPRETERS = frozenset({
     "bash", "sh", "zsh", "dash", "ksh", "busybox",
     "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
 })
-SHELL_PAYLOAD_FLAGS = frozenset({"-c", "--command", "-command", "-e",
-                                 "-encodedcommand", "/c", "/k"})
+SHELL_PAYLOAD_FLAGS = frozenset({"-c", "--command", "-command", "/c", "/k"})
+POWERSHELL_PROGRAMS = frozenset({"powershell", "powershell.exe", "pwsh", "pwsh.exe"})
+POWERSHELL_ENCODED_FLAGS = frozenset(
+    {"-e", "-ec"}
+    | {f"-{'encodedcommand'[:length]}"
+       for length in range(2, len("encodedcommand") + 1)}
+)
+MAX_COMMAND_DEPTH = 4
 CMD_RECURSIVE_FLAGS = frozenset({"/s"})
+
+
+def decode_powershell_command(value: str) -> tuple:
+    """Return a strict UTF-16LE EncodedCommand payload or a deny reason."""
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        return None, "PowerShell EncodedCommand is not strict Base64"
+    if len(raw) % 2:
+        return None, "PowerShell EncodedCommand has an odd UTF-16LE byte length"
+    try:
+        return raw.decode("utf-16le", errors="strict"), ""
+    except UnicodeDecodeError:
+        return None, "PowerShell EncodedCommand is not valid UTF-16LE"
+
+
+def powershell_payload(args: list) -> tuple:
+    """Return (kind, payload or reason) for PowerShell command arguments."""
+    for index, token in enumerate(args):
+        lowered = token.lower()
+        if lowered in POWERSHELL_ENCODED_FLAGS:
+            if index + 1 >= len(args):
+                return "deny", "PowerShell EncodedCommand has no Base64 payload"
+            payload, reason = decode_powershell_command(args[index + 1])
+            return ("deny", reason) if payload is None else ("command", payload)
+        if lowered in ("-c", "-command", "--command"):
+            if index + 1 < len(args):
+                return "command", args[index + 1]
+            return "", ""
+    return "", ""
 
 
 def cmd_delete_verdict(program: str, args: list) -> tuple:
@@ -553,7 +578,29 @@ TEST_NAME = re.compile(
     re.IGNORECASE,
 )
 # Commands whose named operand is a file they overwrite in place.
-WRITE_PROGRAMS = {"tee": 0, "sed": -1, "cp": -1, "mv": -1}
+WRITE_PROGRAMS = {
+    "tee": 0, "sed": -1, "cp": -1, "mv": -1,
+    "set-content": 0, "sc": 0, "add-content": 0, "ac": 0,
+    "out-file": 0, "copy-item": -1, "cpi": -1, "move-item": -1,
+    "mi": -1,
+}
+# (canonical name, shortest valid unambiguous prefix, names an output target).
+CONTENT_PARAMETERS = (
+    ("path", 3, True), ("literalpath", 1, True), ("value", 2, False),
+)
+OUTPUT_PARAMETERS = (("filepath", 2, True), ("inputobject", 3, False))
+COPY_PARAMETERS = (
+    ("path", 3, False), ("literalpath", 1, False),
+    ("destination", 3, True),
+)
+POWERSHELL_WRITE_PARAMETERS = {
+    "set-content": CONTENT_PARAMETERS, "sc": CONTENT_PARAMETERS,
+    "add-content": CONTENT_PARAMETERS, "ac": CONTENT_PARAMETERS,
+    "out-file": OUTPUT_PARAMETERS,
+    "copy-item": COPY_PARAMETERS, "cpi": COPY_PARAMETERS,
+    "move-item": COPY_PARAMETERS, "mi": COPY_PARAMETERS,
+}
+PROTECTED_PATH_PARTS = frozenset({"hooks", ".claude"})
 
 
 def strip_windows_decorations(name: str) -> str:
@@ -582,12 +629,7 @@ def test_write_verdict(program: str, args: list, redirect_targets: list) -> tupl
     Write matcher can see it, so Rule 3 would apply to the same act
     through one tool and not the other.
     """
-    targets = list(redirect_targets)
-    position = WRITE_PROGRAMS.get(os.path.basename(program).lower())
-    if position is not None:
-        operands = [token for token in args if not token.startswith("-")]
-        if operands:
-            targets.append(operands[position])
+    targets = _known_write_targets(program, args, redirect_targets)
     for target in targets:
         if is_test_path(target):
             return "ask", ("writes to an existing test file, which Rule 3 "
@@ -595,7 +637,82 @@ def test_write_verdict(program: str, args: list, redirect_targets: list) -> tupl
     return "", ""
 
 
+def _powershell_write_operands(name: str, args: list) -> tuple:
+    """Return named targets and unused positional write operands."""
+    targets = []
+    operands = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        flag, separator, attached = token.lower().partition(":")
+        parameter = _powershell_write_parameter(name, flag)
+        if parameter:
+            value = attached if separator else ""
+            if not separator and index + 1 < len(args):
+                index += 1
+                value = args[index]
+            if parameter[2] and value:
+                targets.append(value)
+        elif not token.startswith("-"):
+            operands.append(token)
+        index += 1
+    return targets, operands
+
+
+def _powershell_write_parameter(name: str, flag: str):
+    """Return the parameter matched by a valid unambiguous prefix."""
+    candidate = flag.lstrip("-")
+    for parameter in POWERSHELL_WRITE_PARAMETERS.get(name, ()):
+        canonical, minimum, _target = parameter
+        if len(candidate) >= minimum and canonical.startswith(candidate):
+            return parameter
+    return None
+
+
+def _known_write_targets(program: str, args: list, redirects: list) -> list:
+    """Return known output operands for redirects and write programs."""
+    targets = list(redirects)
+    name = os.path.basename(program).lower().removesuffix(".exe")
+    position = WRITE_PROGRAMS.get(name)
+    if position is None:
+        return targets
+    named_targets, operands = _powershell_write_operands(name, args)
+    targets.extend(named_targets)
+    if operands:
+        targets.append(operands[position])
+    return targets
+
+
+def _protected_path(path: str, cwd: str) -> bool:
+    """Return True when a literal path is under hooks/ or .claude/."""
+    cleaned = path.strip().strip('"').strip("'")
+    if not cleaned or is_ambiguous(cleaned):
+        return False
+    root = os.path.realpath(cwd or ".")
+    candidate = cleaned if os.path.isabs(cleaned) else os.path.join(root, cleaned)
+    candidate = os.path.realpath(candidate)
+    try:
+        relative = os.path.relpath(candidate, root)
+    except ValueError:
+        return False
+    if relative == os.pardir or relative.startswith(os.pardir + os.sep):
+        return False
+    head = relative.replace("\\", "/").split("/", 1)[0].lower()
+    return head in PROTECTED_PATH_PARTS
+
+
+def protected_write_verdict(program: str, args: list,
+                            redirects: list, cwd: str) -> tuple:
+    """Gate known shell writes to repository-controlled hook files."""
+    for target in _known_write_targets(program, args, redirects):
+        if _protected_path(target, cwd):
+            return "ask", ("a known shell write to hooks/ or .claude/. "
+                           "These prompts are best-effort workflow checks")
+    return "", ""
+
+
 MAX_CONFIG_BYTES = 256 * 1024
+MAX_REPO_DISCOVERY_DEPTH = 100
 # Keys whose value names a program git runs during an ordinary read.
 EXEC_CAPABLE_KEYS = frozenset({
     "core.fsmonitor", "core.pager", "core.editor", "core.sshcommand",
@@ -612,9 +729,8 @@ EXEC_CAPABLE_SUBSECTIONS = {
 }
 
 
-def _read_git_config(cwd: str):
-    """Return .git/config text, "" when absent, or None when unreadable."""
-    path = os.path.join(cwd or ".", ".git", "config")
+def _read_config_path(path: str):
+    """Return config text, "" when absent, or None when unreadable."""
     try:
         if os.path.getsize(path) > MAX_CONFIG_BYTES:
             return None
@@ -634,14 +750,14 @@ def _section_name(header: str) -> str:
     return f"{name.lower()}.{subsection.strip().strip(chr(34))}"
 
 
-def parse_git_config(cwd: str):
-    """Return {"section.key": value} from .git/config, or None on failure.
+def _parse_git_config_path(path: str):
+    """Return normalized config entries from `path`, or None on failure.
 
     The file is read, never queried through `git config`: running git to
     decide whether running git is safe is the bug this exists to close.
     Format is git's own, which configparser does not implement.
     """
-    raw = _read_git_config(cwd)
+    raw = _read_config_path(path)
     if raw is None:
         return None
     entries = {}
@@ -654,9 +770,22 @@ def parse_git_config(cwd: str):
             section = _section_name(stripped[1:-1].strip())
             continue
         key, separator, value = stripped.partition("=")
-        if separator:
-            entries[f"{section}.{key.strip().lower()}"] = value.strip()
+        if not separator:
+            parts = stripped.split(None, 1)
+            key = parts[0]
+            value = parts[1] if len(parts) > 1 else "true"
+        key = key.strip().lower()
+        if (not section or not key or not key[0].isalpha()
+                or not key.replace("-", "").isalnum()):
+            return None
+        entries[f"{section}.{key}"] = value.strip()
     return entries
+
+
+def parse_git_config(cwd: str):
+    """Return normalized entries from the repository config under `cwd`."""
+    path = os.path.join(cwd or ".", ".git", "config")
+    return _parse_git_config_path(path)
 
 
 def _exec_capable_key(entries: dict) -> str:
@@ -664,30 +793,533 @@ def _exec_capable_key(entries: dict) -> str:
     for name, value in entries.items():
         if name in EXEC_CAPABLE_KEYS and value.lower() not in ("", "false", "0"):
             return name
+        if name.startswith("pager.") and value.lower() not in ("", "false", "0"):
+            return name
+        if ((name.startswith("include.") or name.startswith("includeif."))
+                and name.endswith(".path") and value):
+            return name
         parts = name.split(".")
         if (len(parts) == GIT_CONFIG_SUBSECTION_PARTS
-                and parts[2] in EXEC_CAPABLE_SUBSECTIONS.get(parts[0], ())):
+                and parts[2] in EXEC_CAPABLE_SUBSECTIONS.get(parts[0], ())
+                and value.lower() not in ("", "false", "0")):
             return name
     return ""
 
 
-def repo_executes_on_read(cwd: str, cleared: set) -> tuple:
-    """Return (decision, reason) for a git read in a repo that runs programs.
+def _assignment_map(assignments: list) -> dict:
+    """Return leading environment assignments with last-value-wins order."""
+    values = {}
+    for name, value in assignments:
+        values[name] = value
+    return values
 
-    `cleared` holds keys the command already neutralized with -c key=, which
-    is the escape hatch: a caller who disables the knob is not gated on it.
-    """
-    entries = parse_git_config(cwd)
+
+def _parse_config_setting(setting: str):
+    """Return a normalized git config pair, or None when malformed."""
+    key, separator, value = setting.partition("=")
+    key = key.strip().lower()
+    if not separator or not key:
+        return None
+    return key, value
+
+
+def _apply_git_environment_locations(state: dict, environment: dict) -> str:
+    """Apply repository locations supplied through the environment."""
+    if not state["explicit_git_dir"] and "GIT_DIR" in environment:
+        value = environment["GIT_DIR"]
+        if not value or is_ambiguous(value):
+            return "GIT_DIR names an unresolved repository"
+        state["git_dir"] = os.path.realpath(os.path.join(state["cwd"], value))
+        state["explicit_git_dir"] = True
+        state["repository_override"] = True
+    if "GIT_COMMON_DIR" in environment:
+        value = environment["GIT_COMMON_DIR"]
+        if not value or is_ambiguous(value):
+            return "GIT_COMMON_DIR names an unresolved repository"
+        state["common_dir"] = os.path.realpath(os.path.join(state["cwd"], value))
+        state["repository_override"] = True
+    if not state["work_tree"] and "GIT_WORK_TREE" in environment:
+        value = environment["GIT_WORK_TREE"]
+        if not value or is_ambiguous(value):
+            return "GIT_WORK_TREE names an unresolved work tree"
+        state["work_tree"] = os.path.realpath(os.path.join(state["cwd"], value))
+        state["repository_override"] = True
+    return ""
+
+
+def _finalize_git_state(state: dict, environment: dict) -> tuple:
+    """Apply environment locations and return Git state or its error."""
+    reason = _apply_git_environment_locations(state, environment)
+    return (None, reason) if reason else (state, "")
+
+
+def _apply_git_config_argument(args: list, index: int,
+                               token: str, state: dict) -> tuple:
+    """Apply one -c setting and return its last argument index."""
+    setting = token[GIT_SHORT_OPTION_VALUE_INDEX:] if token != "-c" else ""
+    if token == "-c":
+        index += 1
+        setting = args[index] if index < len(args) else ""
+    parsed = _parse_config_setting(setting)
+    if parsed is None:
+        return index, "git -c has a missing or malformed setting"
+    state["settings"].append(parsed)
+    return index, ""
+
+
+def _apply_git_path_argument(args: list, index: int,
+                             token: str, state: dict) -> tuple:
+    """Apply one repository path option and return its last argument index."""
+    name, separator, attached = token.partition("=")
+    value = attached if separator else ""
+    if not separator:
+        index += 1
+        value = args[index] if index < len(args) else ""
+    if not value or is_ambiguous(value):
+        return index, f"git {name} has a missing or unresolved path"
+    resolved = os.path.realpath(os.path.join(state["cwd"], value))
+    if name == "-C":
+        state["cwd"] = resolved
+    elif name == "--git-dir":
+        state["git_dir"] = resolved
+        state["explicit_git_dir"] = True
+    else:
+        state["work_tree"] = resolved
+    state["repository_override"] = True
+    return index, ""
+
+
+def _apply_git_global_argument(args: list, index: int, state: dict) -> tuple:
+    """Apply one Git global argument and return its last index or an error."""
+    token = args[index]
+    name = token.partition("=")[0]
+    if (token == "-c" or token.startswith("-c")
+            and len(token) > GIT_SHORT_OPTION_VALUE_INDEX):
+        return _apply_git_config_argument(args, index, token, state)
+    if name in ("-C", "--git-dir", "--work-tree"):
+        return _apply_git_path_argument(args, index, token, state)
+    if name == "--config-env":
+        return index, "git --config-env cannot be inspected from command text"
+    return index, ""
+
+
+def _git_global_state(args: list, cwd: str, environment: dict = None) -> tuple:
+    """Return invocation settings and repository location, or an error."""
+    environment = environment or {}
+    state = {
+        "settings": [],
+        "cwd": os.path.realpath(cwd or "."),
+        "git_dir": "",
+        "common_dir": "",
+        "work_tree": "",
+        "explicit_git_dir": False,
+        "repository_override": False,
+    }
+    index = 0
+    while index < len(args) and args[index].startswith("-"):
+        index, reason = _apply_git_global_argument(args, index, state)
+        if reason:
+            return None, reason
+        index += 1
+    return _finalize_git_state(state, environment)
+
+
+def _read_gitdir_pointer(path: str, marker: str):
+    """Return a path stored in a small git administrative pointer file."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            raw = handle.read(MAX_REASON_VALUE).strip()
+    except FileNotFoundError:
+        return ""
+    except (OSError, UnicodeDecodeError):
+        return None
+    if marker:
+        name, separator, raw = raw.partition(":")
+        if name.strip().lower() != marker or not separator:
+            return None
+    return raw.strip() or None
+
+
+def _parent_repository_dir(current: str, device: int) -> tuple:
+    """Return the next parent on the same device, or an inspection error."""
+    parent = os.path.dirname(current)
+    if parent == current:
+        return "", ""
+    try:
+        parent_device = os.stat(parent).st_dev
+    except OSError:
+        return None, "a parent repository directory could not be inspected"
+    if parent_device != device:
+        return "", ""
+    return parent, ""
+
+
+def _discover_dot_git(cwd: str) -> tuple:
+    """Return the .git entry Git discovers upward, or an inspection error."""
+    current = os.path.realpath(cwd or ".")
+    try:
+        device = os.stat(current).st_dev
+    except OSError:
+        return None, "the repository search root could not be inspected"
+    for _depth in range(MAX_REPO_DISCOVERY_DEPTH):
+        dot_git = os.path.join(current, ".git")
+        try:
+            os.stat(dot_git)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            return None, "a parent repository entry could not be inspected"
+        else:
+            return dot_git, ""
+        parent, reason = _parent_repository_dir(current, device)
+        if parent is None:
+            return None, reason
+        if not parent:
+            return "", ""
+        current = parent
+    return None, "the parent repository search exceeded its depth limit"
+
+
+def _redirected_repo_config_paths(dot_git: str) -> tuple:
+    """Return config paths reached through a .git pointer file."""
+    value = _read_gitdir_pointer(dot_git, "gitdir")
+    if value is None:
+        return None, "the redirected repository config could not be resolved"
+    git_dir = os.path.realpath(os.path.join(os.path.dirname(dot_git), value))
+    common = _read_gitdir_pointer(os.path.join(git_dir, "commondir"), "")
+    if common is None:
+        return None, "the redirected repository common config could not be resolved"
+    if not common:
+        return [(os.path.join(git_dir, "config"), True)], ""
+    common_dir = os.path.realpath(os.path.join(git_dir, common))
+    return [
+        (os.path.join(common_dir, "config"), True),
+        (os.path.join(git_dir, "config"), False),
+        (os.path.join(git_dir, "config.worktree"), False),
+    ], ""
+
+
+def _repo_config_paths(state: dict) -> tuple:
+    """Return repository config paths with required-file markers."""
+    if state["common_dir"]:
+        paths = [(os.path.join(state["common_dir"], "config"), True)]
+        if state["git_dir"] and state["git_dir"] != state["common_dir"]:
+            paths.append((os.path.join(state["git_dir"], "config.worktree"), False))
+        return paths, ""
+    if state["explicit_git_dir"]:
+        return [(os.path.join(state["git_dir"], "config"), True)], ""
+    dot_git, reason = _discover_dot_git(state["cwd"])
+    if dot_git is None:
+        return None, reason
+    if not dot_git:
+        return [(os.path.join(state["cwd"], ".git", "config"), False)], ""
+    if not os.path.isfile(dot_git):
+        return [(os.path.join(dot_git, "config"), False)], ""
+    return _redirected_repo_config_paths(dot_git)
+
+
+def _environment_config(environment: dict) -> tuple:
+    """Return config settings supplied through GIT_CONFIG_COUNT."""
+    raw_count = environment.get("GIT_CONFIG_COUNT")
+    if raw_count is None:
+        return [], ""
+    try:
+        count = int(raw_count)
+    except ValueError:
+        return None, "GIT_CONFIG_COUNT is not a non-negative integer"
+    if count < 0 or count > MAX_GIT_CONFIG_COUNT:
+        return None, "GIT_CONFIG_COUNT is outside the inspectable range"
+    settings = []
+    for index in range(count):
+        key = environment.get(f"GIT_CONFIG_KEY_{index}")
+        value = environment.get(f"GIT_CONFIG_VALUE_{index}")
+        if key is None or value is None:
+            return None, "GIT_CONFIG_COUNT names an incomplete key/value vector"
+        parsed = _parse_config_setting(f"{key}={value}")
+        if parsed is None:
+            return None, "GIT_CONFIG_COUNT names a malformed setting"
+        settings.append(parsed)
+    return settings, ""
+
+
+CONFIG_PATH_ENV = (
+    "GIT_CONFIG", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_LOCAL", "GIT_CONFIG_WORKTREE",
+)
+
+
+def _read_invocation_configs(state: dict, environment: dict,
+                             assigned_names: set = None) -> tuple:
+    """Return merged file config entries or a fail-closed reason."""
+    assigned_names = assigned_names or set()
+    entries = {}
+    for variable in CONFIG_PATH_ENV:
+        path = environment.get(variable)
+        if path is None:
+            continue
+        if not path or is_ambiguous(path):
+            return None, f"{variable} names an uninspectable config path"
+        resolved = os.path.realpath(os.path.join(state["cwd"], path))
+        parsed = _parse_git_config_path(resolved)
+        if parsed is None or (variable in assigned_names and not os.path.isfile(resolved)):
+            return None, f"{variable} config could not be read"
+        entries.update(parsed)
+    repo_paths, reason = _repo_config_paths(state)
+    if repo_paths is None:
+        return None, reason
+    for repo_path, required in repo_paths:
+        parsed = _parse_git_config_path(repo_path)
+        if parsed is None or (required and not os.path.isfile(repo_path)):
+            return None, "the redirected repository config could not be read"
+        entries.update(parsed)
+    return entries, ""
+
+
+def _environment_exec_key(environment: dict) -> str:
+    """Return the first environment variable that makes a git read execute."""
+    pager = environment.get("GIT_PAGER")
+    if pager is None:
+        pager = environment.get("PAGER")
+        pager_name = "PAGER"
+    else:
+        pager_name = "GIT_PAGER"
+    if pager:
+        return pager_name
+    if environment.get("GIT_EXTERNAL_DIFF"):
+        return "GIT_EXTERNAL_DIFF"
+    return ""
+
+
+def is_relevant_git_environment(name: str) -> bool:
+    """Return True when a variable can alter inspected Git behavior."""
+    return (name in {
+        "GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_PAGER", "PAGER",
+        "GIT_EXTERNAL_DIFF", "GIT_CONFIG", "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_GLOBAL", "GIT_CONFIG_LOCAL", "GIT_CONFIG_WORKTREE",
+        "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL",
+    } or name.startswith("GIT_CONFIG_KEY_")
+        or name.startswith("GIT_CONFIG_VALUE_"))
+
+
+def _git_environment(assignments: list) -> dict:
+    """Return effective relevant environment values for one invocation."""
+    environment = {
+        name: value for name, value in os.environ.items()
+        if is_relevant_git_environment(name)
+    }
+    environment.update(_assignment_map(assignments))
+    return environment
+
+
+def _effective_git_entries(state: dict, environment: dict,
+                           assigned_names: set = None) -> tuple:
+    """Return merged config entries and ordered invocation settings."""
+    entries, reason = _read_invocation_configs(
+        state, environment, assigned_names)
     if entries is None:
-        return "ask", (".git/config could not be read, so the gate cannot "
-                       "tell whether this command runs a program")
-    remaining = {name: value for name, value in entries.items()
-                 if name not in cleared}
-    found = _exec_capable_key(remaining)
+        return None, None, reason
+    env_settings, reason = _environment_config(environment)
+    if env_settings is None:
+        return None, None, reason
+    settings = env_settings + state["settings"]
+    for key, value in settings:
+        entries[key] = value
+    return entries, settings, ""
+
+
+def git_read_verdict(args: list, cwd: str, assignments: list) -> tuple:
+    """Classify executable settings and config paths for one git read."""
+    environment = _git_environment(assignments)
+    if "GIT_CONFIG_PARAMETERS" in environment:
+        return "ask", "GIT_CONFIG_PARAMETERS cannot be inspected safely"
+    state, reason = _git_global_state(args, cwd, environment)
+    if state is None:
+        return "ask", reason
+    assigned_names = {name for name, _value in assignments}
+    entries, _, reason = _effective_git_entries(
+        state, environment, assigned_names)
+    if entries is None:
+        return "ask", reason
+    found = _environment_exec_key(environment) or _exec_capable_key(entries)
     if not found:
         return "", ""
-    return "ask", (f"a git read in a repository whose config sets {found}, "
-                   f"which names a program git runs")
+    return "ask", (f"a git read sets {found}, which names a program git runs")
+
+
+def _shell_alias_write_label(expansion: str, entries: dict,
+                             depth: int) -> tuple:
+    """Return a write label found inside a Git shell alias."""
+    try:
+        shell_tokens = shlex.split(expansion[1:])
+    except ValueError:
+        return "", "git shell alias could not be inspected"
+    for index, token in enumerate(shell_tokens):
+        if os.path.basename(token).lower().removesuffix(".exe") != "git":
+            continue
+        nested, nested_rest = git_subcommand(shell_tokens[index + 1:])
+        label, reason = _alias_write_label(
+            nested, nested_rest, entries, depth + 1)
+        if label or reason:
+            return label, reason
+        return "", "git shell alias may hide a Git write"
+    return "", "git shell alias may execute an uninspectable command"
+
+
+def _alias_write_label(subcommand: str, rest: list,
+                       entries: dict, depth: int = 0) -> tuple:
+    """Return a resolved write label and an alias-resolution error."""
+    if subcommand in ("commit", "push"):
+        return f"git {subcommand}", ""
+    expansion = entries.get(f"alias.{subcommand.lower()}", "")
+    if not expansion:
+        return "", ""
+    if depth >= MAX_GIT_ALIAS_DEPTH:
+        return "", "git alias expansion exceeds the inspection limit"
+    if expansion.startswith("!"):
+        return _shell_alias_write_label(expansion, entries, depth)
+    try:
+        expanded = shlex.split(expansion)
+    except ValueError:
+        return "", "git alias could not be inspected"
+    nested, nested_rest = git_subcommand(expanded + rest)
+    return _alias_write_label(nested, nested_rest, entries, depth + 1)
+
+
+def _git_write_context(state: dict, environment: dict, assignments: list,
+                       settings: list, resolution: tuple) -> dict:
+    """Return structured context for an effective Git write."""
+    label, error = resolution
+    return {
+        "label": label,
+        "error": error,
+        "cwd": state["cwd"],
+        "git_dir": state["git_dir"],
+        "common_dir": state["common_dir"],
+        "work_tree": state["work_tree"],
+        "repository_override": state["repository_override"],
+        "assignments": assignments,
+        "settings": settings,
+        "environment": environment,
+    }
+
+
+def _could_be_alias(subcommand: str) -> bool:
+    """Return True when an unknown subcommand may resolve through config."""
+    return bool(subcommand) and (
+        is_ambiguous(subcommand) or subcommand not in KNOWN_SUBCOMMANDS)
+
+
+def _ambiguous_git_context(state: dict, environment: dict,
+                           assignments: list, subcommand: str,
+                           reason: str) -> dict:
+    """Return a fail-closed context for an alias source we cannot inspect."""
+    label = f"git {sanitize(subcommand)}" if subcommand else "ambiguous git write"
+    return _git_write_context(
+        state, environment, assignments, [], (label, reason))
+
+
+def _fallback_git_state(cwd: str) -> dict:
+    """Return minimal state for a Git write whose globals were malformed."""
+    return {
+        "cwd": os.path.realpath(cwd or "."), "git_dir": "",
+        "common_dir": "", "work_tree": "", "repository_override": True,
+    }
+
+
+def _resolve_git_write_context(state: dict, environment: dict,
+                               assignments: list, subcommand: str,
+                               rest: list) -> dict:
+    """Resolve aliases and return context for a Git write."""
+    direct_label = f"git {subcommand}" if subcommand in ("commit", "push") else ""
+    assigned_names = {name for name, _value in assignments}
+    entries, settings, reason = _effective_git_entries(
+        state, environment, assigned_names)
+    if entries is None:
+        if direct_label or _could_be_alias(subcommand):
+            return _git_write_context(
+                state, environment, assignments, [],
+                (direct_label or f"git {sanitize(subcommand)}", reason))
+        return {}
+    if is_ambiguous(subcommand):
+        return _ambiguous_git_context(
+            state, environment, assignments, subcommand,
+            "git subcommand is nonliteral and cannot be resolved")
+    label, alias_error = _alias_write_label(subcommand, rest, entries)
+    if not label and not alias_error:
+        return {}
+    return _git_write_context(
+        state, environment, assignments, settings,
+        (label or f"git {sanitize(subcommand)}", alias_error))
+
+
+def git_write_context(args: list, cwd: str, assignments: list) -> dict:
+    """Return effective context for a Git commit or push, including aliases."""
+    subcommand, rest = git_subcommand(args)
+    direct_label = f"git {subcommand}" if subcommand in ("commit", "push") else ""
+    environment = _git_environment(assignments)
+    state, reason = _git_global_state(args, cwd, environment)
+    if state is None:
+        if direct_label or _could_be_alias(subcommand):
+            return _ambiguous_git_context(
+                _fallback_git_state(cwd), environment, assignments,
+                subcommand, reason)
+        return {}
+    if "GIT_CONFIG_PARAMETERS" in environment:
+        if direct_label or _could_be_alias(subcommand):
+            return _ambiguous_git_context(
+                state, environment, assignments, subcommand,
+                "GIT_CONFIG_PARAMETERS cannot be inspected safely")
+        return {}
+    return _resolve_git_write_context(
+        state, environment, assignments, subcommand, rest)
+
+
+def git_checker_environment(context: dict) -> dict:
+    """Return a constrained child environment matching a Git invocation."""
+    environment = dict(os.environ)
+    for name, value in context.get("assignments", []):
+        if is_relevant_git_environment(name):
+            environment[name] = value
+    locations = {
+        "GIT_DIR": context.get("git_dir", ""),
+        "GIT_COMMON_DIR": context.get("common_dir", ""),
+        "GIT_WORK_TREE": context.get("work_tree", ""),
+    }
+    for name, value in locations.items():
+        if value:
+            environment[name] = value
+    settings = context.get("settings", [])
+    if settings:
+        for name in list(environment):
+            if (name == "GIT_CONFIG_COUNT" or name.startswith("GIT_CONFIG_KEY_")
+                    or name.startswith("GIT_CONFIG_VALUE_")):
+                environment.pop(name)
+        environment["GIT_CONFIG_COUNT"] = str(len(settings))
+        for index, (key, value) in enumerate(settings):
+            environment[f"GIT_CONFIG_KEY_{index}"] = key
+            environment[f"GIT_CONFIG_VALUE_{index}"] = value
+    return environment
+
+
+def environment_assignment_verdict(program: str, args: list) -> tuple:
+    """Gate persistent shell assignment of variables that alter Git reads."""
+    name = os.path.basename(program).lower()
+    exports = name == "export"
+    if name in ("declare", "typeset"):
+        exports = any(
+            token == "--export" or (is_short_group(token) and "x" in token)
+            for token in args)
+    if not exports:
+        return "", ""
+    for token in args:
+        if token.startswith("-"):
+            continue
+        name = token.split("=", 1)[0]
+        if is_relevant_git_environment(name):
+            return "ask", (f"exporting {sanitize(name)} changes how a later "
+                           "git read resolves or executes programs")
+    return "", ""
 
 
 def resolve_alias(cwd: str, subcommand: str) -> str:

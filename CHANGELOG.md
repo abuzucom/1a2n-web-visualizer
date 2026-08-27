@@ -26,11 +26,11 @@ All notable changes to this project are documented here. Format loosely follows
   starts, which is the stdlib way to reach them. The gate fails both when a
   function gains unreached statements and when the baseline goes stale,
   since a recorded limit nobody maintains stops being a limit.
-- The baseline is per repository, and this one records 66 unreached
-  statements where the template records 61. This repo declined
-  `test_enforce_branch_name.py` and `test_enforce_git_identity.py`, which
-  upstream drive `_gate_core.resolved_under` and `_gate_core.sanitize`.
-  `docs/template-drift.md` records it.
+- The baseline is per repository, and this one records 211 unreached
+  statements across 64 functions where the template records 118 across 59.
+  This repo declined `test_enforce_branch_name.py` and
+  `test_enforce_git_identity.py`, which exercise the template's Git write
+  context paths. `docs/template-drift.md` records it.
 - Covered the digest-bound form of `AGENTS_CONSENT_GRANTED`, which no test
   had ever run. The bare `path` grant was covered; `path@sha256:<digest>`
   was not, so the binding the gate's docstring promises had never been
@@ -121,6 +121,9 @@ All notable changes to this project are documented here. Format loosely follows
   rather than throwing when demo mode is off.
 
 ### Fixed
+- Removed the replayable `AGENTS_CONSENT_GRANTED` grant override. Fixed Bash
+  brace and command-substitution parsing, PowerShell backtick and encoded-command
+  handling, Git config execution detection, and hard-link scan failures.
 - Fixed the watchdog reporting a lost audio input, and reconnecting to a device
   when armed, on a page that never opened a stream. `visualizer-core.js` passed
   a `handleLostInput` option that `audio-watchdog.js` does not read; the option
@@ -162,6 +165,9 @@ All notable changes to this project are documented here. Format loosely follows
   is not an exception to the pushed-history rule.
 
 ### Changed
+- Split the newly mirrored Git option, repository-config, alias, and nested
+  interpreter parsing into focused helpers so all shared gate files pass this
+  repository's strict ruff rules without changing decisions.
 - Removed `find_reason` and `find_consent_reason` from the Bash gate. Both
   were defined and called by nothing, here or upstream.
 - Closed three false positives in `check_ascii.py` and `lint_style.py`.

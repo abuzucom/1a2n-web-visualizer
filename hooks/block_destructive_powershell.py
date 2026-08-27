@@ -23,8 +23,10 @@ PowerShell parameters may be abbreviated to any unambiguous prefix, so
 case-insensitive. Matching the full spelling alone would read
 `Remove-Item -r` as non-recursive.
 
-Still a heuristic, not a sandbox. A command behind a function, a module, or a
-variable holding a cmdlet name is invisible to it.
+Still a heuristic, not a sandbox or authorization boundary. A command behind a
+function, a module, or a variable holding a cmdlet name is invisible.
+Repository writers can alter this hook or its settings. Tamper resistance
+requires controls outside the writable repository.
 """
 import json
 import os
@@ -38,7 +40,8 @@ GATE = "block_destructive_powershell.py"
 
 try:
     import _gate_core as core
-except ImportError as error:  # pragma: no cover - exercised by the adoption test
+except ImportError as error:  # pragma: no cover
+    # The adoption test exercises this import failure.
     # Fail closed. Claude Code treats any non-zero exit other than 2 as a
     # non-blocking error, so an unhandled ImportError would wave the command
     # through in exactly the repos that installed this gate.
@@ -53,7 +56,10 @@ except ImportError as error:  # pragma: no cover - exercised by the adoption tes
     sys.exit(2)
 
 GATED_KEYWORDS = core.gated_keywords() + tuple(core.DELETE_PROGRAMS)
-SEPARATORS = frozenset({";", "|", "&&", "||", "\n"})
+# A subexpression puts a command where an argument goes, the mirror of
+# the Bash gate's brace group. Reading Write-Output as the program sees
+# no delete at all, so the parentheses end a statement.
+SEPARATORS = frozenset({";", "|", "&&", "||", "(", ")", "\n"})
 # The call operator and the cmdlets that run a command given to them.
 WRAPPERS = frozenset({"&", "start-process", "invoke-expression", "iex",
                       "invoke-command", "sudo"})
@@ -70,7 +76,7 @@ ARGUMENT_LIST_FLAGS = frozenset(
     [f"-{'argumentlist'[:n]}" for n in range(1, 13)] + ["-args"])
 FILE_PATH_FLAGS = frozenset(f"-{'filepath'[:n]}" for n in range(2, 9))
 SCRIPT_BLOCK_DELIMITERS = "{}"
-MAX_WRAPPER_DEPTH = 4
+MAX_WRAPPER_DEPTH = core.MAX_COMMAND_DEPTH
 
 
 def _tokenize(command: str):
@@ -119,18 +125,22 @@ def _argument_list_verdict(program: str, rest: list, depth: int) -> tuple:
     nested = _tokenize(rest[0])
     if nested is None:
         return core.unparseable_verdict(rest[0].lower(), GATED_KEYWORDS)
+    if depth >= core.MAX_COMMAND_DEPTH:
+        return "deny", "shell command nesting exceeds the inspection limit"
     return _interpreter_verdict(program, nested, depth + 1)
 
 
-def _payload_verdict(flag: str, rest: list) -> tuple:
+def _payload_verdict(flag: str, rest: list, depth: int) -> tuple:
     """Return the verdict for a command string handed to an interpreter."""
     if not rest:
         return "", ""
+    if depth >= core.MAX_COMMAND_DEPTH:
+        return "deny", "shell command nesting exceeds the inspection limit"
     # cmd takes the remainder of the line; PowerShell takes one string
     # after -Command.
     if flag.startswith("/"):
-        return classify(" ".join(rest))
-    return classify(rest[0])
+        return classify(" ".join(rest), depth + 1)
+    return classify(rest[0], depth + 1)
 
 
 def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
@@ -138,17 +148,22 @@ def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
 
     `depth` bounds the re-entry below, which follows one interpreter into
     the arguments another handed it. A hostile command can nest launches
-    without limit; the gate reads a fixed number and then gives up, which
-    the unparseable path turns into a prompt rather than a pass.
+    without limit; the gate reads a fixed number and then denies.
     """
     if depth >= MAX_WRAPPER_DEPTH:
-        return "", ""
+        return "deny", "shell command nesting exceeds the inspection limit"
+    if program.lower() in core.POWERSHELL_PROGRAMS:
+        kind, value = core.powershell_payload(args)
+        if kind == "deny":
+            return "deny", value
+        if kind == "command":
+            return classify(value, depth + 1)
     for index, token in enumerate(args):
         lowered = token.lower()
         if lowered in ARGUMENT_LIST_FLAGS:
             return _argument_list_verdict(program, args[index + 1:], depth)
         if lowered in INTERPRETER_PAYLOAD_FLAGS:
-            return _payload_verdict(lowered, args[index + 1:])
+            return _payload_verdict(lowered, args[index + 1:], depth)
     return "", ""
 
 
@@ -171,21 +186,55 @@ def _strip_wrappers(tokens: list) -> list:
             if token.strip(SCRIPT_BLOCK_DELIMITERS)]
 
 
-def _statement_verdict(tokens: list) -> tuple:
+def _statement_verdict(tokens: list, depth: int) -> tuple:
     """Return (decision, reason) for one PowerShell statement."""
     privileged = core.privilege_verdict(tokens)
+    environment = _environment_assignment_verdict(tokens)
     redirects = _redirect_targets(tokens)
-    return core.strongest(privileged, _program_verdict(tokens, redirects))
+    return core.strongest(
+        environment,
+        core.strongest(privileged, _program_verdict(tokens, redirects, depth)))
 
 
-def _named_program_verdict(program: str, args: list) -> tuple:
+def _environment_assignment_verdict(tokens: list) -> tuple:
+    """Gate persistent assignments that can make a later Git read execute."""
+    joined = "".join(tokens)
+    name = ""
+    if "=" in joined:
+        name = _environment_reference_name(joined.split("=", 1)[0])
+    program = os.path.basename(tokens[0]).lower() if tokens else ""
+    if not name and program in ("set-item", "si", "set-variable", "sv"):
+        for token in tokens[1:]:
+            name = _environment_reference_name(token)
+            if name:
+                break
+    if not core.is_relevant_git_environment(name):
+        return "", ""
+    return "ask", (f"assigning $env:{core.sanitize(name)} changes how a later "
+                   "git read resolves or executes programs")
+
+
+def _environment_reference_name(value: str) -> str:
+    """Return an environment provider variable name from PowerShell syntax."""
+    candidate = value.strip().strip('"').strip("'")
+    lowered = candidate.lower()
+    if lowered.startswith("${env:") and "}" in candidate:
+        return candidate[6:candidate.index("}")].lstrip("\\/").upper()
+    if lowered.startswith("$env:"):
+        return candidate[5:].lstrip("\\/").upper()
+    if lowered.startswith("env:"):
+        return candidate[4:].lstrip("\\/").upper()
+    return ""
+
+
+def _named_program_verdict(program: str, args: list, depth: int) -> tuple:
     """Return the verdict for a cmdlet read by name, or None.
 
     None means the name is not one of the three the gate reads whole, so
     the caller runs it past every other check instead.
     """
     if program in INTERPRETERS:
-        return _interpreter_verdict(program, args)
+        return _interpreter_verdict(program, args, depth)
     if program in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(program, args)
     if program == "git":
@@ -193,19 +242,21 @@ def _named_program_verdict(program: str, args: list) -> tuple:
     return None
 
 
-def _program_verdict(tokens: list, redirects: list) -> tuple:
+def _program_verdict(tokens: list, redirects: list, depth: int) -> tuple:
     """Return (decision, reason) for the cmdlet this statement runs."""
     stripped = _strip_wrappers(tokens)
     if len(stripped) < len(tokens) and len(stripped) == 1 and " " in stripped[0]:
         # Invoke-Expression and the call operator take a command as one
         # string. Reading it as a program name sees the whole statement.
-        return classify(stripped[0])
+        if depth >= core.MAX_COMMAND_DEPTH:
+            return "deny", "PowerShell command nesting exceeds the inspection limit"
+        return classify(stripped[0], depth + 1)
     tokens = [token for token in stripped if token not in REDIRECTIONS]
     if not tokens:
         return core.test_write_verdict("", [], redirects)
     program = os.path.basename(tokens[0]).lower()
     args = tokens[1:]
-    named = _named_program_verdict(program, args)
+    named = _named_program_verdict(program, args, depth)
     if named is not None:
         return named
     for verdict in (core.destruction_verdict(program, args),
@@ -217,6 +268,8 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
                     core.forge_verdict(program, args),
                     core.filesystem_repair_verdict(program, args),
                     core.profile_verdict(program, args, redirects),
+                    core.protected_write_verdict(
+                        program, args, redirects, _CWD[0]),
                     core.cmd_delete_verdict(program, args),
                     core.test_write_verdict(program, args, redirects)):
         if verdict[0]:
@@ -224,7 +277,7 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
     return "", ""
 
 
-def classify(command) -> tuple:
+def classify(command, depth: int = 0) -> tuple:
     """Return the strongest (decision, reason) across the command's statements."""
     if not isinstance(command, str):
         return "ask", "the command is not a string, so the gate cannot read it"
@@ -237,7 +290,8 @@ def classify(command) -> tuple:
         verdict = core.strongest(
             verdict, core.remote_execution_verdict(segments))
         for segment in segments:
-            verdict = core.strongest(verdict, _statement_verdict(segment))
+            verdict = core.strongest(
+                verdict, _statement_verdict(segment, depth))
     return verdict
 
 
@@ -257,7 +311,6 @@ def main() -> int:
     if command is None:
         return core.emit(GATE, "deny", "the command field is not a string, so "
                                        "the gate cannot read it")
-    _CWD[0] = core.project_dir(payload)
     decision, reason = classify(command)
     if not decision:
         return 0

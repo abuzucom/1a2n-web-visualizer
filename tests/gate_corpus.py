@@ -45,6 +45,17 @@ BASH_CASES = (
     ("true\nrm -rf /tmp/x", ASK, "a newline separates statements"),
     ("true; rm -rf /tmp/x", ASK, "so does a semicolon"),
     ("true && rm -rf /tmp/x", ASK, "and a conditional"),
+    ("{ rm -rf /tmp/x; }", ASK,
+     "a brace group puts a command where a program name goes, so every"
+     " verdict read the program as { and cleared the delete"),
+    ("{ git push --force; }", ASK, "the same group hiding a history rewrite"),
+    ("{ cp /tmp/evil hooks/_gate_core.py; }", ASK,
+     "and hiding a write to the gate deciding all of this"),
+    ("echo `rm -rf /tmp/x`", ASK,
+     "backtick substitution glued the command into argument tokens, so the"
+     " program read as echo; the PowerShell gate caught its own"
+     " & { ... } form while this one stayed open"),
+    ("` rm -rf /tmp/x `", ASK, "the same substitution standing alone"),
 
     # Spellings of one act.
     ("rm -Rf /tmp/x", ASK, "case varies within a flag cluster"),
@@ -112,6 +123,12 @@ BASH_CASES = (
      "the merged-only delete; case carries the meaning and is not folded"),
     ("echo 'rm -rf / is a string'", ALLOW, "a quoted argument is not a command"),
     ("grep -r 'dd if=' .", ALLOW, "searching for a destructive string is not running it"),
+    ("echo {a,b}.txt", ALLOW,
+     "brace expansion arrives as one token; reading { as a separator must"
+     " not swallow it"),
+    ("tar -czf x.tgz {src,doc}", ALLOW, "the same expansion as an operand"),
+    ("git commit -m 'fix: a {brace} here'", ALLOW, "a brace inside a quoted argument"),
+    ('echo "a `date` b"', ALLOW, "a backtick inside quotes stays inside them"),
 )
 
 # (command, expected verdict, why this row exists)

@@ -10,6 +10,7 @@ An `ask` routes the decision to the human through the permission prompt,
 which is the only consent AGENTS.md recognizes for Rule 2 and for rewriting
 pushed history.
 """
+import importlib.util
 import json
 import os
 import ntpath
@@ -26,6 +27,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = REPO_ROOT / "hooks" / "block_destructive_bash.py"
+CORE_PATH = REPO_ROOT / "hooks" / "_gate_core.py"
 BLOCKING_EXIT_CODE = 2
 
 
@@ -48,6 +50,14 @@ def run_hook(command: str, permission_mode: str = "default") -> tuple:
     if result.stdout.strip():
         decision = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"]
     return result.returncode, decision
+
+
+def load_core_module(name: str):
+    """Load a distinct shared-core module for direct filesystem tests."""
+    spec = importlib.util.spec_from_file_location(name, CORE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class DenyTest(unittest.TestCase):
@@ -407,6 +417,13 @@ class InterpreterWrapperTest(unittest.TestCase):
                 _, decision = run_hook(command)
                 self.assertEqual(decision, "")
 
+    def test_encoded_powershell_payload_is_classified(self):
+        import base64
+        command = "Remove-Item -Recurse -Force /etc"
+        payload = base64.b64encode(command.encode("utf-16le")).decode("ascii")
+        _, decision = run_hook(f"powershell -enc {payload}")
+        self.assertEqual(decision, "deny")
+
 
 class CmdVerbTest(unittest.TestCase):
     """CMD reaches this gate nested inside a shell, so its verbs count."""
@@ -451,6 +468,20 @@ class BashWriteToTestTest(unittest.TestCase):
                 _, decision = run_hook(command)
                 self.assertEqual(decision, expected)
 
+    def test_known_shell_writes_to_gate_paths_ask(self):
+        commands = (
+            "echo x > hooks/new.py",
+            "echo x >> .claude/settings.json",
+            "tee hooks/new.py",
+            "sed -i 's/a/b/' .claude/settings.json",
+            "cp source.py hooks/new.py",
+            "mv source.py .claude/new.json",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                _, decision = run_hook(command)
+                self.assertEqual(decision, "ask")
+
 
 def _repo_with_config(directory: str, body: str) -> None:
     """Write a .git/config carrying `body` under a fresh repo directory."""
@@ -489,6 +520,13 @@ class RepoExecutesOnReadTest(unittest.TestCase):
         ('[core]\n\tsshCommand = /tmp/evil\n', "git log"),
         ('[diff "x"]\n\ttextconv = /tmp/evil\n', "git show HEAD"),
         ('[core]\n\thooksPath = /tmp/evil\n', "git blame f"),
+        ('[core]\n\tpager = /tmp/evil\n', "git status"),
+        ('[pager]\n\tshow = /tmp/evil\n', "git show HEAD"),
+        ('[diff "x"]\n\tcommand = /tmp/evil\n', "git diff"),
+        ('[filter "x"]\n\tsmudge = /tmp/evil\n', "git status"),
+        ('[filter "x"]\n\tprocess = /tmp/evil\n', "git status"),
+        ('[gpg]\n\tprogram = /tmp/evil\n', "git log"),
+        ('[log]\n\tshowSignature\n', "git log"),
     )
 
     def setUp(self):
@@ -530,6 +568,154 @@ class RepoExecutesOnReadTest(unittest.TestCase):
         _, decision = run_hook_in("git -c diff.external= diff", self.tmp.name)
         self.assertEqual(decision, "")
 
+    def test_inline_exec_settings_and_last_value_win(self):
+        _repo_with_config(self.tmp.name, '[core]\n\tbare = false\n')
+        cases = (
+            ("git -c core.pager=/tmp/evil status", "ask"),
+            ("git -ccore.pager=/tmp/evil status", "ask"),
+            ("git -c core.pager=/tmp/evil -c core.pager= status", ""),
+            ("git -c core.pager= -c core.pager=/tmp/evil status", "ask"),
+            ("git -c pager.diff=/tmp/evil diff", "ask"),
+            ("git -c diff.x.textconv=/tmp/evil show HEAD", "ask"),
+            ("git -c filter.x.clean=/tmp/evil status", "ask"),
+            ("git -c gpg.program=/tmp/evil log", "ask"),
+            ("git -c log.showSignature=true log", "ask"),
+            ("git -c status", "ask"),
+        )
+        for command, expected in cases:
+            with self.subTest(command=command):
+                _, decision = run_hook_in(command, self.tmp.name)
+                self.assertEqual(decision, expected)
+
+    def test_leading_environment_exec_settings_gate_reads(self):
+        _repo_with_config(self.tmp.name, '[core]\n\tbare = false\n')
+        commands = (
+            "GIT_PAGER=/tmp/evil git status",
+            "PAGER=/tmp/evil git log",
+            "GIT_EXTERNAL_DIFF=/tmp/evil git diff",
+            "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager "
+            "GIT_CONFIG_VALUE_0=/tmp/evil git status",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                _, decision = run_hook_in(command, self.tmp.name)
+                self.assertEqual(decision, "ask")
+
+    def test_environment_config_vector_uses_last_value(self):
+        _repo_with_config(self.tmp.name, '[core]\n\tbare = false\n')
+        cleared_last = (
+            "GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.pager "
+            "GIT_CONFIG_VALUE_0=/tmp/evil GIT_CONFIG_KEY_1=core.pager "
+            "GIT_CONFIG_VALUE_1= git status"
+        )
+        executable_last = (
+            "GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.pager "
+            "GIT_CONFIG_VALUE_0= GIT_CONFIG_KEY_1=core.pager "
+            "GIT_CONFIG_VALUE_1=/tmp/evil git status"
+        )
+        self.assertEqual(run_hook_in(cleared_last, self.tmp.name)[1], "")
+        self.assertEqual(run_hook_in(executable_last, self.tmp.name)[1], "ask")
+
+    def test_malformed_environment_config_vector_fails_closed(self):
+        _repo_with_config(self.tmp.name, '[core]\n\tbare = false\n')
+        for command in (
+                "GIT_CONFIG_COUNT=x git status",
+                "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager git status"):
+            with self.subTest(command=command):
+                _, decision = run_hook_in(command, self.tmp.name)
+                self.assertEqual(decision, "ask")
+
+    def test_config_path_and_repository_location_globals_are_inspected(self):
+        root = Path(self.tmp.name)
+        redirected = root / "redirected.config"
+        redirected.write_text('[core]\n\tpager = /tmp/evil\n', encoding="utf-8")
+        child = root / "child"
+        _repo_with_config(str(child), '[diff]\n\texternal = /tmp/evil\n')
+        bare = root / "bare.git"
+        bare.mkdir()
+        (bare / "config").write_text(
+            '[filter "x"]\n\tprocess = /tmp/evil\n', encoding="utf-8")
+        commands = (
+            f"GIT_CONFIG_GLOBAL={redirected} git status",
+            "git -C child status",
+            "git --git-dir=bare.git status",
+            "git --git-dir bare.git --work-tree child status",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                _, decision = run_hook_in(command, self.tmp.name)
+                self.assertEqual(decision, "ask")
+
+    def test_git_directory_environment_is_inspected(self):
+        root = Path(self.tmp.name)
+        git_dir = root / "work.git"
+        git_dir.mkdir()
+        (git_dir / "config").write_text(
+            '[core]\n\tpager = /tmp/evil\n', encoding="utf-8")
+        common = root / "common"
+        common.mkdir()
+        (common / "config").write_text(
+            '[diff]\n\texternal = /tmp/evil\n', encoding="utf-8")
+        commands = (
+            "GIT_DIR=work.git git status",
+            "GIT_DIR=work.git GIT_COMMON_DIR=common git diff",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(run_hook_in(command, self.tmp.name)[1], "ask")
+
+    def test_git_config_parameters_fails_closed(self):
+        _repo_with_config(self.tmp.name, '[core]\n\tbare = false\n')
+        command = "GIT_CONFIG_PARAMETERS='core.pager=/tmp/evil' git status"
+        self.assertEqual(run_hook_in(command, self.tmp.name)[1], "ask")
+
+    def test_exported_git_execution_environment_is_gated(self):
+        _repo_with_config(self.tmp.name, '[core]\n\tbare = false\n')
+        commands = (
+            "export GIT_PAGER=/tmp/evil; git status",
+            "export GIT_EXTERNAL_DIFF=/tmp/evil; git diff",
+            "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager "
+            "GIT_CONFIG_VALUE_0=/tmp/evil; git status",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(run_hook_in(command, self.tmp.name)[1], "ask")
+
+    def test_export_declaration_forms_are_gated(self):
+        _repo_with_config(self.tmp.name, '[core]\n\tbare = false\n')
+        commands = (
+            "declare -x GIT_PAGER=/tmp/evil; git status",
+            "typeset -x GIT_EXTERNAL_DIFF=/tmp/evil; git diff",
+            "export GIT_CONFIG_GLOBAL=/tmp/evil; git status",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(run_hook_in(command, self.tmp.name)[1], "ask")
+
+    def test_parent_repository_config_is_discovered_after_c(self):
+        _repo_with_config(self.tmp.name, '[diff]\n\texternal = /tmp/evil\n')
+        child = Path(self.tmp.name) / "nested" / "child"
+        child.mkdir(parents=True)
+        self.assertEqual(
+            run_hook_in("git -C nested/child diff", self.tmp.name)[1], "ask")
+
+    def test_parent_gitfile_target_is_relative_to_the_gitfile(self):
+        root = Path(self.tmp.name)
+        admin = root / "admin"
+        admin.mkdir()
+        (admin / "config").write_text(
+            '[core]\n\tbare = false\n', encoding="utf-8")
+        (root / ".git").write_text("gitdir: admin\n", encoding="utf-8")
+        child = root / "nested" / "child"
+        child.mkdir(parents=True)
+        self.assertEqual(
+            run_hook_in("git -C nested/child status", self.tmp.name)[1], "")
+
+    def test_uninspectable_redirected_repo_config_fails_closed(self):
+        _, decision = run_hook_in(
+            "git --git-dir=missing/../unknown.git status", self.tmp.name)
+        self.assertEqual(decision, "ask")
+
     def test_unreadable_config_fails_closed(self):
         git_dir = Path(self.tmp.name) / ".git"
         git_dir.mkdir(parents=True, exist_ok=True)
@@ -541,6 +727,70 @@ class RepoExecutesOnReadTest(unittest.TestCase):
         _repo_with_config(self.tmp.name, '[diff]\n\texternal = /tmp/evil\n')
         _, decision = run_hook_in("git push origin feat/x", self.tmp.name)
         self.assertEqual(decision, "")
+
+
+class GitConfigPathTest(unittest.TestCase):
+    """Repository indirection is inspected without invoking Git."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.core = load_core_module("gate_core_config_paths")
+
+    @staticmethod
+    def make_state(cwd: Path) -> dict:
+        """Return the repository-location state used by the shared core."""
+        return {
+            "common_dir": "",
+            "git_dir": "",
+            "explicit_git_dir": False,
+            "cwd": str(cwd),
+        }
+
+    def test_missing_repository_search_root_reports_inspection_failure(self):
+        paths, reason = self.core._repo_config_paths(
+            self.make_state(self.root / "missing"))
+        self.assertIsNone(paths)
+        self.assertEqual(
+            reason, "the repository search root could not be inspected")
+
+    def test_malformed_gitfile_reports_resolution_failure(self):
+        (self.root / ".git").write_text("not a gitdir pointer\n", encoding="utf-8")
+        paths, reason = self.core._repo_config_paths(self.make_state(self.root))
+        self.assertIsNone(paths)
+        self.assertEqual(
+            reason, "the redirected repository config could not be resolved")
+
+    def test_empty_commondir_reports_resolution_failure(self):
+        git_dir = self.root / "admin"
+        git_dir.mkdir()
+        (self.root / ".git").write_text("gitdir: admin\n", encoding="utf-8")
+        (git_dir / "commondir").write_text("", encoding="utf-8")
+        paths, reason = self.core._repo_config_paths(self.make_state(self.root))
+        self.assertIsNone(paths)
+        self.assertEqual(
+            reason, "the redirected repository common config could not be resolved")
+
+    def test_valid_commondir_returns_common_and_worktree_configs(self):
+        common_dir = self.root / "admin"
+        git_dir = common_dir / "worktrees" / "one"
+        git_dir.mkdir(parents=True)
+        (self.root / ".git").write_text(
+            "gitdir: admin/worktrees/one\n", encoding="utf-8")
+        (git_dir / "commondir").write_text("../..\n", encoding="utf-8")
+        paths, reason = self.core._repo_config_paths(self.make_state(self.root))
+        self.assertEqual(reason, "")
+        canonical_common = os.path.realpath(common_dir)
+        canonical_git = os.path.realpath(git_dir)
+        self.assertEqual(paths, [
+            (os.path.join(canonical_common, "config"), True),
+            (os.path.join(canonical_git, "config"), False),
+            (os.path.join(canonical_git, "config.worktree"), False),
+        ])
+
+    def test_resolve_alias_without_config_returns_empty(self):
+        self.assertEqual(self.core.resolve_alias(str(self.root), "ship"), "")
 
 
 class GitAliasTest(unittest.TestCase):

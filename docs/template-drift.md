@@ -13,10 +13,11 @@ of what this repository took versus declined. This file does not restate
 either.
 
 One part of this is mechanical. `scripts/sync.py --check-shared` compares the
-seven files carrying gate decisions against `shared-files.json`, a manifest of
-SHA-256 digests committed in both repositories, and it runs in CI here. A gate
-fix landing upstream and not here fails this repository's check on the next
-run.
+eight files carrying gate decisions against `shared-files.json`, a manifest of
+SHA-256 digests committed in both repositories, and it runs in CI here. The
+Bash parser is manifest-covered because parsing determines which commands
+reach those decisions. A gate fix landing upstream and not here fails this
+repository's check on the next run.
 
 Everything below that manifest is a convention. Nothing verifies it.
 
@@ -49,7 +50,12 @@ It is not: it follows from a declined file.
 
 ### `hook-coverage-baseline.json`
 
-Per repo by nature, not drift. The baseline records what the suite leaves unrun in `hooks/`, and this repository declined `tests/test_enforce_branch_name.py` and `tests/test_enforce_git_identity.py`, which upstream drive `_gate_core.resolved_under` and `_gate_core.sanitize`. Its baseline therefore records 66 unreached statements where the template records 61. A shared baseline would be wrong in both.
+Per repo by nature, not drift. The baseline records what the suite leaves unrun
+in `hooks/`, and this repository declined `tests/test_enforce_branch_name.py`
+and `tests/test_enforce_git_identity.py`, which exercise the template's Git
+write context paths. Its baseline therefore records 211 unreached statements
+across 64 functions where the template records 118 across 59. A shared
+baseline would be wrong in both.
 
 Both baselines are measured in CI, and the tool refuses to write one as root: a mode 000 file is readable for root, so the two `OSError` branches a permission denial takes never fire in a root shell.
 

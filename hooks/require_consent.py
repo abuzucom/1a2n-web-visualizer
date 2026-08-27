@@ -38,17 +38,9 @@ its canonical target, and, when the file has more than one link, the inodes
 of the project's test tree: `realpath` resolves a symlink but a hard link has
 no target to resolve.
 
-For headless runs a human sets AGENTS_CONSENT_GRANTED at launch to a
-comma-separated list of paths the gate may release, each bound to the
-content the file held when the grant was written (`path@sha256:<digest>`).
-A bare path is accepted and releases only the current content.
-
-The variable is not reachable from Bash tool calls, which do not persist
-shell state. It is not a security boundary against a party who can edit this
-hook or `.claude/settings.json`: whoever writes those before the hook runs
-decides what it does. This gate raises the cost of the casual path. Closing
-it needs a server-side check on those paths, which an adopting repo supplies
-and this template does not.
+Unattended modes deny every gated act. Repository-controlled hooks are
+best-effort prompts for compliant workflows, not an authorization boundary.
+Repository writers can alter this hook or its settings before it runs.
 
 A Bash call can also write a test file, through a redirect, a
 here-document, `tee`, `sed -i`, `cp`, or `mv`, where no Edit or Write
@@ -56,7 +48,6 @@ matcher sees it. hooks/block_destructive_bash.py routes those to the same
 decision, using the classifier both gates share in _gate_core.py. A write
 through a program neither gate knows still passes.
 """
-import hashlib
 import json
 import os
 import sys
@@ -84,7 +75,6 @@ except ImportError as error:  # pragma: no cover - exercised by the adoption tes
 GATED_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 PATH_KEYS = ("file_path", "notebook_path")
 PROTECTED_PARTS = ("hooks", ".claude")
-OVERRIDE_ENV = "AGENTS_CONSENT_GRANTED"
 SKIP_WALK_DIRS = frozenset({".git", "node_modules", ".venv", "__pycache__"})
 MAX_INODE_WALK = 20000
 
@@ -96,6 +86,10 @@ file is not gated, so the test-first workflow keeps its exemption where it is
 verifiable. Destructive and history rewriting Bash commands route the same way
 (Rule 2). Writes to hooks/ and .claude/ route the same way, because they
 decide whether these gates run at all.
+
+These repository-controlled hooks are best-effort prompts for compliant
+workflows, not an authorization boundary. Repository writers can alter them or
+their settings. Tamper resistance requires controls outside this repository.
 
 Approval of a plan is not authorization for the individual acts inside it.
 
@@ -144,23 +138,29 @@ def reaches_a_test_inode(target: str, project_dir: str) -> bool:
 
     Only files with more than one link are walked, so the ordinary case
     costs one stat. A test file outside the scanned tree is not matched,
-    and a tree larger than MAX_INODE_WALK entries stops early: the hook
-    budget is finite and a gate that times out fails open.
+    and a tree larger than MAX_INODE_WALK entries stops early. An incomplete
+    scan returns None so the caller gates the write conservatively.
     """
     try:
         target_stat = os.stat(target)
     except OSError:
-        return False
+        return None
     if target_stat.st_nlink <= 1:
         return False
 
     seen = 0
-    for current, dirnames, filenames in os.walk(os.path.realpath(project_dir)):
+    traversal_failed = [False]
+
+    def record_walk_error(_error) -> None:
+        traversal_failed[0] = True
+
+    for current, dirnames, filenames in os.walk(
+            os.path.realpath(project_dir), onerror=record_walk_error):
         dirnames[:] = [d for d in dirnames if d not in SKIP_WALK_DIRS]
         for name in filenames:
             seen += 1
             if seen > MAX_INODE_WALK:
-                return False
+                return None
             candidate = os.path.join(current, name)
             if not is_test_path(os.path.relpath(candidate, project_dir)):
                 continue
@@ -168,8 +168,8 @@ def reaches_a_test_inode(target: str, project_dir: str) -> bool:
                 if _same_file(target_stat, os.stat(candidate)):
                     return True
             except OSError:
-                continue
-    return False
+                return None
+    return None if traversal_failed[0] else False
 
 
 def given_path(tool_input: dict):
@@ -195,9 +195,10 @@ def names_a_test(raw: str, target: str, project_dir: str) -> bool:
     called notes.txt reaches a test file, a test-named symlink reaches
     whatever its author chose, and a hard link resolves to itself.
     """
+    inode_result = reaches_a_test_inode(target, project_dir)
     return (is_test_path(raw)
             or is_test_path(target)
-            or reaches_a_test_inode(target, project_dir))
+            or inode_result is not False)
 
 
 def escapes_root(target: str, project_dir: str) -> bool:
@@ -229,40 +230,6 @@ def escape_reason(raw: str, target: str, project_dir: str) -> str:
                 "which the gate cannot vouch for")
     return ("names a test file outside the project root, which the gate "
             "cannot vouch for")
-
-
-def content_digest(target: str):
-    """Return a digest of the file's bytes, or None when it cannot be read."""
-    try:
-        with open(target, "rb") as handle:
-            # SHA-256: binds a consent grant to the content it was given for.
-            return hashlib.sha256(handle.read()).hexdigest()
-    except OSError:
-        return None
-
-
-def is_override_granted(target: str, project_dir: str) -> bool:
-    """Return True if a human released this file at this content.
-
-    A grant reads `path` or `path@sha256:<digest>`. Comparison is on the
-    canonical path, since matching a suffix would let one grant for
-    tests/test_auth.py release every path ending the same way. The digest
-    binds the grant to one edit: consenting to a change is not consenting
-    to whatever follows it.
-    """
-    digest = content_digest(target)
-    for entry in os.environ.get(OVERRIDE_ENV, "").split(","):
-        cleaned = entry.strip()
-        if not cleaned:
-            continue
-        path_part, _, want = cleaned.partition("@sha256:")
-        if resolve_target(path_part, project_dir) != target:
-            continue
-        if not want:
-            return True
-        if digest is not None and want.lower() == digest:
-            return True
-    return False
 
 
 def find_gate_reason(tool_name: str, target: str) -> str:
@@ -355,7 +322,7 @@ def _handle_write(payload: dict, project_dir: str) -> int:
         return 0
     target = resolve_target(raw, project_dir)
     reason = _write_reason(payload, raw, target, project_dir)
-    if not reason or is_override_granted(target, project_dir):
+    if not reason:
         return 0
     return _decide(payload, target, reason)
 

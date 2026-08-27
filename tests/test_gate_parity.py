@@ -10,7 +10,9 @@ Each row pairs a command with its equivalent in the other shell. Where a
 form exists in only one shell, the pair repeats the same string, which
 still asserts that both gates read it identically.
 """
+import importlib.util
 import json
+import tempfile
 import subprocess
 import sys
 import unittest
@@ -19,9 +21,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASH_HOOK = REPO_ROOT / "hooks" / "block_destructive_bash.py"
 POWERSHELL_HOOK = REPO_ROOT / "hooks" / "block_destructive_powershell.py"
+CORE_PATH = REPO_ROOT / "hooks" / "_gate_core.py"
 
 
-def _decision(hook: Path, tool: str, command, mode: str = "default") -> str:
+def _decision(hook: Path, tool: str, command, mode: str = "default",
+              cwd: str = "") -> str:
     """Return the permission decision one gate reaches for `command`."""
     payload = {
         "hook_event_name": "PreToolUse",
@@ -29,6 +33,8 @@ def _decision(hook: Path, tool: str, command, mode: str = "default") -> str:
         "permission_mode": mode,
         "tool_input": {"command": command},
     }
+    if cwd:
+        payload["cwd"] = cwd
     result = subprocess.run(
         [sys.executable, str(hook)],
         input=json.dumps(payload), capture_output=True, text=True, check=False)
@@ -75,6 +81,26 @@ class GitParityTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(bash(command), powershell(command))
 
+    def test_inline_config_and_repo_location_forms_agree(self):
+        with tempfile.TemporaryDirectory() as root:
+            git_dir = Path(root) / ".git"
+            git_dir.mkdir()
+            (git_dir / "config").write_text(
+                '[diff "x"]\n\ttextconv = /tmp/evil\n', encoding="utf-8")
+            commands = (
+                "git -c core.pager=/tmp/evil status",
+                "git -ccore.pager=/tmp/evil log",
+                "git -c core.pager=/tmp/evil -c core.pager= status",
+                "git --git-dir .git --work-tree . show HEAD",
+                "git -C . diff",
+            )
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assertEqual(
+                        _decision(BASH_HOOK, "Bash", command, cwd=root),
+                        _decision(POWERSHELL_HOOK, "PowerShell", command, cwd=root),
+                    )
+
 
 class MalformedParityTest(unittest.TestCase):
     """Both gates must fail closed on the same malformed inputs."""
@@ -110,6 +136,17 @@ class BoundaryParityTest(unittest.TestCase):
         ("echo x > tests/test_auth.py", "Write-Output x > tests/test_auth.py"),
         ("echo x > src/app.js", "Write-Output x > src/app.js"),
         ("cmd /c rd /s /q C:/work", "cmd /c rd /s /q C:/work"),
+        # Grouping that puts a command where a program name goes. The
+        # PowerShell gate read its own & { ... } and the Bash gate did not
+        # read { ... ; }; the Bash gate read $( ... ) and the PowerShell
+        # gate did not. Each gap was invisible until both spellings sat
+        # in one row.
+        ("{ rm -rf /tmp/x; }", "& { Remove-Item -Recurse -Force /tmp/x }"),
+        ("{ git push --force; }", "& { git push --force }"),
+        ("echo `rm -rf /tmp/x`",
+         "Write-Output $(Remove-Item -Recurse -Force /tmp/x)"),
+        ("rm -rf build", "Remove-Item -Recurse -Force (Join-Path $a build)"),
+        ("echo {a,b}.txt", "Write-Output {a,b}.txt"),
     )
 
     def test_equivalent_commands_agree(self):
@@ -121,10 +158,18 @@ class BoundaryParityTest(unittest.TestCase):
 class CoreOwnershipTest(unittest.TestCase):
     """Every decision function lives in the core, not in one gate."""
 
+    def test_git_environment_classifier_is_public(self):
+        spec = importlib.util.spec_from_file_location("gate_core_public", CORE_PATH)
+        core = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(core)
+        self.assertTrue(core.is_relevant_git_environment("GIT_DIR"))
+        self.assertFalse(core.is_relevant_git_environment("PATH"))
+
     def test_neither_gate_defines_its_own_verdict_helpers(self):
         shared = ("delete_verdict", "git_verdict", "push_verdict",
                   "is_root_target", "strongest", "is_test_path",
-                  "cmd_delete_verdict", "sanitize")
+                  "cmd_delete_verdict", "sanitize",
+                  "is_relevant_git_environment")
         for hook in (BASH_HOOK, POWERSHELL_HOOK):
             source = hook.read_text(encoding="utf-8")
             for name in shared:

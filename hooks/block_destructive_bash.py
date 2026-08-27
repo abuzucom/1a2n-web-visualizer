@@ -39,24 +39,28 @@ An `ask` needs a human to answer it. When `permission_mode` reports an
 unattended session, or a mode this hook does not recognize, the ask becomes a
 deny: absence of a human is absence of consent.
 
-Still a heuristic, not a sandbox. It does not execute the shell, so a command
-hidden behind an alias, a wrapper script, or a variable holding the program
-name is invisible to it.
+Still a heuristic, not a sandbox or authorization boundary. It does not
+execute the shell, so a command hidden behind an alias, a wrapper script, or a
+variable holding the program name is invisible. Repository writers can alter
+this hook or its settings. Tamper resistance requires controls outside the
+writable repository.
 """
 import json
 import os
-import shlex
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
     import _gate_core as core
-except ImportError as error:  # pragma: no cover - exercised by the adoption test
+    import _bash_parser as bash_parser
+except ImportError as error:  # pragma: no cover
+    # The adoption test exercises this import failure.
     # Fail closed. Claude Code treats any non-zero exit other than 2 as a
     # non-blocking error, so an unhandled ImportError would wave the command
     # through in exactly the repos that installed this gate.
-    _REASON = f"hooks/_gate_core.py could not be imported ({error}), so the gate cannot clear this command"
+    _REASON = (f"the shared hook parser or core could not be imported ({error}), "
+               "so the gate cannot clear this command")
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -68,9 +72,6 @@ except ImportError as error:  # pragma: no cover - exercised by the adoption tes
 _CWD = [""]
 GATE = "block_destructive_bash.py"
 GATED_KEYWORDS = core.gated_keywords()
-OPERATOR_CHARS = frozenset("&|;")
-GROUPING = frozenset({"(", ")", "\n"})
-WRAPPERS = frozenset({"sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs", "timeout"})
 # A shell handed a command string is a wrapper whose payload is another
 # command. Reading only the program name sees "bash" and stops there.
 # Both shells are here, not only this one. A gate that knows only its own
@@ -78,58 +79,7 @@ WRAPPERS = frozenset({"sudo", "doas", "env", "time", "nohup", "nice", "command",
 # as a hole, and on Windows that line runs.
 INTERPRETERS = core.SHELL_INTERPRETERS
 INTERPRETER_PAYLOAD_FLAGS = core.SHELL_PAYLOAD_FLAGS
-# Wrapper options that consume the token after them. Without these,
-# `sudo -u root rm -rf /` leaves `root` as the apparent program.
-WRAPPER_VALUE_OPTIONS = {
-    "sudo": frozenset({"-u", "-g", "-p", "-C", "-h", "-U", "-r", "-t",
-                       "--user", "--group", "--prompt", "--close-from", "--host", "--role", "--type"}),
-    "doas": frozenset({"-u", "-C"}),
-    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
-    "xargs": frozenset({"-n", "-I", "-L", "-P", "-s", "-d", "-E", "-a",
-                        "--max-args", "--replace", "--max-procs", "--delimiter", "--arg-file"}),
-    "nice": frozenset({"-n", "--adjustment"}),
-    "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
-}
-REDIRECTION_CHARS = frozenset("<>&0123456789")
 IMPLAUSIBLE_PROGRAM_CHARS = frozenset("<>&|;")
-
-
-def _tokenize(command: str):
-    """Return the command's tokens, or None when it cannot be parsed."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        return list(lexer)
-    except ValueError:
-        return None
-
-
-def _is_separator(token: str) -> bool:
-    """Return True if the token separates one command from the next."""
-    return token in GROUPING or (bool(token) and set(token) <= OPERATOR_CHARS)
-
-
-def _segments(tokens: list) -> list:
-    """Split tokens into the individual commands the shell would run."""
-    segments = [[]]
-    for token in tokens:
-        if _is_separator(token):
-            segments.append([])
-        else:
-            segments[-1].append(token)
-    return [segment for segment in segments if segment]
-
-
-def _is_env_assignment(token: str) -> bool:
-    """Return True if the token is a leading VAR=value assignment."""
-    if token.startswith("-") or "=" not in token:
-        return False
-    return token.split("=", 1)[0].isidentifier()
-
-
-def _is_redirection(token: str) -> bool:
-    """Return True if the token is a redirection operator such as > or 2>&1."""
-    return bool(token) and ("<" in token or ">" in token) and set(token) <= REDIRECTION_CHARS
 
 
 def _is_plausible_program(token: str) -> bool:
@@ -144,88 +94,75 @@ def _is_plausible_program(token: str) -> bool:
     return not (set(token) & IMPLAUSIBLE_PROGRAM_CHARS)
 
 
-def _consumes_value(wrapper: str, token: str) -> bool:
-    """Return True if this wrapper option takes the following token as its value."""
-    if "=" in token:
-        return False
-    return token in WRAPPER_VALUE_OPTIONS.get(wrapper, frozenset())
-
-
 def _redirect_targets(tokens: list) -> list:
     """Return the files this segment redirects into.
 
     Both spellings matter: `> path` arrives as two tokens under
     punctuation_chars, and `>path` as one.
     """
-    targets = []
-    for index, token in enumerate(tokens):
-        if _is_redirection(token) and index + 1 < len(tokens):
-            targets.append(tokens[index + 1])
-        elif ">" in token and not _is_redirection(token):
-            _, _, tail = token.partition(">")
-            if tail:
-                targets.append(tail)
-    return targets
+    return bash_parser.redirect_targets(tokens)
 
 
-def _strip_prefixes(tokens: list) -> list:
-    """Drop leading redirections, environment assignments, and wrappers.
-
-    A wrapper's own options are consumed too. Stopping at the first token
-    that begins with a dash left `-n` as the program of `sudo -n rm -rf /`,
-    which is how an unguarded root delete read as an unknown command.
-    """
-    index = 0
-    wrapper = ""
-    while index < len(tokens):
-        token = tokens[index]
-        if _is_redirection(token):
-            index += 2
-            continue
-        if _is_env_assignment(token):
-            index += 1
-            continue
-        name = os.path.basename(token)
-        if name in WRAPPERS:
-            wrapper = name
-            index += 1
-            continue
-        if wrapper and token.startswith("-"):
-            index += 2 if _consumes_value(wrapper, token) else 1
-            continue
-        break
-    return tokens[index:]
+def _nested_command_verdict(command: str, depth: int, shell: str) -> tuple:
+    """Classify one nested command while enforcing the inspection limit."""
+    if depth >= core.MAX_COMMAND_DEPTH:
+        return "deny", f"{shell} command nesting exceeds the inspection limit"
+    return classify(command, depth + 1)
 
 
-def _interpreter_verdict(program: str, args: list) -> tuple:
+def _powershell_interpreter_verdict(program: str, args: list,
+                                    depth: int):
+    """Return a PowerShell payload verdict, or None when none is present."""
+    if program.lower() not in core.POWERSHELL_PROGRAMS:
+        return None
+    kind, value = core.powershell_payload(args)
+    if kind == "deny":
+        return "deny", value
+    if kind == "command":
+        return _nested_command_verdict(value, depth, "PowerShell")
+    return None
+
+
+def _interpreter_argument_verdict(token: str, rest: list, depth: int):
+    """Return a command-payload verdict for one interpreter argument."""
+    lowered = token.lower()
+    if lowered in INTERPRETER_PAYLOAD_FLAGS:
+        if not rest:
+            return "", ""
+        # A POSIX shell takes one string after -c. CMD takes the whole
+        # remainder of the line after /c or /k.
+        payload = " ".join(rest) if lowered.startswith("/") else rest[0]
+        return _nested_command_verdict(payload, depth, "shell")
+    if token.startswith("-") and not token.startswith("--") and "c" in token:
+        if not rest:
+            return "", ""
+        return _nested_command_verdict(rest[0], depth, "shell")
+    return None
+
+
+def _interpreter_verdict(program: str, args: list, depth: int) -> tuple:
     """Return (decision, reason) for a shell handed a command string.
 
     Only the payload after -c, /c, or /k is another command. A shell
     invoked without one runs a script or a REPL, which this gate cannot
     read either way, so it is not gated on the interpreter's own name.
     """
+    verdict = _powershell_interpreter_verdict(program, args, depth)
+    if verdict is not None:
+        return verdict
     for index, token in enumerate(args):
-        lowered = token.lower()
-        if lowered in INTERPRETER_PAYLOAD_FLAGS:
-            rest = args[index + 1:]
-            if not rest:
-                return "", ""
-            # A POSIX shell takes one string after -c. CMD takes the whole
-            # remainder of the line after /c or /k.
-            if lowered.startswith("/"):
-                return classify(" ".join(rest))
-            return classify(rest[0])
+        rest = args[index + 1:]
+        verdict = _interpreter_argument_verdict(token, rest, depth)
+        if verdict is not None:
+            return verdict
         # busybox sh -c: the applet name precedes the flag
+        lowered = token.lower()
         if not token.startswith(("-", "/")) and lowered in INTERPRETERS:
-            return _interpreter_verdict(lowered, args[index + 1:])
-        # a combined short group such as -lc still carries the payload
-        if token.startswith("-") and not token.startswith("--") and "c" in token:
-            payload = args[index + 1:index + 2]
-            return classify(payload[0]) if payload else ("", "")
+            return _interpreter_verdict(lowered, rest, depth)
     return "", ""
 
 
-def _segment_verdict(tokens: list) -> tuple:
+def _segment_verdict(tokens: list, depth: int) -> tuple:
     """Return (decision, reason) for one command segment.
 
     The privilege verdict is folded into whatever the wrapped command
@@ -233,11 +170,15 @@ def _segment_verdict(tokens: list) -> tuple:
     """
     privileged = core.privilege_verdict(tokens)
     redirects = _redirect_targets(tokens)
-    tokens = _strip_prefixes(tokens)
-    return core.strongest(privileged, _program_verdict(tokens, redirects))
+    tokens, environment, complete = bash_parser.strip_prefixes(tokens)
+    if not complete:
+        return "ask", "env -S command text could not be inspected"
+    return core.strongest(
+        privileged, _program_verdict(tokens, redirects, environment, depth))
 
 
-def _named_program_verdict(program: str, args: list) -> tuple:
+def _named_program_verdict(program: str, args: list,
+                           environment: list, depth: int) -> tuple:
     """Return the verdict for a program read by name, or None.
 
     None means the program is not one of the three the gate reads whole,
@@ -245,15 +186,16 @@ def _named_program_verdict(program: str, args: list) -> tuple:
     """
     lowered = program.lower()
     if lowered in INTERPRETERS:
-        return _interpreter_verdict(program, args)
+        return _interpreter_verdict(program, args, depth)
     if lowered in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(lowered, args)
     if program == "git":
-        return core.git_verdict(args, _CWD[0])
+        return core.git_verdict(args, _CWD[0], environment)
     return None
 
 
-def _program_verdict(tokens: list, redirects: list) -> tuple:
+def _program_verdict(tokens: list, redirects: list,
+                     environment: list, depth: int) -> tuple:
     """Return (decision, reason) for the program this segment runs."""
     if not tokens:
         return core.strongest(
@@ -261,11 +203,12 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
             core.test_write_verdict("", [], redirects))
     program = os.path.basename(tokens[0])
     args = tokens[1:]
-    named = _named_program_verdict(program, args)
+    named = _named_program_verdict(program, args, environment, depth)
     if named is not None:
         return named
     for verdict in (core.destruction_verdict(program, args),
                     core.alias_verdict(program, args),
+                    core.environment_assignment_verdict(program, args),
                     core.mode_change_verdict(program, args),
                     core.truncation_verdict(program, args, redirects),
                     core.process_verdict(program, args),
@@ -273,6 +216,8 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
                     core.forge_verdict(program, args),
                     core.filesystem_repair_verdict(program, args),
                     core.profile_verdict(program, args, redirects),
+                    core.protected_write_verdict(
+                        program, args, redirects, _CWD[0]),
                     core.cmd_delete_verdict(program, args),
                     core.test_write_verdict(program, args, redirects)):
         if verdict[0]:
@@ -288,20 +233,16 @@ def _mentions_gated_command(tokens: list) -> bool:
     return any(os.path.basename(token) in GATED_KEYWORDS for token in tokens)
 
 
-def classify(command: str) -> tuple:
+def classify(command: str, depth: int = 0) -> tuple:
     """Return the strongest (decision, reason) across the command's segments."""
     if not isinstance(command, str):
         return "ask", "the command is not a string, so the gate cannot read it"
-    verdict = ("", "")
-    for line in command.splitlines():
-        tokens = _tokenize(line)
-        if tokens is None:
-            return core.unparseable_verdict(command, GATED_KEYWORDS)
-        segments = _segments(tokens)
-        verdict = core.strongest(
-            verdict, core.remote_execution_verdict(segments))
-        for segment in segments:
-            verdict = core.strongest(verdict, _segment_verdict(segment))
+    segments, complete = bash_parser.command_segments(command)
+    if not complete:
+        return core.unparseable_verdict(command, GATED_KEYWORDS)
+    verdict = core.remote_execution_verdict(segments)
+    for segment in segments:
+        verdict = core.strongest(verdict, _segment_verdict(segment, depth))
     return verdict
 
 

@@ -25,6 +25,7 @@ SHARED_MANIFEST = "shared-files.json"
 # design exists to prevent, so the files carrying decisions are listed here
 # and their hashes are committed in every repository holding them.
 SHARED_FILES = [
+    "hooks/_bash_parser.py",
     "hooks/_gate_core.py",
     "hooks/block_destructive_bash.py",
     "hooks/block_destructive_powershell.py",
