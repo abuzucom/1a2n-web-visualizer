@@ -307,6 +307,7 @@ not the other fails the other's suite.
 | `scripts/check_weak_hashing.py` | No weak hashing in security-sensitive contexts | Yes |
 | `scripts/check_dockerfile_root.py` | No root containers without explicit consent | Yes |
 | `scripts/check_secrets_heuristic.py` | No secrets in version control (heuristic, not entropy-based) | Yes |
+| `scripts/check_hook_coverage.py` | Nothing untested enters `hooks/` | Wired into CI. Runs the suite with `tools/coverage` on `PYTHONPATH`, which traces every interpreter the suite starts; the gates run as subprocesses, so ordinary in-process coverage sees almost none of their decision code. Compares against `hook-coverage-baseline.json`, which is per repo: this repo declined two hook suites, so what its run leaves unrun differs from the template's |
 | `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Wired into CI against `README.md`, `CHANGELOG.md`, `SECURITY.md`, and `docs/`. It reads prose, so a table delimiter row, a list marker, and an inline code span spanning two lines are excluded from the dash rule rather than rewritten |
 
 Protected-file review runs from the trusted default branch through

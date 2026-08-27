@@ -47,6 +47,10 @@ its call through in silence. The behavioral tests launch hooks through
 This is the one difference that reads as true drift without its cause attached.
 It is not: it follows from a declined file.
 
+### `hook-coverage-baseline.json`
+
+Per repo by nature, not drift. The baseline records what the suite leaves unrun in `hooks/`, and this repository declined `tests/test_enforce_branch_name.py` and `tests/test_enforce_git_identity.py`, which upstream drive `_gate_core.resolved_under` and `_gate_core.sanitize`. Its baseline therefore records 66 unreached statements where the template records 61. A shared baseline would be wrong in both.
+
 ### GitHub Actions pinning
 
 This repository pins every action to a full commit SHA and enforces it with

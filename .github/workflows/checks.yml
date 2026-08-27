@@ -49,6 +49,9 @@ jobs:
       - name: Check the shared gate files against the manifest
         run: python3 scripts/sync.py --check-shared
 
+      - name: Check no untested statement entered the hooks
+        run: python3 scripts/check_hook_coverage.py
+
       - name: Check GitHub Actions are pinned
         run: python3 scripts/check_action_pins.py
 

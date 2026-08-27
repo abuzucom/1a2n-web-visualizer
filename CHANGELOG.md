@@ -7,6 +7,18 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Added `scripts/check_hook_coverage.py`, `tools/coverage/sitecustomize.py`
+  and `hook-coverage-baseline.json`, run in CI. The gates execute as
+  subprocesses, so ordinary in-process coverage sees almost none of their
+  decision code; Python imports `sitecustomize` in every interpreter it
+  starts, which is the stdlib way to reach them. The gate fails both when a
+  function gains unreached statements and when the baseline goes stale,
+  since a recorded limit nobody maintains stops being a limit.
+- The baseline is per repository, and this one records 66 unreached
+  statements where the template records 61. This repo declined
+  `test_enforce_branch_name.py` and `test_enforce_git_identity.py`, which
+  upstream drive `_gate_core.resolved_under` and `_gate_core.sanitize`.
+  `docs/template-drift.md` records it.
 - Covered the digest-bound form of `AGENTS_CONSENT_GRANTED`, which no test
   had ever run. The bare `path` grant was covered; `path@sha256:<digest>`
   was not, so the binding the gate's docstring promises had never been
