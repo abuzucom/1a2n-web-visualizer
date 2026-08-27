@@ -240,7 +240,11 @@ static checks for `persist-credentials: false` on checkout steps, unjustified
 MD5/SHA-1, non-root containers, and likely secrets.
 
 These checks come from the `abuzucom/agents` AI-agent-instructions template
-(see AGENTS.md's own history for the adoption). `make sync` (or
+(see AGENTS.md's own history for the adoption). `sync.py` keeps only the
+AGENTS.md family in step; every `scripts/`, `hooks/`, and `tests/` file was
+copied by hand, so
+[`docs/template-drift.md`](docs/template-drift.md) records what differs here
+and why. `make sync` (or
 `python3 scripts/sync.py`) regenerates the tool-specific copies after editing
 `AGENTS.md`; `make check` verifies them without writing; `make lint` runs the
 AGENTS.md-specific style checks below, additive to `npm run lint` (ESLint and

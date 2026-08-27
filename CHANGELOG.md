@@ -7,6 +7,14 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Added `docs/template-drift.md`, recording what this repository's copies of
+  the `abuzucom/agents` template files differ in and why. `sync.py` keeps only
+  the AGENTS.md family in step, so every `scripts/`, `hooks/`, and `tests/`
+  file is maintained here and drifts unwatched. Two files differ today, both
+  following from a template file this repository declined rather than from an
+  independent edit. The template owns the policy in `DRIFT.md` and the
+  taken-versus-declined list in `adopters/1a2n-web-visualizer.md`; neither side
+  restates the other's fields. Nothing verifies any of it.
 - Added a demo build (`src/demo.html`) that drives the visualizer from a
   synthetic audio track generated in the page, so the presets react with no
   microphone permission, no virtual audio cable, and no input device. It shares
