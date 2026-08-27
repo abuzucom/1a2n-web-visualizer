@@ -766,39 +766,6 @@ class SettingsWiringTest(unittest.TestCase):
                 matchers = self._matchers_for(settings, "block_destructive_bash.py", "PreToolUse")
                 self.assertIn("Bash", matchers, f"{path.name} does not register the Bash gate")
 
-    def test_entries_use_the_exec_form(self):
-        """Shell form splits a project path containing spaces and the hook never runs."""
-        for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
-            settings = json.loads(path.read_text(encoding="utf-8"))
-            for event in ("SessionStart", "PreToolUse"):
-                for matcher in settings["hooks"][event]:
-                    for entry in matcher.get("hooks", []):
-                        command = entry.get("command", "")
-                        with self.subTest(path=path.name, command=command):
-                            self.assertTrue(entry.get("args"), "exec form requires args")
-                            self.assertTrue(command, "no launcher configured")
-                            # A launcher carrying a space or a shell
-                            # metacharacter is shell form wearing exec
-                            # form's shape. Which program it names is
-                            # asserted by the launcher-resolution test,
-                            # which requires it to exist on PATH.
-                            self.assertNotIn(" ", command)
-                            self.assertFalse(
-                                set(command) & set("$\"'|&;<>()"),
-                                "launcher carries shell syntax")
-
-    def test_destructive_bash_hook_is_registered(self):
-        """The incident's rm -rf and force-push ran because nothing wired this."""
-        for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
-            with self.subTest(path=path.name):
-                settings = json.loads(path.read_text(encoding="utf-8"))
-                matchers = self._matchers_for(settings, "block_destructive_bash.py", "PreToolUse")
-                self.assertIn("Bash", matchers, f"{path.name} does not register the Bash gate")
-
-
-if __name__ == "__main__":
-    unittest.main()
-
 
 class CorpusTest(unittest.TestCase):
     """Every known consent-gate path reaches the verdict the corpus records."""
@@ -821,3 +788,7 @@ class CorpusTest(unittest.TestCase):
         for relative, exists, expected, why in gate_corpus.CONSENT_CASES:
             with self.subTest(path=relative, why=why):
                 self.assertEqual(self.decision_for(relative, exists), expected)
+
+
+if __name__ == "__main__":
+    unittest.main()

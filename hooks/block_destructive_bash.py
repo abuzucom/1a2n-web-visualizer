@@ -237,6 +237,22 @@ def _segment_verdict(tokens: list) -> tuple:
     return core.strongest(privileged, _program_verdict(tokens, redirects))
 
 
+def _named_program_verdict(program: str, args: list) -> tuple:
+    """Return the verdict for a program read by name, or None.
+
+    None means the program is not one of the three the gate reads whole,
+    so the caller runs it past every other check instead.
+    """
+    lowered = program.lower()
+    if lowered in INTERPRETERS:
+        return _interpreter_verdict(program, args)
+    if lowered in core.DELETE_PROGRAMS:
+        return core.any_delete_verdict(lowered, args)
+    if program == "git":
+        return core.git_verdict(args, _CWD[0])
+    return None
+
+
 def _program_verdict(tokens: list, redirects: list) -> tuple:
     """Return (decision, reason) for the program this segment runs."""
     if not tokens:
@@ -244,13 +260,10 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
             core.truncation_verdict("", [], redirects),
             core.test_write_verdict("", [], redirects))
     program = os.path.basename(tokens[0])
-    if program.lower() in INTERPRETERS:
-        return _interpreter_verdict(program, tokens[1:])
-    if program.lower() in core.DELETE_PROGRAMS:
-        return core.any_delete_verdict(program.lower(), tokens[1:])
-    if program == "git":
-        return core.git_verdict(tokens[1:], _CWD[0])
     args = tokens[1:]
+    named = _named_program_verdict(program, args)
+    if named is not None:
+        return named
     for verdict in (core.destruction_verdict(program, args),
                     core.alias_verdict(program, args),
                     core.mode_change_verdict(program, args),

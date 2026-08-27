@@ -330,6 +330,17 @@ def _decide(payload: dict, target: str, reason: str) -> int:
                         f"consent (permission_mode {core.mode_label(payload)}).")
 
 
+def _write_reason(payload: dict, raw: str, target: str,
+                  project_dir: str) -> str:
+    """Return why this write needs consent, or an empty string."""
+    if is_protected_path(target, project_dir):
+        return "writes to a file that decides whether these gates run at all"
+    if names_a_test(raw, target, project_dir):
+        return (escape_reason(raw, target, project_dir)
+                or find_gate_reason(payload.get("tool_name", ""), target))
+    return ""
+
+
 def _handle_write(payload: dict, project_dir: str) -> int:
     """Gate a write to an existing test file or to the gates' own files."""
     tool_input = payload.get("tool_input")
@@ -343,19 +354,8 @@ def _handle_write(payload: dict, project_dir: str) -> int:
     if not raw:
         return 0
     target = resolve_target(raw, project_dir)
-
-    if is_protected_path(target, project_dir):
-        reason = ("writes to a file that decides whether these gates run at "
-                  "all")
-    elif names_a_test(raw, target, project_dir):
-        reason = (escape_reason(raw, target, project_dir)
-                  or find_gate_reason(payload.get("tool_name", ""), target))
-    else:
-        return 0
-
-    if not reason:
-        return 0
-    if is_override_granted(target, project_dir):
+    reason = _write_reason(payload, raw, target, project_dir)
+    if not reason or is_override_granted(target, project_dir):
         return 0
     return _decide(payload, target, reason)
 

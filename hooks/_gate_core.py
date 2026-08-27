@@ -27,6 +27,18 @@ import sys
 INTERACTIVE_MODES = frozenset({"default", "plan", "acceptEdits", "auto"})
 AMBIGUOUS_MARKERS = ("$", "`")
 FILESYSTEM_ROOTS = frozenset({"/", "//", "/*"})
+# A UNC share root is \\\\server\\share, so at most two components; a drive
+# root is two characters, C:. Both name a whole volume, not a path in one.
+UNC_SHARE_ROOT_PARTS = 2
+DRIVE_ROOT_LENGTH = 2
+# git reads -ckey=value glued, so a longer token carries the setting.
+GIT_CONFIG_FLAG_LENGTH = 2
+# section.subsection.key, the only shape a driver name takes.
+GIT_CONFIG_SUBSECTION_PARTS = 3
+# Latin-1 renders as \\xNN; everything above it needs \\uNNNN.
+MAX_LATIN1_CODEPOINT = 0xFF
+# A forge delete reads as "<noun> delete <target>", so two words minimum.
+FORGE_DELETE_MIN_WORDS = 2
 # Directories whose removal takes the machine with them. These deny rather
 # than ask: putting "delete /etc?" in front of a person is not consent, it
 # is an invitation to a mistake nobody can undo.
@@ -81,9 +93,10 @@ def _is_drive_root(token: str) -> bool:
     candidate = token.strip().strip('"').strip("'")
     if candidate.startswith("\\\\") or candidate.startswith("//"):
         parts = [part for part in candidate.replace("\\", "/").split("/") if part]
-        return len(parts) <= 2
+        return len(parts) <= UNC_SHARE_ROOT_PARTS
     stripped = candidate.rstrip("\\/")
-    return len(stripped) == 2 and stripped[1] == ":" and stripped[0].isalpha()
+    return (len(stripped) == DRIVE_ROOT_LENGTH and stripped[1] == ":"
+            and stripped[0].isalpha())
 
 
 def _is_system_root(token: str) -> bool:
@@ -214,7 +227,7 @@ def cleared_config_keys(args: list) -> set:
     for index, token in enumerate(args):
         if token == "-c" and index + 1 < len(args):
             setting = args[index + 1]
-        elif token.startswith("-c") and len(token) > 2:
+        elif token.startswith("-c") and len(token) > GIT_CONFIG_FLAG_LENGTH:
             setting = token[2:]
         else:
             continue
@@ -224,49 +237,65 @@ def cleared_config_keys(args: list) -> set:
     return cleared
 
 
-def git_verdict(args: list, cwd: str = "") -> tuple:
-    """Return (decision, reason) for a git argument list."""
-    subcommand, rest = git_subcommand(args)
+def _git_alias_verdict(subcommand: str, rest: list, cwd: str) -> tuple:
+    """Return (decision, reason) for a subcommand git does not define."""
+    expansion = resolve_alias(cwd, subcommand)
+    if not expansion:
+        return "ask", (f"git {sanitize(subcommand)}: not a git subcommand "
+                       "and not a declared alias, so the gate cannot tell "
+                       "what this runs")
+    if expansion.startswith("!"):
+        # A shell alias. Classify the text; never expand or run it.
+        return "ask", (f"git {sanitize(subcommand)} is a shell alias, "
+                       "which the gate cannot read as a git command")
+    return git_verdict(expansion.split() + rest, cwd)
+
+
+def _git_resolution_verdict(subcommand: str, rest: list, args: list,
+                            cwd: str) -> tuple:
+    """Return a verdict for a subcommand needing resolution, else None.
+
+    None means git defines the subcommand and it is not a read, so the
+    caller reads its flags.
+    """
     if not subcommand or is_ambiguous(subcommand):
-        return "ask", "git with an unresolved subcommand: the gate cannot tell what this runs"
+        return "ask", ("git with an unresolved subcommand: the gate cannot "
+                       "tell what this runs")
     if subcommand in READ_SUBCOMMANDS:
         return repo_executes_on_read(cwd, cleared_config_keys(args))
-    if subcommand not in KNOWN_SUBCOMMANDS:
-        expansion = resolve_alias(cwd, subcommand)
-        if not expansion:
-            return "ask", (f"git {sanitize(subcommand)}: not a git subcommand "
-                           "and not a declared alias, so the gate cannot tell "
-                           "what this runs")
-        if expansion.startswith("!"):
-            # A shell alias. Classify the text; never expand or run it.
-            return "ask", (f"git {sanitize(subcommand)} is a shell alias, "
-                           "which the gate cannot read as a git command")
-        return git_verdict(expansion.split() + rest, cwd)
-    if subcommand == "push":
-        return push_verdict(rest)
-    alias_decision = alias_verdict("git", [subcommand] + rest)
-    if alias_decision[0]:
-        return alias_decision
-    if subcommand == "branch":
-        # Case carries the meaning here: -d refuses an unmerged branch,
-        # -D discards it. Lowercasing first would gate the safe one.
-        lowered = [token.lower() for token in rest]
-        forced = (("--delete" in lowered and "--force" in lowered)
-                  or any(token.startswith("-") and not token.startswith("--")
-                         and "D" in token for token in rest))
-        if forced:
-            return "ask", ("git branch -D discards a branch whose commits "
-                           "may not be merged anywhere else")
+    if subcommand in KNOWN_SUBCOMMANDS:
+        return None
+    return _git_alias_verdict(subcommand, rest, cwd)
+
+
+def _git_branch_verdict(rest: list) -> tuple:
+    """Return (decision, reason) for a git branch argument list."""
+    # Case carries the meaning here: -d refuses an unmerged branch, -D
+    # discards it. Lowercasing first would gate the safe one.
+    lowered = [token.lower() for token in rest]
+    forced = (("--delete" in lowered and "--force" in lowered)
+              or any(token.startswith("-") and not token.startswith("--")
+                     and "D" in token for token in rest))
+    if forced:
+        return "ask", ("git branch -D discards a branch whose commits "
+                       "may not be merged anywhere else")
+    return "", ""
+
+
+def _git_clean_verdict(rest: list) -> tuple:
+    """Return (decision, reason) for a git clean argument list."""
+    lowered = [token.lower() for token in rest]
+    if any(flag in lowered for flag in ("-n", "--dry-run")):
         return "", ""
-    if subcommand == "clean":
-        lowered = [token.lower() for token in rest]
-        if any(flag in lowered for flag in ("-n", "--dry-run")):
-            return "", ""
-        if any(flag.startswith("-") and ("d" in flag or "x" in flag)
-               for flag in lowered):
-            return "ask", ("git clean removing untracked files, over a set "
-                           "decided at run time")
-        return "", ""
+    if any(flag.startswith("-") and ("d" in flag or "x" in flag)
+           for flag in lowered):
+        return "ask", ("git clean removing untracked files, over a set "
+                       "decided at run time")
+    return "", ""
+
+
+def _git_flag_verdict(subcommand: str, rest: list) -> tuple:
+    """Return (decision, reason) for the subcommands one flag decides."""
     if subcommand == "reset" and "--hard" in rest:
         return "deny", "git reset --hard"
     if subcommand == "commit" and "--amend" in rest:
@@ -274,6 +303,31 @@ def git_verdict(args: list, cwd: str = "") -> tuple:
     if subcommand in HISTORY_SUBCOMMANDS:
         return "ask", HISTORY_SUBCOMMANDS[subcommand]
     return "", ""
+
+
+# Subcommands whose whole argument list decides the verdict, rather than
+# one flag. push stays out: it runs before the alias check below.
+GIT_SUBCOMMAND_READERS = {
+    "branch": _git_branch_verdict,
+    "clean": _git_clean_verdict,
+}
+
+
+def git_verdict(args: list, cwd: str = "") -> tuple:
+    """Return (decision, reason) for a git argument list."""
+    subcommand, rest = git_subcommand(args)
+    resolved = _git_resolution_verdict(subcommand, rest, args, cwd)
+    if resolved is not None:
+        return resolved
+    if subcommand == "push":
+        return push_verdict(rest)
+    alias_decision = alias_verdict("git", [subcommand] + rest)
+    if alias_decision[0]:
+        return alias_decision
+    reader = GIT_SUBCOMMAND_READERS.get(subcommand)
+    if reader:
+        return reader(rest)
+    return _git_flag_verdict(subcommand, rest)
 
 
 def unparseable_verdict(command: str, keywords: tuple) -> tuple:
@@ -375,7 +429,7 @@ def sanitize(value) -> str:
     for character in str(value):
         if " " <= character <= "~":
             rendered.append(character)
-        elif ord(character) <= 0xFF:
+        elif ord(character) <= MAX_LATIN1_CODEPOINT:
             rendered.append(f"\\x{ord(character):02x}")
         else:
             rendered.append(f"\\u{ord(character):04x}")
@@ -611,7 +665,8 @@ def _exec_capable_key(entries: dict) -> str:
         if name in EXEC_CAPABLE_KEYS and value.lower() not in ("", "false", "0"):
             return name
         parts = name.split(".")
-        if len(parts) == 3 and parts[2] in EXEC_CAPABLE_SUBSECTIONS.get(parts[0], ()):
+        if (len(parts) == GIT_CONFIG_SUBSECTION_PARTS
+                and parts[2] in EXEC_CAPABLE_SUBSECTIONS.get(parts[0], ())):
             return name
     return ""
 
@@ -710,7 +765,7 @@ def _mentions_device(args: list) -> bool:
                                                     "/random", "/null")):
                 continue
             return True
-        if len(value) == 2 and value[1] == ":":
+        if len(value) == DRIVE_ROOT_LENGTH and value[1] == ":":
             return True
         if lowered.startswith("/w:"):
             return True
@@ -1073,7 +1128,7 @@ def forge_verdict(program: str, args: list) -> tuple:
     if name not in FORGE_PROGRAMS:
         return "", ""
     words = [token.lower() for token in args if not token.startswith("-")]
-    if len(words) < 2 or "delete" not in words[:3]:
+    if len(words) < FORGE_DELETE_MIN_WORDS or "delete" not in words[:3]:
         return "", ""
     noun = words[0]
     if noun not in FORGE_DELETE_NOUNS:

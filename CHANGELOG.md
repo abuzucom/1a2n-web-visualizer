@@ -7,6 +7,17 @@ All notable changes to this project are documented here. Format loosely follows
 ## [1.9.0]
 
 ### Added
+- Fixed a crash in the PowerShell gate's `-ArgumentList` handler, which
+  called `unparseable_verdict` with one argument against a two-parameter
+  function. A payload that would not tokenize raised `TypeError` rather
+  than denying, and a raise is a non-zero exit that is not 2, which Claude
+  Code treats as non-blocking: the gate failed open on exactly the input it
+  exists to catch. `tests/gate_corpus.py` carries the case.
+- Removed two duplicate test methods from `tests/test_require_consent.py`.
+  Merging the template's copy with this repo's local wiring assertions
+  produced a second definition of `test_entries_use_the_exec_form` and
+  `test_destructive_bash_hook_is_registered`. Python keeps the later
+  definition silently, so both assertions had stopped running.
 - Added `shared-files.json` and `scripts/sync.py --check-shared`, run in
   CI. `sync.py` copies the AGENTS.md family and can copy nothing living in
   a repository it cannot see, which is how this repo's `check_ascii.py` and
@@ -110,6 +121,13 @@ All notable changes to this project are documented here. Format loosely follows
   is not an exception to the pushed-history rule.
 
 ### Changed
+- Brought the shared gates under this repository's ruff ruleset. `lint` had
+  been red on every commit of this branch: `npx eslint .` passes, and the
+  `astral-sh/ruff-action` install step runs `ruff check` over the whole
+  repository before the explicit `ruff check tools/` step is reached.
+  Seven magic values are named, `git_verdict` splits into a resolution
+  reading, a per-subcommand table and a flag reading, and the three
+  `_program_verdict` functions split so each returns at most six times.
 - Rewrote the README hook section and dropped a contradicting sentence from
   AGENTS.md rule 3. Both described the gates two revisions back: two hooks
   where there are three, `git push --force` as a refusal after it moved to

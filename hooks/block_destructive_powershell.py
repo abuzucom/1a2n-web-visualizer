@@ -107,6 +107,32 @@ def _redirect_targets(tokens: list) -> list:
     return targets
 
 
+def _argument_list_verdict(program: str, rest: list, depth: int) -> tuple:
+    """Return the verdict for a payload handed to `program` as arguments.
+
+    -ArgumentList carries arguments for `program`, not a command line of
+    its own, so `/c rd /s /q C:\\` has to be read as cmd's arguments.
+    Reading it as a statement finds a program named /c and clears it.
+    """
+    if not rest:
+        return "", ""
+    nested = _tokenize(rest[0])
+    if nested is None:
+        return core.unparseable_verdict(rest[0].lower(), GATED_KEYWORDS)
+    return _interpreter_verdict(program, nested, depth + 1)
+
+
+def _payload_verdict(flag: str, rest: list) -> tuple:
+    """Return the verdict for a command string handed to an interpreter."""
+    if not rest:
+        return "", ""
+    # cmd takes the remainder of the line; PowerShell takes one string
+    # after -Command.
+    if flag.startswith("/"):
+        return classify(" ".join(rest))
+    return classify(rest[0])
+
+
 def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
     """Return (decision, reason) for an interpreter handed a command.
 
@@ -120,25 +146,9 @@ def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
     for index, token in enumerate(args):
         lowered = token.lower()
         if lowered in ARGUMENT_LIST_FLAGS:
-            rest = args[index + 1:]
-            if not rest:
-                return "", ""
-            # -ArgumentList carries arguments for `program`, not a command
-            # line of its own, so `/c rd /s /q C:\` has to be read as cmd's
-            # arguments. Reading it as a statement finds a program named /c.
-            nested = _tokenize(rest[0])
-            if nested is None:
-                return core.unparseable_verdict(rest[0])
-            return _interpreter_verdict(program, nested, depth + 1)
+            return _argument_list_verdict(program, args[index + 1:], depth)
         if lowered in INTERPRETER_PAYLOAD_FLAGS:
-            rest = args[index + 1:]
-            if not rest:
-                return "", ""
-            # cmd takes the remainder of the line; PowerShell takes one
-            # string after -Command.
-            if lowered.startswith("/"):
-                return classify(" ".join(rest))
-            return classify(rest[0])
+            return _payload_verdict(lowered, args[index + 1:])
     return "", ""
 
 
@@ -168,6 +178,21 @@ def _statement_verdict(tokens: list) -> tuple:
     return core.strongest(privileged, _program_verdict(tokens, redirects))
 
 
+def _named_program_verdict(program: str, args: list) -> tuple:
+    """Return the verdict for a cmdlet read by name, or None.
+
+    None means the name is not one of the three the gate reads whole, so
+    the caller runs it past every other check instead.
+    """
+    if program in INTERPRETERS:
+        return _interpreter_verdict(program, args)
+    if program in core.DELETE_PROGRAMS:
+        return core.any_delete_verdict(program, args)
+    if program == "git":
+        return core.git_verdict(args, _CWD[0])
+    return None
+
+
 def _program_verdict(tokens: list, redirects: list) -> tuple:
     """Return (decision, reason) for the cmdlet this statement runs."""
     stripped = _strip_wrappers(tokens)
@@ -179,13 +204,10 @@ def _program_verdict(tokens: list, redirects: list) -> tuple:
     if not tokens:
         return core.test_write_verdict("", [], redirects)
     program = os.path.basename(tokens[0]).lower()
-    if program in INTERPRETERS:
-        return _interpreter_verdict(program, tokens[1:])
-    if program in core.DELETE_PROGRAMS:
-        return core.any_delete_verdict(program, tokens[1:])
-    if program == "git":
-        return core.git_verdict(tokens[1:], _CWD[0])
     args = tokens[1:]
+    named = _named_program_verdict(program, args)
+    if named is not None:
+        return named
     for verdict in (core.destruction_verdict(program, args),
                     core.alias_verdict(program, args),
                     core.mode_change_verdict(program, args),

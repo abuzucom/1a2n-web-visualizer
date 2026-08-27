@@ -132,6 +132,10 @@ POWERSHELL_CASES = (
      "CMD nested inside a process launch"),
     ("bash -c 'rm -rf /etc'", DENY,
      "the mirror of the Bash gate's gap: a POSIX payload crossed untouched"),
+    ("Start-Process cmd -ArgumentList \"rd /s /q 'C:\\\\\"", DENY,
+     "an -ArgumentList payload that will not tokenize; the handler called"
+     " unparseable_verdict with one argument and raised, and a raise is an"
+     " exit code Claude Code ignores"),
     ("sh -c 'rm -rf build'", ASK, "the nested payload keeps its own verdict"),
     ("Get-ChildItem", ALLOW, "reading"),
     ("Remove-Item build.log", ALLOW, "a single file, not recursive"),

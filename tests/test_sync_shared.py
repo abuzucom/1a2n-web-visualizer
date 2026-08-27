@@ -15,12 +15,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# scripts/ is never on the path, however the suite is launched, so SHARED_FILES
+# has to be read from the module that defines it rather than restated here.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import sync
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SYNC = REPO_ROOT / "scripts" / "sync.py"
 MANIFEST = REPO_ROOT / "shared-files.json"
-
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import sync
 
 
 def run_sync(cwd: Path, *args) -> subprocess.CompletedProcess:
