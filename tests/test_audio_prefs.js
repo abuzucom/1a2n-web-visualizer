@@ -110,3 +110,28 @@ test('resolve never matches a blank label against blank device labels', function
 
   assert.equal(prefs.resolve(devices, { deviceId: 'dev-b', label: '' }), '');
 });
+
+/* Two identical interfaces enumerate under the same label. Picking the first
+ * one reconnects to the wrong input and the stream looks healthy, so the
+ * failure reads as "no audio" mid-set rather than as a wrong choice. */
+test('resolve declines a label shared by more than one device', function () {
+  const prefs = loadPrefs(createStorage()).prefs;
+  const devices = [
+    { deviceId: 'dev-a', label: 'Microphone (USB Audio Device)' },
+    { deviceId: 'dev-b', label: 'Microphone (USB Audio Device)' },
+  ];
+
+  assert.equal(prefs.resolve(devices, { deviceId: 'gone', label: 'Microphone (USB Audio Device)' }), '');
+});
+
+/* The saved id still wins outright, so an ambiguous label is only a reason to
+ * decline the fallback, not a reason to drop an exact match. */
+test('an exact id match still resolves when its label is ambiguous', function () {
+  const prefs = loadPrefs(createStorage()).prefs;
+  const devices = [
+    { deviceId: 'dev-a', label: 'Microphone (USB Audio Device)' },
+    { deviceId: 'dev-b', label: 'Microphone (USB Audio Device)' },
+  ];
+
+  assert.equal(prefs.resolve(devices, { deviceId: 'dev-b', label: 'Microphone (USB Audio Device)' }), 'dev-b');
+});

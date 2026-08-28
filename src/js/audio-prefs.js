@@ -85,10 +85,16 @@
   }
 
   /* Labels are blank for every device until audio permission is granted, so a
-   * blank saved label would otherwise match the first unlabeled entry. */
+   * blank saved label would otherwise match the first unlabeled entry.
+   *
+   * An ambiguous label is declined rather than guessed: two identical
+   * interfaces enumerate under one name, and picking the first reconnects to
+   * the wrong input while the stream still looks healthy. Falling back to the
+   * system default at least fails visibly. */
   function findByLabel(devices, label) {
     if (!label) return null;
-    return devices.find(function (device) { return device.label === label; }) || null;
+    const matches = devices.filter(function (device) { return device.label === label; });
+    return matches.length === 1 ? matches[0] : null;
   }
 
   /**

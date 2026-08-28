@@ -259,3 +259,81 @@ test('picking an input before Start says it takes effect on Start', async functi
   assert.match(harness.status(), /Start/);
 });
 
+
+/* Pre-permission enumeration reports every label blank, so the saved device
+ * can only be matched by id on the first pass. The second pass, after the
+ * stream opens and the labels arrive, is the only thing that recovers a device
+ * whose id changed. This harness models that: blank labels until start. */
+function createTwoPassHarness(vizOverrides) {
+  const storage = createStorage();
+  storage.setItem('bcviz.audioInput.v1', JSON.stringify({ deviceId: 'gone', label: 'Voicemeeter Out B1' }));
+  const blank = [
+    { deviceId: 'dev-a', label: '' },
+    { deviceId: 'dev-b', label: '' },
+  ];
+  const labeled = [
+    { deviceId: 'dev-a', label: 'Built-in Mic' },
+    { deviceId: 'dev-b', label: 'Voicemeeter Out B1' },
+  ];
+  let granted = false;
+  const overrides = Object.assign({
+    listDevices: function () { return (granted ? labeled : blank).slice(); },
+    start: function (deviceId) {
+      granted = true;
+      return Promise.resolve(deviceId);
+    },
+  }, vizOverrides || {});
+  return createHarness(overrides, { storage: storage, devices: blank });
+}
+
+test('the second pass recovers a saved device whose id changed', async function () {
+  const switched = [];
+  const harness = createTwoPassHarness({
+    useDeviceById: function (deviceId) {
+      switched.push(deviceId);
+      return Promise.resolve({ deviceId: deviceId, label: 'Voicemeeter Out B1' });
+    },
+  });
+
+  await harness.click('startBtn');
+  await sleep(1);
+
+  assert.equal(harness.state.startCalls[0], undefined, 'a blank label matches nothing on the first pass');
+  assert.deepEqual(switched, ['dev-b'], 'the second pass matched the saved label');
+});
+
+/* That second pass runs after viz.start() has already succeeded, so its
+ * failure is not a failure to start. The visualizer is running on the default
+ * input; reporting "Audio error" over it just prompts a pointless reload. */
+test('a failed second-pass reselect still reaches the running state', async function () {
+  const harness = createTwoPassHarness({
+    useDeviceById: function () {
+      const error = new Error('Could not start audio source');
+      error.name = 'NotReadableError';
+      return Promise.reject(error);
+    },
+  });
+
+  await harness.click('startBtn');
+  await sleep(1);
+
+  assert.match(harness.status(), /Running/, 'status reports the running visualizer: ' + harness.status());
+  assert.match(harness.status(), /NotReadableError/, 'and still names why the saved input was skipped');
+  assert.match(harness.status(), /exclusively locked/);
+});
+
+test('a failed second-pass reselect still remembers the input actually connected', async function () {
+  const harness = createTwoPassHarness({
+    useDeviceById: function () {
+      const error = new Error('Could not start audio source');
+      error.name = 'NotReadableError';
+      return Promise.reject(error);
+    },
+  });
+
+  await harness.click('startBtn');
+  await sleep(1);
+
+  const saved = harness.prefs.read();
+  assert.equal(saved.deviceId, 'dev-a', 'the remembered device is the one feeding the visualizer');
+});

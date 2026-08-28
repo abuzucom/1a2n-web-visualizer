@@ -843,3 +843,39 @@ test('a WebGL recovery reconnects the synthetic source too', async function () {
   assert.equal(harness.audioConnects[1], original);
   assert.equal(harness.mediaDevices.calls.length, 0);
 });
+
+/* connectInitialStream is awaited, so the input is connected before
+ * `started` is set and a later failure in startAudio runs its catch with a
+ * live capture stream. That catch closed the AudioContext but left the stream
+ * open and `prepared` true, which held the microphone and left prepareAudio
+ * short-circuiting onto a null context, so every retry died. */
+test('a start that fails after the input connects releases it and can be retried', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} } });
+  const realDriver = harness.window.BCRenderDriver;
+  let failNextStart = true;
+  harness.window.BCRenderDriver = {
+    create: function (options) {
+      const driver = realDriver.create(options);
+      const start = driver.start;
+      driver.start = function (context) {
+        if (failNextStart) {
+          failNextStart = false;
+          throw new Error('render driver failed to start');
+        }
+        return start.call(driver, context);
+      };
+      return driver;
+    },
+  };
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+
+  await assert.rejects(function () { return viz.start(); }, /render driver failed to start/);
+
+  assert.equal(viz.isStarted(), false);
+  assert.equal(harness.mediaDevices.openCountFor('default'), 0,
+    'the failed start does not keep the capture device open');
+
+  await viz.start();
+
+  assert.equal(viz.isStarted(), true, 'a retry after a failed start still works');
+});

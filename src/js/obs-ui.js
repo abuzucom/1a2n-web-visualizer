@@ -140,12 +140,22 @@
     return audioPrefs.resolve(viz.listDevices(), audioPrefs.read()) || undefined;
   }
 
+  /* This runs after viz.start() has already succeeded, so a failure here is
+   * not a failure to start: the visualizer is running on the default input.
+   * Reporting it as an audio error would hide that and prompt a reload that
+   * lands in the same place. Return the reason instead and let start() say
+   * both, since the panel has one line of status to spend. */
   async function reselectSavedDevice(requested) {
     const saved = audioPrefs.read();
     const wanted = audioPrefs.resolve(viz.listDevices(), saved);
-    if (!wanted || wanted === requested || wanted === viz.currentDeviceId()) return;
-    await viz.useDeviceById(wanted);
+    if (!wanted || wanted === requested || wanted === viz.currentDeviceId()) return '';
+    try {
+      await viz.useDeviceById(wanted);
+    } catch (error) {
+      return 'Kept the current input: ' + describeDeviceError(error) + '. ';
+    }
     refreshDeviceList();
+    return '';
   }
 
   function switchToSelectedDevice() {
@@ -176,9 +186,9 @@
       const requested = requestedDeviceId();
       await viz.start(requested);
       refreshDeviceList();
-      await reselectSavedDevice(requested);
+      const note = await reselectSavedDevice(requested);
       rememberCurrentDevice();
-      setStatus('\u25B6 Running. Press H to hide this panel.');
+      setStatus(note + '\u25B6 Running. Press H to hide this panel.');
     } catch (e) {
       setStatus('Audio error: ' + describeDeviceError(e));
     }

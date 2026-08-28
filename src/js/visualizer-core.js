@@ -898,9 +898,18 @@
       audio.keepalive.start();
       audio.watchdog.start();
     } catch (error) {
+      /* connectInitialStream is awaited, so the input is already connected by
+       * the time anything after it can throw. Unwind all of it, not just the
+       * context: a stream left open holds the capture device, `prepared` left
+       * true short-circuits prepareAudio onto the nulled context, and `started`
+       * left true makes the guard at the top of this function turn every retry
+       * into a silent no-op over a dead visualizer. */
       stopRenderLoop(playback);
       releaseDemoSource(audio);
+      releaseCurrentStream(audio);
       if (audio.audioCtx) { audio.audioCtx.close(); audio.audioCtx = null; }
+      audio.prepared = false;
+      audio.started = false;
       throw error;
     } finally {
       audio.starting = false;
