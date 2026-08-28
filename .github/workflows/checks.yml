@@ -14,6 +14,28 @@ permissions:
   contents: read
 
 jobs:
+  tests-windows:
+    # The gates run as the launcher named in .claude/settings.json, and only
+    # this job can show it resolves on Windows. A hook that fails to start
+    # exits non-zero but not 2, which Claude Code treats as a non-blocking
+    # error, so every gate would fail open there in silence.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Run Python tests
+        run: npm run test:py
+      - name: Run interpreter shim tests
+        run: node --test tests/test_run_python.js
+
   agents-md-sync:
     runs-on: ubuntu-latest
     steps:
@@ -24,12 +46,20 @@ jobs:
 
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
+      - name: Check the shared gate files against the manifest
+        run: python3 scripts/sync.py --check-shared
+
+      - name: Check no untested statement entered the hooks
+        run: python3 scripts/check_hook_coverage.py
 
       - name: Check GitHub Actions are pinned
         run: python3 scripts/check_action_pins.py
 
       - name: Check AGENTS.md style
         run: python3 scripts/lint_style.py
+
+      - name: Check dashes and ASCII in this repo's own prose
+        run: python3 scripts/check_ascii.py README.md CHANGELOG.md SECURITY.md docs/*.md
 
       - name: Check AGENTS.md American spelling
         run: python3 scripts/check_us_spelling.py AGENTS.md

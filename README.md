@@ -240,12 +240,60 @@ static checks for `persist-credentials: false` on checkout steps, unjustified
 MD5/SHA-1, non-root containers, and likely secrets.
 
 These checks come from the `abuzucom/agents` AI-agent-instructions template
-(see AGENTS.md's own history for the adoption). `make sync` (or
+(see AGENTS.md's own history for the adoption). `sync.py` keeps only the
+AGENTS.md family in step; every `scripts/`, `hooks/`, and `tests/` file was
+copied by hand, so
+[`docs/template-drift.md`](docs/template-drift.md) records what differs here
+and why. `make sync` (or
 `python3 scripts/sync.py`) regenerates the tool-specific copies after editing
 `AGENTS.md`; `make check` verifies them without writing; `make lint` runs the
 AGENTS.md-specific style checks below, additive to `npm run lint` (ESLint and
 Ruff), not a replacement for it. Running `pre-commit install` after cloning
 also wires most of the same checks in as local git hooks (`.pre-commit-config.yaml`).
+
+`hooks/` holds three Claude Code hooks, wired through `.claude/settings.json`,
+that run before a tool call rather than after a commit.
+`block_destructive_bash.py` and `block_destructive_powershell.py` gate
+destructive and history-rewriting commands on the `Bash` and `PowerShell`
+matchers. Which commands deny and which prompt is stated once, in AGENTS.md
+rule 2; a second copy here would be a second thing to disagree with.
+
+Both take every decision from `hooks/_gate_core.py`, so only the parsing is
+shell-specific, and `tests/test_gate_parity.py` fails when the two disagree.
+Each reads the other shell's interpreter names, so a command handed across
+(`powershell -Command '...'` from Bash, `bash -c '...'` from PowerShell) is
+read rather than passed. Commands are tokenized first, so equivalent spellings
+(`rm -Rf`, `git -C dir push --force`, `--force-with-lease=main:<oid>`) are
+caught rather than read past, and a command that will not parse is gated rather
+than cleared.
+
+`require_consent.py` sends every write to a test file that already exists to a
+permission prompt. Creating a new test file is the only exemption, so the
+mandated test-first workflow keeps the one exemption that is verifiable. The
+gate reads the path, never the content: an earlier version cleared a verified
+end-of-file append, and appending `ExistingTest.__unittest_skip__ = True`
+satisfies every structural condition such a check can state while leaving every
+assertion above it inert. Bash writes reaching a test file go to the same
+prompt, through a redirect, a here-document, `tee`, `sed -i`, `cp`, or `mv`.
+
+Paths are resolved before classification, so a symlink with an innocuous name
+cannot carry an edit into a test file, hard links are matched by inode, and any
+test file resolving outside the project root is gated whether a link redirected
+it there or the caller named it directly.
+
+All three fail closed on their own inputs: a payload that will not parse, a
+malformed tool input, or a test file that cannot be decoded as text is denied
+or gated rather than waved through. They are registered in the exec form
+(`command` plus `args`), because in shell form a project path containing a
+space splits into two arguments and the hook silently never runs.
+
+They are heuristics rather than a sandbox. A local hook cannot vouch for
+itself: whoever edits it or `.claude/settings.json` before it runs decides what
+it does, which is what the protected-file review in
+`docs/protected-file-review.md` covers. `tests/gate_corpus.py` holds every
+known bypass as a row with the verdict it must reach, and is shared
+byte-identical with `abuzucom/agents`, so a fix landing in one repository and
+not the other fails the other's suite.
 
 | Script | Backs | Blocking? |
 |---|---|---|
@@ -254,12 +302,13 @@ also wires most of the same checks in as local git hooks (`.pre-commit-config.ya
 | `scripts/check_english_only.py` | English only | No, warns only |
 | `scripts/check_banned_agents.py` | Banned agents | Yes |
 | `scripts/check_branch_name.py` | Branch naming conventions | Yes |
-| `scripts/check_commit_message.py` | Commit message style | Yes |
+| `scripts/check_commit_message.py` | Commit message style (merge commits exempt) | No, warns only |
 | `scripts/check_persist_credentials.py` | No persisted git credentials in CI workflows | Yes |
 | `scripts/check_weak_hashing.py` | No weak hashing in security-sensitive contexts | Yes |
 | `scripts/check_dockerfile_root.py` | No root containers without explicit consent | Yes |
 | `scripts/check_secrets_heuristic.py` | No secrets in version control (heuristic, not entropy-based) | Yes |
-| `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Available, not wired into CI: this repo's existing prose (`CHANGELOG.md`, `README.md`) uses spaced hyphens outside the scope the rule targets |
+| `scripts/check_hook_coverage.py` | Nothing untested enters `hooks/` | Wired into CI. Runs the suite with `tools/hook-trace` on `PYTHONPATH`, which traces every interpreter the suite starts; the gates run as subprocesses, so ordinary in-process coverage sees almost none of their decision code. Compares against `hook-coverage-baseline.json`, which is per repo: this repo declined two hook suites, so what its run leaves unrun differs from the template's |
+| `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Wired into CI against `README.md`, `CHANGELOG.md`, `SECURITY.md`, and `docs/`. It reads prose, so a table delimiter row, a list marker, and an inline code span spanning two lines are excluded from the dash rule rather than rewritten |
 
 Protected-file review runs from the trusted default branch through
 `.github/workflows/protected-files.yml`. It covers agent instructions,

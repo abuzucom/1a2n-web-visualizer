@@ -49,12 +49,12 @@ microphone capture works without TLS.
 
 The compose file and Caddyfile apply the following measures:
 
-- **Localhost binding** - `127.0.0.1:8080:80`, no network exposure.
-- **Read-only filesystem** - the container cannot write to its own layers.
-- **No new privileges** - blocks `setuid`/`setgid` escalation.
-- **All capabilities dropped** - the container runs with zero Linux
+- **Localhost binding**: `127.0.0.1:8080:80`, no network exposure.
+- **Read-only filesystem**: the container cannot write to its own layers.
+- **No new privileges**: blocks `setuid`/`setgid` escalation.
+- **All capabilities dropped**: the container runs with zero Linux
   capabilities.
-- **OWASP security headers** - Caddy sets `Content-Security-Policy`, `X-Frame-Options`,
+- **OWASP security headers**: Caddy sets `Content-Security-Policy`, `X-Frame-Options`,
   `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, and
   `Strict-Transport-Security` are set by Caddy on every response (defense
   in depth with the HTML meta CSP). Note that `Strict-Transport-Security`
@@ -62,8 +62,8 @@ The compose file and Caddyfile apply the following measures:
   container serves plain HTTP on `localhost` by design (see top of file),
   so the header has no effect here but takes effect if this Caddyfile runs
   behind TLS termination.
-- **Server fingerprint removed** - the `Server` header is stripped.
-- **Asset caching** - `/vendor/*` and `/presets-extra/*` are cached for a
+- **Server fingerprint removed**: the `Server` header is stripped.
+- **Asset caching**: `/vendor/*` and `/presets-extra/*` are cached for a
   day and `/js/*` plus `/css/*` for an hour, all with ETag revalidation;
   HTML stays `no-store`. Nothing is marked `immutable` because curation
   rewrites vendored packs and preset chunks in place under the same
