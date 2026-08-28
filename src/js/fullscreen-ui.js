@@ -44,21 +44,32 @@
     toastTimer = setTimeout(function () { toast.classList.remove('show'); }, TOAST_DURATION_MS);
   }
 
-  /** Turns a getUserMedia error into a short, actionable hint keyed on name,
-   * so "Could not start audio source" points at the fix instead of just the
-   * symptom. See docs/unattended-operation.md for the full explanation. */
+  /* Both globals arrive as separate deferred scripts, so the pages' script
+   * order is what makes them present. visualizer-core.js guards the same way:
+   * a reorder or a missing file must degrade the message, not turn every
+   * device-error path into a TypeError. */
   function describeDeviceError(error) {
-    const name = error && error.name;
-    const message = (error && error.message) || String(error);
-    let hint = '';
-    if (name === 'NotReadableError' || name === 'AbortError') {
-      hint = ' (device may be exclusively locked by another app)';
-    } else if (name === 'NotFoundError') {
-      hint = ' (device appears to be unplugged or disabled)';
-    } else if (name === 'OverconstrainedError') {
-      hint = ' (device id no longer valid; re-select an input)';
-    }
-    return (name ? name + ': ' : '') + message + hint;
+    const errors = window.BCDeviceErrors;
+    if (errors && typeof errors.describe === 'function') return errors.describe(error);
+    return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
+  }
+
+  const NO_PREFS = {
+    read: function () { return null; },
+    write: function () { return false; },
+    clear: function () {},
+    resolve: function () { return ''; },
+  };
+  const audioPrefs = window.BCAudioPrefs || NO_PREFS;
+
+  function labelFor(deviceId) {
+    const match = viz.listDevices().find(function (d) { return d.deviceId === deviceId; });
+    return match ? (match.label || '') : '';
+  }
+
+  function rememberCurrentDevice() {
+    const deviceId = viz.currentDeviceId();
+    if (deviceId) audioPrefs.write(deviceId, labelFor(deviceId));
   }
 
   /* demo.html sets the attribute; ?demo=1 turns any fullscreen page into the
@@ -246,14 +257,15 @@
     showStartupStatus();
     window.setTimeout(async function () {
       try {
-        await viz.start();
+        await viz.start(audioPrefs.resolve(viz.listDevices(), audioPrefs.read()) || undefined);
+        rememberCurrentDevice();
         clearStartupStatus(false);
         help.classList.add('hidden');
         document.body.classList.add('running');
         say('\u25B6 Running \u2014 press ? for controls');
       } catch (e) {
         clearStartupStatus(true);
-        say('Audio error: ' + e.message);
+        say('Audio error: ' + describeDeviceError(e));
       } finally {
         startupPending = false;
       }
@@ -290,7 +302,9 @@
       case '=': case '+': nudgeDemoIntensity(INTENSITY_STEP); break;
       case 'd': case 'D':
         if (viz.isDemo()) { say('Demo mode: synthetic audio, no input device'); break; }
-        viz.nextDevice().catch(function (error) { say('Audio device error: ' + describeDeviceError(error)); });
+        viz.nextDevice()
+          .then(rememberCurrentDevice)
+          .catch(function (error) { say('Audio device error: ' + describeDeviceError(error)); });
         break;
       case 'f': case 'F': toggleFullscreen(); break;
       case 't': case 'T':
