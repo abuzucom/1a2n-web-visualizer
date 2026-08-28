@@ -702,6 +702,15 @@
     }
   }
 
+  /* device-errors.js carries the shared wording, but the pages load it as a
+   * separate script and the core must still say something useful if it is
+   * missing. Same optional-dependency guard the preset packs get. */
+  function describeDeviceError(error) {
+    const errors = global.BCDeviceErrors;
+    if (errors && typeof errors.describe === 'function') return errors.describe(error);
+    return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
+  }
+
   function matchDeviceIndex(devices, deviceId) {
     return devices.findIndex(function (device) { return device.deviceId === deviceId; });
   }
@@ -727,19 +736,28 @@
     try {
       const stream = await openStream(deviceId);
       await getDevices(audio);
-      if (!audio.started) { stopStream(stream); return; }
+      // Abandoned mid-prompt: startAudio is awaiting this, so the attempt is
+      // still live while `starting` holds. Dropping the stream here is what
+      // keeps a permission prompt answered after a failed start from leaving
+      // the device open with nothing attached to it.
+      if (!audio.starting && !audio.started) { stopStream(stream); return; }
       syncDeviceIdxFromStream(audio, stream);
       connectStream(audio, stream);
     } catch (error) {
       console.warn('Audio input unavailable; visualizer will continue:', error);
-      audio.onToast('Audio input unavailable; visualizer is running');
+      audio.onToast('Audio input unavailable, visualizer is running. ' + describeDeviceError(error));
     }
   }
 
   /**
-   * Create and return the Web Audio context for the visualizer.
+   * Build the Web Audio context for the visualizer and attach the input.
+   *
+   * connectInitialStream is awaited so that start() resolves with the device
+   * list already re-enumerated under permission. Without that the UI rebuilds
+   * its picker from the pre-permission list, where every label is blank. It
+   * swallows its own errors, so awaiting adds no rejection path.
    */
-  function initializeAudio(audio, playback, deviceId) {
+  async function initializeAudio(audio, playback, deviceId) {
     if (!audio.prepared) prepareAudio(audio, playback);
     audio.audioCtx.resume().catch(function (error) {
       console.warn('Audio context resume failed:', error);
@@ -748,7 +766,7 @@
       startDemoSource(audio);
       return;
     }
-    connectInitialStream(audio, deviceId);
+    await connectInitialStream(audio, deviceId);
   }
 
   /**
@@ -880,9 +898,18 @@
       audio.keepalive.start();
       audio.watchdog.start();
     } catch (error) {
+      /* connectInitialStream is awaited, so the input is already connected by
+       * the time anything after it can throw. Unwind all of it, not just the
+       * context: a stream left open holds the capture device, `prepared` left
+       * true short-circuits prepareAudio onto the nulled context, and `started`
+       * left true makes the guard at the top of this function turn every retry
+       * into a silent no-op over a dead visualizer. */
       stopRenderLoop(playback);
       releaseDemoSource(audio);
+      releaseCurrentStream(audio);
       if (audio.audioCtx) { audio.audioCtx.close(); audio.audioCtx = null; }
+      audio.prepared = false;
+      audio.started = false;
       throw error;
     } finally {
       audio.starting = false;

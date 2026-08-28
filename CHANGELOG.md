@@ -4,6 +4,54 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.10.0]
+
+### Added
+- Remembered the selected audio input across reloads
+  (`src/js/audio-prefs.js`). An OBS browser source is rebuilt from scratch on a
+  scene refresh, which previously dropped the visualizer back to the system
+  default input every time. The device is matched back by id first and by label
+  second, so it also survives a Voicemeeter restart handing the same device
+  back under a new id. This is the only state the pages persist.
+
+### Fixed
+- Fixed `NotAllowedError: Permission denied` when selecting an audio input
+  giving no indication of the cause. The error wording now distinguishes a page
+  or embedder block, which in OBS means a **Local file** browser source that
+  has to become a **URL** source, from an operating-system privacy block, and
+  covers `SecurityError` as well. The wording moved out of the two
+  byte-identical copies in `src/js/obs-ui.js` and `src/js/fullscreen-ui.js`
+  into `src/js/device-errors.js`. See the new troubleshooting entries in
+  `docs/audio-routing.md` and the expanded note in `docs/obs-setup.md`.
+- Fixed a failure to open the audio input at startup collapsing into one
+  generic message, so a permission denial looked the same as an unplugged
+  cable. The initial connect is also awaited now, so the device picker is
+  rebuilt from the list enumerated under permission rather than the
+  pre-permission list, where every label is blank.
+- Fixed a start that fails after the audio input connects leaving the capture
+  device held and the page unable to retry. Awaiting the initial connect means
+  the stream is attached before `started` is set, so `startAudio`'s failure
+  path now releases the stream and clears `prepared` and `started` as well as
+  closing the context. It previously kept the microphone open, and left the
+  retry guard believing the visualizer was running, so every later attempt
+  returned silently over a dead context.
+- Fixed a failure in the second-pass device reselect being reported as a
+  failure to start. That pass runs after the visualizer is already running on
+  the default input, so `src/js/obs-ui.js` now reports why the saved input was
+  skipped alongside the running status instead of replacing it with
+  `Audio error`.
+- Fixed a remembered device name shared by more than one input resolving to
+  whichever enumerated first. Two identical interfaces report one label, and
+  reconnecting to the wrong one still looks healthy, so `resolve` now declines
+  an ambiguous label and falls back to the system default.
+
+### Changed
+- Guarded `window.BCDeviceErrors` and `window.BCAudioPrefs` in
+  `src/js/obs-ui.js` and `src/js/fullscreen-ui.js`, matching the guard
+  `visualizer-core.js` already applies to the same globals. Both arrive as
+  separate deferred scripts, and a missing one turned every device-error path
+  into a `TypeError`, in the code whose job is reporting failures.
+
 ## [1.9.0]
 
 ### Changed
