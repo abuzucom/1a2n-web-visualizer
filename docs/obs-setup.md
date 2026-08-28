@@ -11,6 +11,12 @@
 > If audio access fails over a local file, run a dev server instead
 > (`npm start`) and use **URL** mode pointing at
 > `http://localhost:3000/obs.html` (port depends on the server).
+> A **Local file** browser source is the usual cause of
+> `NotAllowedError: Permission denied`: OBS blocks audio capture for local
+> files, and its embedded browser shows no permission prompt inside
+> **Interact**, so a denial cannot be re-prompted by hand. Use **URL** mode.
+> Adding `--enable-media-stream` to OBS's launch options is a fallback if a
+> URL source is not an option.
 >
 > **Hosted option (simplest):** use **URL** mode pointing at the production
 > deployment, `https://visualizer.1a2n.net/obs.html`. HTTPS means audio
@@ -27,6 +33,12 @@
 2. Pick your audio input from the dropdown (see
    [audio-routing.md](audio-routing.md) to feed it music instead of a mic).
 3. Click **Start visualizer**, then press <kbd>H</kbd> to hide the panel.
+
+The chosen input is remembered in the browser source's own storage, so a scene
+refresh or an OBS restart reconnects it rather than falling back to the system
+default. It is matched by device id first and by device name second, which is
+what recovers the input after a Voicemeeter restart hands the device back under
+a new id. Selecting a different input replaces what is remembered.
 
 ## Clean capture tips
 

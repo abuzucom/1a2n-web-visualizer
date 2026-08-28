@@ -10,7 +10,7 @@ it from the
 
 All entry points share one controller module:
 
-- `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel.
+- `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel. The selected audio input is remembered across reloads, so an OBS scene refresh reconnects it rather than falling back to the system default.
 - `src/fullscreen.html`: Provides a keyboard-controlled interface with no visible UI. It shows a five-second startup indicator, selects a random resident vendored preset, hides the cursor, and shuffles presets by default. Use it for window capture or secondary displays.
 - `src/demo.html`: Runs the fullscreen build against a synthetic audio track generated in the page, so the presets react with no microphone permission and no virtual audio cable. The track is silent. It shares `fullscreen.css` and `fullscreen-ui.js` with the fullscreen build and adds genre, tempo, and intensity keys.
 - `src/mobile.html`: Provides a touch-first browser interface with shuffle, visit history, interval, and hyperspeed controls. It does not request browser fullscreen or expose curation controls.
@@ -388,6 +388,9 @@ The application visualizes audio from a system input device, such as a
 microphone. To visualize system output, route it through a virtual audio cable
 and select that device as the input. See [`docs/audio-routing.md`](docs/audio-routing.md)
 for platform-specific instructions.
+
+The chosen input is the one thing the pages persist, stored per page and matched
+back by device id first and device name second.
 
 To see the visualizer working without configuring any of that, open
 `demo.html`, which drives the presets from a track generated in the page. It

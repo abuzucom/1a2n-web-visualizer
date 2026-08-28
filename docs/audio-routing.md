@@ -43,10 +43,21 @@ set the cable as default playback and monitor it back to your speakers.
 - **Empty device list / permission error:** serve the page over `http://localhost`
   instead of opening the file directly (`npm start`), since some browsers only
   allow audio capture in a secure context.
+- **`NotAllowedError: Permission denied`:** the page itself is not allowed to
+  capture audio. In OBS this is almost always a **Local file** browser source;
+  switch it to **URL** mode (see [obs-setup.md](obs-setup.md)). In a normal
+  browser, clear the blocked microphone permission for the site and reload.
+- **`NotAllowedError: Permission denied by system`:** the operating system is
+  blocking microphone access for the whole app, not for this page. On Windows,
+  Settings -> Privacy & security -> Microphone, and confirm desktop apps are
+  allowed. On macOS, System Settings -> Privacy & Security -> Microphone.
 - **Device labels are blank:** labels only appear after you grant audio
   permission for the first time; start once, then re-open the picker.
 - **No reaction:** confirm audio is actually playing to the selected device
   (check your OS mixer / `pavucontrol` recording tab).
+- **The chosen input comes back after a reload:** that is intentional. The
+  selection is remembered per page, matched by device id and then by device
+  name. Pick a different input to replace it.
 - **Still no reaction:** open `demo.html`. If the presets react there, the
   visualizer and your GPU are fine and the problem is the routing, which
   narrows the search considerably.

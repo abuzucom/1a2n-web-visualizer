@@ -150,6 +150,8 @@ back.
 | `Recoveries: 0` but a dead scene | The input is live and silent. The watchdog is behaving correctly; the problem is upstream at the mixer. |
 | `no usable audio input found` | The preferred device never came back. Reselect the input by hand. |
 | "Could not start audio source" / `NotReadableError` | Another app or tab has the device open in exclusive mode. See [Exclusive-mode devices (Windows)](#exclusive-mode-devices-windows) above. |
+| `NotAllowedError: Permission denied` | The page is not allowed to capture audio. In OBS, a **Local file** browser source; switch it to **URL** mode. See [obs-setup.md](obs-setup.md). |
+| `NotAllowedError: Permission denied by system` | The OS is blocking microphone access for the app. Allow it in the system privacy settings. |
 | Restarts climbing, recoveries at 0 | The render loop is stalling, not the audio. Check GPU load and see [background-rendering.md](background-rendering.md). |
 
 A recovery count of 1 or 2 across a long set is unremarkable. A count in the
