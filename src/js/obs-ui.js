@@ -11,13 +11,28 @@
   const secsEl   = document.getElementById('cycleSecs');
   const guardEl  = document.getElementById('audioGuard');
 
-  const deviceErrors = window.BCDeviceErrors;
-  const audioPrefs = window.BCAudioPrefs;
+  /* Both globals arrive as separate deferred scripts, so the pages' script
+   * order is what makes them present. visualizer-core.js guards the same way:
+   * a reorder or a missing file must degrade the message, not turn every
+   * device-error path into a TypeError. */
+  function describeDeviceError(error) {
+    const errors = window.BCDeviceErrors;
+    if (errors && typeof errors.describe === 'function') return errors.describe(error);
+    return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
+  }
+
+  const NO_PREFS = {
+    read: function () { return null; },
+    write: function () { return false; },
+    clear: function () {},
+    resolve: function () { return ''; },
+  };
+  const audioPrefs = window.BCAudioPrefs || NO_PREFS;
 
   function setStatus(msg) { statusEl.textContent = msg; }
 
   function reportDeviceError(error) {
-    setStatus('Audio device error: ' + deviceErrors.describe(error));
+    setStatus('Audio device error: ' + describeDeviceError(error));
   }
 
   function labelFor(deviceId) {
@@ -165,7 +180,7 @@
       rememberCurrentDevice();
       setStatus('\u25B6 Running. Press H to hide this panel.');
     } catch (e) {
-      setStatus('Audio error: ' + deviceErrors.describe(e));
+      setStatus('Audio error: ' + describeDeviceError(e));
     }
   }
 

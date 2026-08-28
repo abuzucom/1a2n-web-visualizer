@@ -4,13 +4,15 @@
 MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 18,013 deduplicated presets: 373 from four butterchurn preset packs, 14,408 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, and 3,232 experimental NestDrop presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
-`/fullscreen.html`, and `/mobile.html`). GitHub Actions deploys it from the
+`/fullscreen.html`, `/demo.html`, and `/mobile.html`). GitHub Actions deploys
+it from the
 `develop` branch.
 
 All entry points share one controller module:
 
 - `src/obs.html`: Provides an on-screen control panel for device selection, preset management, and auto-cycle configuration. Press <kbd>H</kbd> to hide the panel. The selected audio input is remembered across reloads, so an OBS scene refresh reconnects it rather than falling back to the system default.
 - `src/fullscreen.html`: Provides a keyboard-controlled interface with no visible UI. It shows a five-second startup indicator, selects a random resident vendored preset, hides the cursor, and shuffles presets by default. Use it for window capture or secondary displays.
+- `src/demo.html`: Runs the fullscreen build against a synthetic audio track generated in the page, so the presets react with no microphone permission and no virtual audio cable. The track is silent. It shares `fullscreen.css` and `fullscreen-ui.js` with the fullscreen build and adds genre, tempo, and intensity keys.
 - `src/mobile.html`: Provides a touch-first browser interface with shuffle, visit history, interval, and hyperspeed controls. It does not request browser fullscreen or expose curation controls.
 
 The UI follows the brand visual system across all entry points. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`), Charcoal (`#242424`), Concrete (`#A6A39D`), and Dull Silver (`#74777A`). Libre Franklin provides display and editorial text, with Helvetica, Neue Haas Grotesk, and Arial fallbacks. Cousine provides utility text, with IBM Plex Mono and Courier New fallbacks.
@@ -38,6 +40,7 @@ butterchurn-visualizer/
 |   +-- index.html          # Landing page
 |   +-- obs.html            # OBS browser source entry point
 |   +-- fullscreen.html     # Standalone fullscreen entry point
+|   +-- demo.html           # Synthetic-audio demo entry point
 |   +-- mobile.html         # Touch-first browser entry point
 |   +-- css/
 |   |   +-- brand.css            # shared brand palette and typography tokens
@@ -52,6 +55,7 @@ butterchurn-visualizer/
 |   |   +-- mobile-ui.js         # touch wiring
 |   |   +-- mobile-state.js      # in-memory mobile history and intervals
 |   |   +-- hyperspeed.js        # shared hyperspeed scheduler
+|   |   +-- demo-audio.js        # synthetic demo track generator
 |   +-- vendor/                  # vendored butterchurn + preset/texture packs
 |   |   +-- butterchurn.min.js
 |   |   +-- butterchurnExtraImages.min.js
@@ -172,8 +176,12 @@ npm start             # Serves ./src via the pinned `serve` package
 python3 -m http.server --directory src 8000
 ```
 
-Open <http://localhost:8000/fullscreen.html>, <http://localhost:8000/mobile.html>,
-or <http://localhost:8000/obs.html>.
+Open <http://localhost:8000/fullscreen.html>, <http://localhost:8000/demo.html>,
+<http://localhost:8000/mobile.html>, or <http://localhost:8000/obs.html>.
+
+**Demo mode:** <http://localhost:8000/demo.html> needs no audio setup at all. It
+generates its own track and drives the presets from that, so it is the quickest
+way to check the visualizer works. See [Demo mode](#demo-demohtml).
 
 **OBS Integration:** See [`docs/obs-setup.md`](docs/obs-setup.md) for setup instructions.
 
@@ -192,6 +200,7 @@ GitHub Pages hosts the production environment at **`visualizer.1a2n.net`**:
 ```text
 https://visualizer.1a2n.net/obs.html
 https://visualizer.1a2n.net/fullscreen.html
+https://visualizer.1a2n.net/demo.html
 https://visualizer.1a2n.net/mobile.html
 ```
 
@@ -231,12 +240,60 @@ static checks for `persist-credentials: false` on checkout steps, unjustified
 MD5/SHA-1, non-root containers, and likely secrets.
 
 These checks come from the `abuzucom/agents` AI-agent-instructions template
-(see AGENTS.md's own history for the adoption). `make sync` (or
+(see AGENTS.md's own history for the adoption). `sync.py` keeps only the
+AGENTS.md family in step; every `scripts/`, `hooks/`, and `tests/` file was
+copied by hand, so
+[`docs/template-drift.md`](docs/template-drift.md) records what differs here
+and why. `make sync` (or
 `python3 scripts/sync.py`) regenerates the tool-specific copies after editing
 `AGENTS.md`; `make check` verifies them without writing; `make lint` runs the
 AGENTS.md-specific style checks below, additive to `npm run lint` (ESLint and
 Ruff), not a replacement for it. Running `pre-commit install` after cloning
 also wires most of the same checks in as local git hooks (`.pre-commit-config.yaml`).
+
+`hooks/` holds three Claude Code hooks, wired through `.claude/settings.json`,
+that run before a tool call rather than after a commit.
+`block_destructive_bash.py` and `block_destructive_powershell.py` gate
+destructive and history-rewriting commands on the `Bash` and `PowerShell`
+matchers. Which commands deny and which prompt is stated once, in AGENTS.md
+rule 2; a second copy here would be a second thing to disagree with.
+
+Both take every decision from `hooks/_gate_core.py`, so only the parsing is
+shell-specific, and `tests/test_gate_parity.py` fails when the two disagree.
+Each reads the other shell's interpreter names, so a command handed across
+(`powershell -Command '...'` from Bash, `bash -c '...'` from PowerShell) is
+read rather than passed. Commands are tokenized first, so equivalent spellings
+(`rm -Rf`, `git -C dir push --force`, `--force-with-lease=main:<oid>`) are
+caught rather than read past, and a command that will not parse is gated rather
+than cleared.
+
+`require_consent.py` sends every write to a test file that already exists to a
+permission prompt. Creating a new test file is the only exemption, so the
+mandated test-first workflow keeps the one exemption that is verifiable. The
+gate reads the path, never the content: an earlier version cleared a verified
+end-of-file append, and appending `ExistingTest.__unittest_skip__ = True`
+satisfies every structural condition such a check can state while leaving every
+assertion above it inert. Bash writes reaching a test file go to the same
+prompt, through a redirect, a here-document, `tee`, `sed -i`, `cp`, or `mv`.
+
+Paths are resolved before classification, so a symlink with an innocuous name
+cannot carry an edit into a test file, hard links are matched by inode, and any
+test file resolving outside the project root is gated whether a link redirected
+it there or the caller named it directly.
+
+All three fail closed on their own inputs: a payload that will not parse, a
+malformed tool input, or a test file that cannot be decoded as text is denied
+or gated rather than waved through. They are registered in the exec form
+(`command` plus `args`), because in shell form a project path containing a
+space splits into two arguments and the hook silently never runs.
+
+They are heuristics rather than a sandbox. A local hook cannot vouch for
+itself: whoever edits it or `.claude/settings.json` before it runs decides what
+it does, which is what the protected-file review in
+`docs/protected-file-review.md` covers. `tests/gate_corpus.py` holds every
+known bypass as a row with the verdict it must reach, and is shared
+byte-identical with `abuzucom/agents`, so a fix landing in one repository and
+not the other fails the other's suite.
 
 | Script | Backs | Blocking? |
 |---|---|---|
@@ -245,12 +302,13 @@ also wires most of the same checks in as local git hooks (`.pre-commit-config.ya
 | `scripts/check_english_only.py` | English only | No, warns only |
 | `scripts/check_banned_agents.py` | Banned agents | Yes |
 | `scripts/check_branch_name.py` | Branch naming conventions | Yes |
-| `scripts/check_commit_message.py` | Commit message style | Yes |
+| `scripts/check_commit_message.py` | Commit message style (merge commits exempt) | No, warns only |
 | `scripts/check_persist_credentials.py` | No persisted git credentials in CI workflows | Yes |
 | `scripts/check_weak_hashing.py` | No weak hashing in security-sensitive contexts | Yes |
 | `scripts/check_dockerfile_root.py` | No root containers without explicit consent | Yes |
 | `scripts/check_secrets_heuristic.py` | No secrets in version control (heuristic, not entropy-based) | Yes |
-| `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Available, not wired into CI: this repo's existing prose (`CHANGELOG.md`, `README.md`) uses spaced hyphens outside the scope the rule targets |
+| `scripts/check_hook_coverage.py` | Nothing untested enters `hooks/` | Wired into CI. Runs the suite with `tools/hook-trace` on `PYTHONPATH`, which traces every interpreter the suite starts; the gates run as subprocesses, so ordinary in-process coverage sees almost none of their decision code. Compares against `hook-coverage-baseline.json`, which is per repo: this repo declined two hook suites, so what its run leaves unrun differs from the template's |
+| `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Wired into CI against `README.md`, `CHANGELOG.md`, `SECURITY.md`, and `docs/`. It reads prose, so a table delimiter row, a list marker, and an inline code span spanning two lines are excluded from the dash rule rather than rewritten |
 
 Protected-file review runs from the trusted default branch through
 `.github/workflows/protected-files.yml`. It covers agent instructions,
@@ -289,6 +347,29 @@ workflow and deployment linking behavior.
 | <kbd>Escape</kbd> | Close the excluded-presets or favorites panel |
 | <kbd>?</kbd> | Show/hide the help menu |
 
+### Demo (`demo.html`)
+
+Same keys as the fullscreen build, with three differences: <kbd>D</kbd> does
+nothing (there is no capture device), the audio guard has nothing to guard, and
+these are added.
+
+| Key | Action |
+| --- | --- |
+| <kbd>B</kbd> | Cycle genre and tempo: house 87, trance 140, liquid drum and bass 174 |
+| <kbd>,</kbd> / <kbd>.</kbd> | Nudge tempo in 4 BPM steps |
+| <kbd>-</kbd> / <kbd>=</kbd> | Intensity in 10% steps |
+
+Each tempo is its own pattern rather than the same loop played faster, so the
+presets get recognizably different music to react to. Add `?demo=1` to
+`fullscreen.html` for the same behavior on that page.
+
+The generated audio is silent: it reaches the speakers only through a gain of
+zero, which exists so the synthetic sources sit on the destination-connected
+graph the browser is guaranteed to render. Your tab may still show the audio
+indicator, which is the background-rendering keepalive tone described in
+[`docs/background-rendering.md`](docs/background-rendering.md), not the demo
+track.
+
 ### OBS Panel (`obs.html`)
 
 Use the on-screen graphical controls. Press <kbd>H</kbd> to toggle the control panel's visibility.
@@ -310,6 +391,10 @@ for platform-specific instructions.
 
 The chosen input is the one thing the pages persist, stored per page and matched
 back by device id first and device name second.
+
+To see the visualizer working without configuring any of that, open
+`demo.html`, which drives the presets from a track generated in the page. It
+never requests microphone permission.
 
 ## Dependencies
 

@@ -17,6 +17,16 @@ class ProtectedFileTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(is_protected(path))
 
+    def test_protects_tests_and_the_enforcement_that_guards_them(self) -> None:
+        """A gate anyone can quietly edit or delete is not a gate."""
+        for path in (
+            "tests/test_bcviz_api.js", "tests/test_protected_files.py",
+            "hooks/require_consent.py", "hooks/block_destructive_bash.py",
+            ".claude/settings.json",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(is_protected(path))
+
     def test_leaves_content_and_style_files_unprotected(self) -> None:
         self.assertFalse(is_protected("README.md"))
         self.assertFalse(is_protected("src/css/fullscreen.css"))

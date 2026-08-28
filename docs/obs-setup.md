@@ -24,7 +24,7 @@
 >
 > **Internal option:** if you run the Docker + Caddy container (see
 > [local-hosting.md](local-hosting.md)) on the same machine as OBS, point
-> **URL** mode at `http://localhost:8080/obs.html` instead - the container
+> **URL** mode at `http://localhost:8080/obs.html` instead; the container
 > only binds to `localhost`, so this doesn't work from a different machine.
 
 ## Grant audio and start
@@ -55,7 +55,7 @@ a new id. Selecting a different input replaces what is remembered.
 
 ## Notes / gotchas
 
-- Runs fully offline from a local clone - see [local-hosting.md](local-hosting.md)
+- Runs fully offline from a local clone; see [local-hosting.md](local-hosting.md)
   for how the vendoring works.
 - The butterchurn build is unaffiliated with OBS; no plugin install is needed -
   it is just a web page.
