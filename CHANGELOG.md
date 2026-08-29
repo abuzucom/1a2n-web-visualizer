@@ -4,6 +4,30 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.11.0]
+
+### Added
+- Imported 2,173 presets from the "Flexis Mildrop preset collection" folder
+  of [LeetCodes/milkdrop-preset-collection](https://github.com/LeetCodes/milkdrop-preset-collection)
+  (pinned commit `65ea61e`), tagged `[EXP2] ` rather than the existing
+  `[EXP] ` so this batch stays visually distinct while curating. Of 3,008
+  source `.milk` files, 2,926 converted; 82 failed on malformed source
+  content (mostly one corrupted equation shared across 67 mix variants of
+  `TonyMilkdrop - Dawning The Peacocks`) and were recorded, not silently
+  dropped. 753 were skipped as already curated out, already imported,
+  missing a texture, or duplicate content within this batch. Building
+  this required the native `milkdrop-shader-converter` addon this
+  environment didn't have compiled; see the new `--exp-prefix` flag on
+  `tools/import-nestdrop-presets.py` below.
+- Added 7 textures new to the experimental image bundle from
+  [projectM-visualizer/presets-milkdrop-texture-pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack)
+  (pinned commit `b6e4610`), needed by a handful of the newly imported
+  presets. 60 of that pack's 67 textures were already carried.
+- Added `--exp-prefix` to `tools/import-nestdrop-presets.py`, defaulting to
+  the existing `[EXP] ` string so every prior invocation is unaffected. A
+  batch that should stay visually distinct from earlier imports while
+  curating can now pass `--exp-prefix "[EXP2] "` instead.
+
 ## [1.10.0]
 
 ### Added

@@ -422,9 +422,9 @@ The `.milk` to JSON pipeline (`tools/convert-milk-presets.js`) prioritizes stabi
 
 The experimental NestDrop import adds 3,232 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 561 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 18,013 presets.
 
-A second experimental batch, tagged `[EXP2] ` so it stays visually distinct
-from the `[EXP]` NestDrop import while curating, adds the non-duplicate
-presets from the "Flexis Mildrop preset collection" folder of
+A second experimental batch adds 2,173 more presets, tagged `[EXP2] ` so it
+stays visually distinct from the `[EXP]` NestDrop import while curating.
+Sourced from the "Flexis Mildrop preset collection" folder of
 [LeetCodes/milkdrop-preset-collection](https://github.com/LeetCodes/milkdrop-preset-collection)
 (pinned commit `65ea61e`, WTFPL-licensed; not the original author of the
 individual presets it collects, credited here as the immediate source). A
@@ -432,7 +432,8 @@ handful of its presets needed textures this repo didn't already carry;
 those came from
 [projectM-visualizer/presets-milkdrop-texture-pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack)
 (pinned commit `b6e4610`), the same upstream `fetch-cream-of-the-crop-presets.py`
-already trusts.
+already trusts. The combined preset inventory now totals 19,937 rows across
+578 logical chunks.
 
 The folder contains generated, committed output. After an upstream update,
 refresh it with the curation-preserving script (see
