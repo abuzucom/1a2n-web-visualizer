@@ -7,12 +7,15 @@ members. Skip DDS-dependent presets because browsers cannot load DDS
 textures through the image bundle. Append deterministic ``[variant N]``
 suffixes to duplicate basenames when their converted content differs.
 Retain identical converted content once. Prefix experimental runtime names
-with the reserved ``[EXP] `` string.
+with the reserved ``[EXP] `` string by default; pass ``--exp-prefix`` to use
+a different one for a batch that should stay visually distinct from prior
+imports during curation (e.g. ``[EXP2] ``).
 
 Usage:
     python3 tools/import-nestdrop-presets.py --zip PACK.zip --dry-run
     python3 tools/import-nestdrop-presets.py --zip PACK1.zip --zip PACK2.zip
     python3 tools/import-nestdrop-presets.py --zip PACK.zip --offset 3000 --limit 1000
+    python3 tools/import-nestdrop-presets.py --zip PACK.zip --exp-prefix "[EXP2] "
 
 Logical chunk IDs remain contiguous in index.js. Experimental physical files
 start at chunk-9000.js and are recorded in index.js's optional ``files`` map.
@@ -381,9 +384,15 @@ def main():  # noqa: C901, PLR0912, PLR0915
     )
     parser.add_argument("--offset", type=int, default=0, help="skip this many .milk files per archive")
     parser.add_argument("--limit", type=int, help="convert at most this many .milk files per archive")
+    parser.add_argument(
+        "--exp-prefix", default=EXP_PREFIX,
+        help="display-name prefix for presets imported by this run (default: %(default)r); "
+             "lets a distinct batch stay visually identifiable during curation",
+    )
     args = parser.parse_args()
     if not args.zip and not args.normalize_existing:
         parser.error("provide --zip or --normalize-existing")
+    exp_prefix = args.exp_prefix
 
     zip_paths = [Path(path).resolve() for path in (args.zip or [])]
     for path in zip_paths:
@@ -469,7 +478,7 @@ def main():  # noqa: C901, PLR0912, PLR0915
         if normalized in removed_names:
             skipped.append({"sourceName": source_name, "reason": "curated-out name"})
             continue
-        display = EXP_PREFIX + normalized
+        display = exp_prefix + normalized
         if display in existing_exp_names:
             skipped.append({"sourceName": source_name, "reason": "already imported"})
             continue
@@ -529,7 +538,7 @@ def main():  # noqa: C901, PLR0912, PLR0915
 
     manifest = {
         "version": 1,
-        "prefix": EXP_PREFIX,
+        "prefix": exp_prefix,
         "physicalChunkBase": PHYSICAL_CHUNK_BASE,
         "sources": [
             source for source in existing_manifest.get("sources", [])
