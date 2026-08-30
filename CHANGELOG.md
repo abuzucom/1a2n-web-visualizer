@@ -4,6 +4,48 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.12.0]
+
+### Added
+- Imported 421 presets from
+  [projectM-visualizer/presets-milkdrop-original](https://github.com/projectM-visualizer/presets-milkdrop-original)
+  (pinned commit `e03b83e`), the official "Original Milkdrop Preset Pack",
+  tagged `[EXP3] ` per the repo's per-batch prefix convention. Of 552
+  source `.milk` files, 544 converted; 8 failed on malformed source
+  equations (parse errors in corrupted custom EEL2 code) and were
+  recorded, not silently dropped. 123 were skipped as already curated
+  out, already imported, or duplicate content. One retained preset
+  needed the `clouds` texture, pulled from the same
+  [projectM-visualizer/presets-milkdrop-texture-pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack)
+  pin already vendored for the `[EXP2] ` batch. 5 "martin"-authored source
+  presets convert with a blank warp or comp shader (the source `.milk`
+  files use undeclared `double2`/`double3` HLSL identifiers); all 5 were
+  already excluded as previously curated-out names, so none were imported.
+- Documented the per-batch `[EXP2]`, `[EXP3]`, ... exp-prefix convention
+  in AGENTS.md so future preset-import batches stay visually
+  distinguishable during curation.
+
+### Fixed
+- `tools/import-nestdrop-presets.py` now fills absent equation fields on
+  newly imported presets, not just on already-committed chunks reached by
+  `--normalize-existing`. Butterchurn compiles equations as
+  `"".concat(field, " return a;")`, so a missing field stringified to the
+  literal `undefined` and raised `SyntaxError: Unexpected token 'return'`,
+  making the preset get skipped at load time. visualizer-core.js could not
+  catch it, because its `normalizeEquation` only rewrites existing strings
+  and `validateEquation` returns early on a falsy value. This silently
+  affected 232 of this batch's 421 presets before the fix. The
+  normalization runs after the dedup digest is taken, so duplicate
+  detection still compares the same canonical content earlier imports
+  recorded.
+- `tools/import-nestdrop-presets.py`'s texture-bundling step now merges a
+  new batch's textures with what is already vendored instead of replacing
+  the bundle outright. Previously, any import whose archive didn't happen
+  to carry a full copy of every already-vendored experimental texture
+  would silently delete the missing ones from
+  `src/vendor/butterchurnExtraImagesExp-part-N.js` and
+  `experimental-textures.json`.
+
 ## [1.11.0]
 
 ### Added
