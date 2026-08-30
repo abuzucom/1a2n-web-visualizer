@@ -152,10 +152,66 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   atomically.
 - Experimental names use `[EXP] `. Analysis strips it; runtime and curation
   names retain it. EXP-only presets are never duplicate-removal targets.
+- Each distinct import batch gets its own sequential prefix passed via
+  `tools/import-nestdrop-presets.py --exp-prefix`: the original NestDrop
+  import is `[EXP] `, the next batch is `[EXP2] `, and so on (`[EXP3] `,
+  `[EXP4] `, ...). Never reuse an earlier batch's prefix for a new source.
+  This keeps batches visually distinguishable during curation and keeps the
+  importer's own name-collision check (which only compares within a single
+  prefix) scoped to genuine re-imports of the same batch rather than
+  masking a new batch's presets as false-positive duplicates of an earlier
+  one.
 - Generated equation fields must be present as strings, including empty
   strings. Validate generated equations with
   `tools/validate-experimental-presets.js`; never execute preset text during
   validation.
+- Every equation field butterchurn reaches must exist as a string. It
+  compiles them as `new Function("a", "".concat(field, " return a;"))`, so a
+  field absent from the JSON stringifies to the literal `undefined` and
+  raises `SyntaxError: Unexpected token 'return'` at load time.
+  visualizer-core.js does not catch this: `normalizeEquation` only rewrites
+  values that are already strings, and `validateEquation` returns early on a
+  falsy value. Top-level `init_eqs_str`/`frame_eqs_str` are compiled
+  unconditionally; `pixel_eqs_str` and a wave's `point_eqs_str` are guarded
+  by a non-empty check; a shape's or wave's equations are compiled only when
+  that item's merged `baseVals.enabled` is non-zero (butterchurn's shape and
+  wave defaults both carry `enabled: 0`). `tests/test_experimental_equation_fields.py`
+  enforces this over the generated experimental chunks.
+- `validate-experimental-presets.js` and `validate-preset-chunks.js` only
+  check JSON shape. Neither one catches a WebGL shader link failure or a
+  JS `SyntaxError` in a converted equation, since both only surface when
+  butterchurn actually compiles and runs the preset; a batch can pass both
+  validators, lint, and `npm test` while a large fraction of it is broken
+  at runtime. Before treating an import batch as done, load
+  `src/demo.html` in a real browser (`data-demo="1"` gives synthetic
+  audio, so no microphone is needed) or force `BCViz.create()`'s
+  `opts.demo = true` when driving `obs.html`/`fullscreen.html` instead,
+  then walk the batch's presets through the returned instance's
+  `keys()` / `goto(index, announce)` / `currentName()` /
+  `isChunkLoading()`. Pass `cycleOn: false`, or the auto-cycle timer
+  navigates mid-walk and misattributes failures. Watch the console for
+  `Preset load failed; skipping: {...}` warnings: that is
+  visualizer-core.js's graceful-degradation path (see "Graceful
+  Degradation" in the README), and it auto-advances past a broken preset
+  without throwing, so a broken import looks clean unless the console is
+  actually checked. A failure also makes the controller fall forward
+  through neighboring presets, so attribute a warning to a preset only
+  when its own name appears in the warning after that preset was
+  requested. Screenshotting a small hand-picked sample (as prior import
+  PRs did) is not enough to catch a systemic conversion bug that affects
+  most of a batch; walk the whole batch's presets, not a sample.
+- A software WebGL renderer (headless Chromium with swiftshader, as in a
+  CI or agent sandbox) fails to link most converted MilkDrop-2 warp/comp
+  shaders, reporting `shader program link failed: Fragment shader is not
+  compiled.` This is an artifact of that renderer, not evidence the
+  presets are broken. Mainline and `[EXP]` carry no custom shaders at all,
+  so their passing says nothing here; split the batch by whether a preset
+  has non-empty `warp`/`comp` and compare the shader-bearing half against
+  an already-shipped shader-heavy batch (`[EXP2]`) as the control. When
+  both fail at the same rate the result is environmental and shader
+  validity simply cannot be judged in that sandbox; say so rather than
+  reporting the batch as broken. The equation checks above stay valid
+  there, because they are pure JS and never touch the GPU.
 - Imports whitelist `.milk` and approved images; never extract or invoke
   archive executables/scripts. Reject traversal and symlinks; record ignored
   members and the archive digest. Convert with trusted WSL Node 22 tooling.

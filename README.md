@@ -432,8 +432,19 @@ handful of its presets needed textures this repo didn't already carry;
 those came from
 [projectM-visualizer/presets-milkdrop-texture-pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack)
 (pinned commit `b6e4610`), the same upstream `fetch-cream-of-the-crop-presets.py`
-already trusts. The combined preset inventory now totals 19,937 rows across
-578 logical chunks.
+already trusts.
+
+A third experimental batch adds 421 more presets, tagged `[EXP3] ` per the
+repo's per-batch prefix convention (see AGENTS.md). Sourced from
+[projectM-visualizer/presets-milkdrop-original](https://github.com/projectM-visualizer/presets-milkdrop-original)
+(pinned commit `e03b83e`), the official "Original Milkdrop Preset Pack". Of
+552 source `.milk` files, 544 converted; 8 failed on malformed source
+equations and were recorded, not silently dropped. 123 were skipped as
+already curated out, already imported, or duplicate content. One retained
+preset needed the `clouds` texture, sourced from the same
+presets-milkdrop-texture-pack pin already vendored for the `[EXP2] ` batch.
+The combined preset inventory now totals 20,358 rows across 582 logical
+chunks.
 
 The folder contains generated, committed output. After an upstream update,
 refresh it with the curation-preserving script (see

@@ -339,10 +339,26 @@ def build_texture_bundle(texture_files):
 
 
 def write_texture_bundle(images, records):
-    """Write the lazy-loaded texture part files and the texture manifest."""
+    """Merge this batch's textures into the vendored bundle and manifest.
+
+    A batch's Textures/ folder rarely carries every texture already vendored
+    from prior imports, so the new images and manifest records are merged
+    with what is already on disk rather than replacing it outright; without
+    the merge, splitter.write_parts would treat this batch's images as the
+    complete set and delete every previously vendored texture part.
+    """
     splitter = load_texture_splitter()
-    splitter.write_parts(images, dry_run=False)
-    atomic_write_text(TEXTURE_MANIFEST_PATH, json.dumps(records, indent=2) + "\n")
+    merged_images = {**splitter.read_images(), **images}
+    splitter.write_parts(merged_images, dry_run=False)
+    existing_records = (
+        json.loads(TEXTURE_MANIFEST_PATH.read_text(encoding="utf-8"))
+        if TEXTURE_MANIFEST_PATH.exists() else []
+    )
+    records_by_name = {record["name"]: record for record in existing_records}
+    for record in records:
+        records_by_name[record["name"]] = record
+    merged_records = [records_by_name[name] for name in sorted(records_by_name)]
+    atomic_write_text(TEXTURE_MANIFEST_PATH, json.dumps(merged_records, indent=2) + "\n")
 
 
 def load_texture_splitter():
@@ -514,6 +530,13 @@ def main():  # noqa: C901, PLR0912, PLR0915
             })
             continue
         seen_hashes.add(digest)
+        # Fill absent equation fields before the preset is written. Butterchurn
+        # compiles them as "".concat(field, " return a;"), so a missing field
+        # becomes the literal "undefined" and raises SyntaxError at load time;
+        # visualizer-core's own guards skip non-string values and never catch
+        # it. Run after the digest above so dedup keeps comparing the same
+        # canonical content earlier imports recorded.
+        normalize_equation_fields(preset)
         kept[display] = {
             "preset": preset, "sourceName": source_name, "displayName": display,
             "canonicalHash": digest, "mainlineMatches": matches,
