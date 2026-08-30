@@ -2,8 +2,8 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -27,7 +27,7 @@ class TextureBundleMergeTests(unittest.TestCase):
             "clouds": {"data": "data:image/jpeg;base64,BBB", "width": 2, "height": 2},
         }
 
-        fake_splitter = mock.Mock()
+        fake_splitter = unittest.mock.Mock()
         fake_splitter.read_images.return_value = dict(existing_images)
         recorded = {}
 
@@ -44,8 +44,8 @@ class TextureBundleMergeTests(unittest.TestCase):
             )
 
             with (
-                mock.patch.object(tool, "load_texture_splitter", return_value=fake_splitter),
-                mock.patch.object(tool, "TEXTURE_MANIFEST_PATH", manifest_path),
+                unittest.mock.patch.object(tool, "load_texture_splitter", return_value=fake_splitter),
+                unittest.mock.patch.object(tool, "TEXTURE_MANIFEST_PATH", manifest_path),
             ):
                 tool.write_texture_bundle(
                     new_images,
