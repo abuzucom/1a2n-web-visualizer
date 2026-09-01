@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.12.1]
+
+### Removed
+- 2,134 more presets curated out via `tools/remove_presets.js`: 1,991
+  `[EXP2] ` presets, 129 `[EXP3] ` presets, 13 mainline presets, and 1
+  `[EXP] ` preset. Spans `src/presets-extra/` (35 chunk files) with the
+  matching `preset-inventory.csv` rows dropped and `removed-presets.csv`
+  appended. Same intentional editorial curation as prior batches; see the
+  *Curation* section in the README. Ships 18,224 deduplicated presets now
+  (373 vendored + 17,851 from `src/presets-extra/`).
+
 ## [1.12.0]
 
 ### Added
