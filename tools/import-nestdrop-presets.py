@@ -307,6 +307,23 @@ def texture_names(preset):
     return refs - BUILTIN_TEXTURES
 
 
+def compute_available_textures(texture_images, previously_vendored):
+    """Return the case-insensitive set of texture names presets may use.
+
+    texture_names() always lowercases sampler references, so every source
+    here is lowercased too; EXISTING_TEXTURE_NAMES otherwise keeps its
+    original mixed case (e.g. "cloudsImage") and would never match.
+    previously_vendored covers textures already shipped by prior import
+    batches, which texture_images (this run's own batch) does not include.
+    """
+    return (
+        BUILTIN_TEXTURES
+        | {name.lower() for name in EXISTING_TEXTURE_NAMES}
+        | {name.lower() for name in previously_vendored}
+        | {name.lower() for name in texture_images}
+    )
+
+
 def build_texture_bundle(texture_files):
     """Pack and write authorized textures into a JSON payload."""
     images = {}
@@ -481,7 +498,8 @@ def main():  # noqa: C901, PLR0912, PLR0915
                     continue
                 converted[name] = preset
         texture_images, texture_records, unavailable_textures = build_texture_bundle(texture_files)
-    available_textures = BUILTIN_TEXTURES | EXISTING_TEXTURE_NAMES | set(texture_images)
+    previously_vendored = load_texture_splitter().read_images() if zip_paths else {}
+    available_textures = compute_available_textures(texture_images, previously_vendored)
     unavailable_texture_names = {
         item["name"].lower() for item in unavailable_textures
     }
