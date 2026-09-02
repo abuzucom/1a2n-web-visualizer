@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Prevented keyboard shortcut keys from wrapping onto multiple lines in the
+  fullscreen and demo help dialogs.
+
 ## [1.12.1]
 
 ### Removed

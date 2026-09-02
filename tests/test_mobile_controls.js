@@ -328,6 +328,28 @@ test('fullscreen ?guard=1 pre-arms the audio guard at load', function () {
   assert.equal(plain.viz.isAudioGuardArmed(), false);
 });
 
+test('fullscreen keyboard help prevents wrapping shortcut key combinations', function () {
+  const css = fs.readFileSync('src/css/fullscreen.css', 'utf8');
+  const fullscreenHtml = fs.readFileSync('src/fullscreen.html', 'utf8');
+  const demoHtml = fs.readFileSync('src/demo.html', 'utf8');
+
+  assert.match(
+    fullscreenHtml,
+    /<td class="k"><kbd>Space<\/kbd> \/ <kbd>N<\/kbd><\/td>/,
+    'fullscreen markup defines the Space / N shortcut in a key cell'
+  );
+  assert.match(
+    demoHtml,
+    /<td class="k"><kbd>Space<\/kbd> \/ <kbd>N<\/kbd><\/td>/,
+    'demo markup defines the Space / N shortcut in a key cell'
+  );
+  assert.match(
+    css,
+    /#help td\.k\s*\{[^}]*white-space:\s*nowrap/m,
+    'fullscreen stylesheet prevents keyboard shortcut columns from wrapping to multiple lines'
+  );
+});
+
 function pressKeys(harness, keys) {
   keys.forEach(function (key) {
     harness.listeners.keydown.forEach(function (handler) {
@@ -407,3 +429,4 @@ test('?demo=1 turns the fullscreen page into the demo build', function () {
   const plain = createFullscreenHarness();
   assert.equal(plain.createOpts().demo, false, 'and the plain page is unchanged');
 });
+
