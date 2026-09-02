@@ -19,6 +19,10 @@
   const DEFAULT_CYCLE_SECS = 20;
   const FALLBACK_PREFETCH_DELAY_MS = 5000;
   const MIN_CYCLE_SECS = 3;
+  const PERCENT_SCALE = 100;
+  /* Mirrors BCDemoAudio.LABEL, for the window before an instance exists. It
+   * must not look like a loopback device to audible-keepalive.js. */
+  const DEMO_INPUT_LABEL = 'Synthetic demo track';
   const PRESET_PACKS = [
     'butterchurnPresets', 'butterchurnPresetsExtra',
     'butterchurnPresetsExtra2', 'butterchurnPresetsMD1',
@@ -449,6 +453,12 @@
    * Request and return a list of connected audio input devices.
    */
   async function getDevices(audio) {
+    // Demo mode has no capture input, and enumerating would be the one call
+    // that could still surface a permission prompt on an otherwise silent page.
+    if (audio.demoMode) {
+      audio.inputDevices = [];
+      return audio.inputDevices;
+    }
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
       audio.inputDevices = all.filter(function (device) { return device.kind === 'audioinput'; });
@@ -468,6 +478,7 @@
   }
 
   function currentDeviceLabel(audio) {
+    if (audio.demoMode) return audio.demo ? audio.demo.label() : DEMO_INPUT_LABEL;
     const track = currentTrack(audio);
     if (track && track.label) return track.label;
     const device = audio.inputDevices[audio.deviceIdx];
@@ -489,6 +500,7 @@
    * device's stream, and again here as a defense-in-depth backstop for any
    * other caller of connectStream. */
   function releaseCurrentStream(audio) {
+    releaseDemoSource(audio);
     stopStream(audio.micStream);
     audio.micStream = null;
     if (audio.sourceNode) {
@@ -509,6 +521,37 @@
     // The keepalive must go quiet whenever the input becomes a loopback device,
     // otherwise its tone is captured straight back into the analysis graph.
     if (audio.keepalive) audio.keepalive.setInputLabel(currentDeviceLabel(audio));
+  }
+
+  function releaseDemoSource(audio) {
+    if (!audio.demo) return;
+    audio.demo.stop();
+    audio.demo = null;
+  }
+
+  /**
+   * Build the synthetic demo track and feed it to the visualizer in place of a
+   * capture stream. Nothing here can reach getUserMedia, so the demo page never
+   * prompts for permission, and micStream and hadStream deliberately stay unset:
+   * there is no stream, so nothing downstream may report one as lost.
+   */
+  function connectDemoSource(audio) {
+    const factory = global.BCDemoAudio;
+    if (!factory) throw new Error('demo audio module not loaded');
+    releaseCurrentStream(audio);
+    audio.demo = factory.create({ window: global, audioContext: audio.audioCtx });
+    audio.sourceNode = audio.demo.getNode();
+    audio.visualizer.connectAudio(audio.sourceNode);
+    audio.demo.start();
+  }
+
+  function startDemoSource(audio) {
+    try {
+      connectDemoSource(audio);
+    } catch (error) {
+      console.warn('Demo audio unavailable; visualizer will continue:', error);
+      audio.onToast('Demo audio unavailable; visualizer is running');
+    }
   }
 
   /**
@@ -545,6 +588,12 @@
    * Switch the visualizer's audio input to the specified device.
    */
   async function useDevice(audio, index) {
+    // The synthetic source is the only input in demo mode. Refusing here is
+    // what keeps an armed watchdog from reconnecting its way to a microphone.
+    if (audio.demoMode) {
+      audio.onToast('\uD83C\uDF9B ' + currentDeviceLabel(audio));
+      return null;
+    }
     const requestSeq = ++audio.deviceRequestSeq;
     if (!audio.inputDevices.length) await getDevices(audio);
     if (requestSeq !== audio.deviceRequestSeq || !audio.inputDevices.length) return null;
@@ -653,6 +702,15 @@
     }
   }
 
+  /* device-errors.js carries the shared wording, but the pages load it as a
+   * separate script and the core must still say something useful if it is
+   * missing. Same optional-dependency guard the preset packs get. */
+  function describeDeviceError(error) {
+    const errors = global.BCDeviceErrors;
+    if (errors && typeof errors.describe === 'function') return errors.describe(error);
+    return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
+  }
+
   function matchDeviceIndex(devices, deviceId) {
     return devices.findIndex(function (device) { return device.deviceId === deviceId; });
   }
@@ -678,24 +736,37 @@
     try {
       const stream = await openStream(deviceId);
       await getDevices(audio);
-      if (!audio.started) { stopStream(stream); return; }
+      // Abandoned mid-prompt: startAudio is awaiting this, so the attempt is
+      // still live while `starting` holds. Dropping the stream here is what
+      // keeps a permission prompt answered after a failed start from leaving
+      // the device open with nothing attached to it.
+      if (!audio.starting && !audio.started) { stopStream(stream); return; }
       syncDeviceIdxFromStream(audio, stream);
       connectStream(audio, stream);
     } catch (error) {
       console.warn('Audio input unavailable; visualizer will continue:', error);
-      audio.onToast('Audio input unavailable; visualizer is running');
+      audio.onToast('Audio input unavailable, visualizer is running. ' + describeDeviceError(error));
     }
   }
 
   /**
-   * Create and return the Web Audio context for the visualizer.
+   * Build the Web Audio context for the visualizer and attach the input.
+   *
+   * connectInitialStream is awaited so that start() resolves with the device
+   * list already re-enumerated under permission. Without that the UI rebuilds
+   * its picker from the pre-permission list, where every label is blank. It
+   * swallows its own errors, so awaiting adds no rejection path.
    */
-  function initializeAudio(audio, playback, deviceId) {
+  async function initializeAudio(audio, playback, deviceId) {
     if (!audio.prepared) prepareAudio(audio, playback);
     audio.audioCtx.resume().catch(function (error) {
       console.warn('Audio context resume failed:', error);
     });
-    connectInitialStream(audio, deviceId);
+    if (audio.demoMode) {
+      startDemoSource(audio);
+      return;
+    }
+    await connectInitialStream(audio, deviceId);
   }
 
   /**
@@ -745,6 +816,9 @@
     playback.ensureExperimentalImages = function () { return ensureExperimentalImages(audio); };
     loadExtraImages(audio);
     scheduleImagePrefetch(audio);
+    /* A recovery builds a new butterchurn instance with a new analyser chain.
+     * Without this the restored visualizer renders against dead audio forever. */
+    if (audio.sourceNode) audio.visualizer.connectAudio(audio.sourceNode);
   }
 
   /**
@@ -776,6 +850,10 @@
    */
   function renderOnce(audio, playback) {
     if (!playback.rendering) return;
+    /* Outside the try: pump() is exception safe by contract, and a demo fault
+     * must not be reported as a render failure. While the page is hidden this
+     * tick comes off the audio thread, which timer throttling cannot reach. */
+    if (audio.demo) audio.demo.pump();
     try {
       audio.visualizer.render();
     } catch (error) {
@@ -820,8 +898,18 @@
       audio.keepalive.start();
       audio.watchdog.start();
     } catch (error) {
+      /* connectInitialStream is awaited, so the input is already connected by
+       * the time anything after it can throw. Unwind all of it, not just the
+       * context: a stream left open holds the capture device, `prepared` left
+       * true short-circuits prepareAudio onto the nulled context, and `started`
+       * left true makes the guard at the top of this function turn every retry
+       * into a silent no-op over a dead visualizer. */
       stopRenderLoop(playback);
+      releaseDemoSource(audio);
+      releaseCurrentStream(audio);
       if (audio.audioCtx) { audio.audioCtx.close(); audio.audioCtx = null; }
+      audio.prepared = false;
+      audio.started = false;
       throw error;
     } finally {
       audio.starting = false;
@@ -848,6 +936,10 @@
       starting: false,
       prepared: false,
       hadStream: false,
+      // Intent, not state: it stays true even if the generator failed to build,
+      // so a microphone can never become a silent fallback for demo mode.
+      demoMode: opts.demo === true,
+      demo: null,
       keepalive: null,
       watchdog: null,
       experimentalImagesLoading: null,
@@ -883,8 +975,9 @@
       recoverVisualizer: function () { if (audio.started) recoverVisualizer(audio, playback); },
       getAudioContext: function () { return audio.audioCtx; },
       getTrack: function () { return currentTrack(audio); },
-      // Without a stream there is no input to lose, so do not report one gone.
-      handleLostInput: function () { if (audio.hadStream) audio.onToast('\u26A0 audio input lost'); },
+      // Without a stream there is no input to lose, so do not report one gone
+      // and above all do not reconnect: demo mode must never open a device.
+      isMonitoring: function () { return !audio.demoMode && audio.hadStream; },
       getDeviceId: function () { return currentDeviceId(audio); },
       getDeviceLabel: function () { return currentDeviceLabel(audio); },
       listDevices: function () { return getDevices(audio); },
@@ -893,11 +986,21 @@
     });
   }
 
+  function describeDemo(demo) {
+    const info = demo.stats();
+    return info.genre + ' ' + info.bpm + ' BPM ' + Math.round(info.intensity * PERCENT_SCALE) + '%';
+  }
+
+  function trackStateLabel(audio) {
+    if (audio.demoMode) return 'synthetic';
+    const track = currentTrack(audio);
+    return track ? (track.muted ? 'muted' : track.readyState) : 'none';
+  }
+
   function collectDiagnostics(audio, playback) {
     const driver = playback.driver.stats();
     const keepalive = audio.keepalive.stats();
     const watchdog = audio.watchdog.stats();
-    const track = currentTrack(audio);
     return {
       fps: driver.fps,
       tickSource: driver.tickSource,
@@ -906,7 +1009,8 @@
       frames: driver.frames,
       keepalive: keepalive.active ? 'active' : (keepalive.reason || 'off'),
       device: currentDeviceLabel(audio) || 'none',
-      trackState: track ? (track.muted ? 'muted' : track.readyState) : 'none',
+      trackState: trackStateLabel(audio),
+      demo: audio.demo ? describeDemo(audio.demo) : '',
       armed: watchdog.armed,
       audioLost: watchdog.audioLost,
       recoverInSecs: watchdog.recoverInSecs,
@@ -941,6 +1045,20 @@
     });
   }
 
+  /* Total functions: every one is safe to call with demo mode off, where they
+   * report 0 rather than throwing. isDemo() is the authoritative check, since
+   * 0 is itself a legal intensity. */
+  function createDemoApi(audio) {
+    return {
+      isDemo: function () { return audio.demoMode; },
+      getDemoTempo: function () { return audio.demo ? audio.demo.getTempo() : 0; },
+      setDemoTempo: function (bpm) { return audio.demo ? audio.demo.setTempo(bpm) : 0; },
+      cycleDemoTempo: function () { return audio.demo ? audio.demo.cycleTempo() : 0; },
+      getDemoIntensity: function () { return audio.demo ? audio.demo.getIntensity() : 0; },
+      setDemoIntensity: function (value) { return audio.demo ? audio.demo.setIntensity(value) : 0; },
+    };
+  }
+
   /**
    * Initialize and return the core visualization system bound to a canvas element.
    */
@@ -958,7 +1076,7 @@
     attachLifecycle(audio, playback, canvas);
     sizeCanvas(audio);
 
-    return {
+    return Object.assign({
       start: function (deviceId) { return startAudio(audio, playback, deviceId); },
       next: function () { loadPreset(playback, stepIndex(playback, 1)); restartCycle(playback); },
       prev: function () { loadPreset(playback, stepIndex(playback, -1)); restartCycle(playback); },
@@ -998,7 +1116,7 @@
       toggleAudioGuard: function () { return audio.watchdog.setArmed(!audio.watchdog.isArmed()); },
       setAudioGuard: function (armed) { return audio.watchdog.setArmed(armed); },
       isAudioGuardArmed: function () { return audio.watchdog.isArmed(); },
-    };
+    }, createDemoApi(audio));
   }
 
   global.BCViz = { create: create };

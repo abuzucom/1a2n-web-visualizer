@@ -289,6 +289,8 @@ test('watchdog ignores the input entirely when nothing is being monitored', asyn
   const window = { setInterval: function () {}, clearInterval: function () {} };
   loadScript('src/js/audio-watchdog.js', window);
   const toasts = [];
+  const listed = [];
+  const reconnects = [];
   let intervalCallback = null;
   window.setInterval = function (callback) { intervalCallback = callback; return { id: 1 }; };
   const watchdog = window.BCWatchdog.create({
@@ -297,15 +299,23 @@ test('watchdog ignores the input entirely when nothing is being monitored', asyn
     // lose, so it must not be reported as one.
     isMonitoring: function () { return false; },
     getTrack: function () { return null; },
+    listDevices: function () { listed.push(true); return Promise.resolve([]); },
+    reconnect: function (deviceId) { reconnects.push(deviceId); return Promise.resolve(null); },
     onToast: function (message) { toasts.push(message); },
   });
   watchdog.start();
   watchdog.setArmed(true);
-  intervalCallback();
-  await flushMicrotasks();
+  for (let i = 0; i < 5; i += 1) {
+    intervalCallback();
+    await flushMicrotasks();
+  }
 
   assert.equal(watchdog.stats().audioLost, false);
   assert.deepEqual(toasts, []);
+  // An armed guard must not go looking for a device either. This is what keeps
+  // the demo build, which has no stream at all, away from getUserMedia.
+  assert.deepEqual(listed, [], 'an unmonitored input is never enumerated');
+  assert.deepEqual(reconnects, [], 'an unmonitored input is never reconnected');
 });
 
 test('watchdog reports failure rather than capturing the room', async function () {

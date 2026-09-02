@@ -7,12 +7,15 @@ members. Skip DDS-dependent presets because browsers cannot load DDS
 textures through the image bundle. Append deterministic ``[variant N]``
 suffixes to duplicate basenames when their converted content differs.
 Retain identical converted content once. Prefix experimental runtime names
-with the reserved ``[EXP] `` string.
+with the reserved ``[EXP] `` string by default; pass ``--exp-prefix`` to use
+a different one for a batch that should stay visually distinct from prior
+imports during curation (e.g. ``[EXP2] ``).
 
 Usage:
     python3 tools/import-nestdrop-presets.py --zip PACK.zip --dry-run
     python3 tools/import-nestdrop-presets.py --zip PACK1.zip --zip PACK2.zip
     python3 tools/import-nestdrop-presets.py --zip PACK.zip --offset 3000 --limit 1000
+    python3 tools/import-nestdrop-presets.py --zip PACK.zip --exp-prefix "[EXP2] "
 
 Logical chunk IDs remain contiguous in index.js. Experimental physical files
 start at chunk-9000.js and are recorded in index.js's optional ``files`` map.
@@ -304,6 +307,23 @@ def texture_names(preset):
     return refs - BUILTIN_TEXTURES
 
 
+def compute_available_textures(texture_images, previously_vendored):
+    """Return the case-insensitive set of texture names presets may use.
+
+    texture_names() always lowercases sampler references, so every source
+    here is lowercased too; EXISTING_TEXTURE_NAMES otherwise keeps its
+    original mixed case (e.g. "cloudsImage") and would never match.
+    previously_vendored covers textures already shipped by prior import
+    batches, which texture_images (this run's own batch) does not include.
+    """
+    return (
+        BUILTIN_TEXTURES
+        | {name.lower() for name in EXISTING_TEXTURE_NAMES}
+        | {name.lower() for name in previously_vendored}
+        | {name.lower() for name in texture_images}
+    )
+
+
 def build_texture_bundle(texture_files):
     """Pack and write authorized textures into a JSON payload."""
     images = {}
@@ -336,10 +356,26 @@ def build_texture_bundle(texture_files):
 
 
 def write_texture_bundle(images, records):
-    """Write the lazy-loaded texture part files and the texture manifest."""
+    """Merge this batch's textures into the vendored bundle and manifest.
+
+    A batch's Textures/ folder rarely carries every texture already vendored
+    from prior imports, so the new images and manifest records are merged
+    with what is already on disk rather than replacing it outright; without
+    the merge, splitter.write_parts would treat this batch's images as the
+    complete set and delete every previously vendored texture part.
+    """
     splitter = load_texture_splitter()
-    splitter.write_parts(images, dry_run=False)
-    atomic_write_text(TEXTURE_MANIFEST_PATH, json.dumps(records, indent=2) + "\n")
+    merged_images = {**splitter.read_images(), **images}
+    splitter.write_parts(merged_images, dry_run=False)
+    existing_records = (
+        json.loads(TEXTURE_MANIFEST_PATH.read_text(encoding="utf-8"))
+        if TEXTURE_MANIFEST_PATH.exists() else []
+    )
+    records_by_name = {record["name"]: record for record in existing_records}
+    for record in records:
+        records_by_name[record["name"]] = record
+    merged_records = [records_by_name[name] for name in sorted(records_by_name)]
+    atomic_write_text(TEXTURE_MANIFEST_PATH, json.dumps(merged_records, indent=2) + "\n")
 
 
 def load_texture_splitter():
@@ -381,9 +417,15 @@ def main():  # noqa: C901, PLR0912, PLR0915
     )
     parser.add_argument("--offset", type=int, default=0, help="skip this many .milk files per archive")
     parser.add_argument("--limit", type=int, help="convert at most this many .milk files per archive")
+    parser.add_argument(
+        "--exp-prefix", default=EXP_PREFIX,
+        help="display-name prefix for presets imported by this run (default: %(default)r); "
+             "lets a distinct batch stay visually identifiable during curation",
+    )
     args = parser.parse_args()
     if not args.zip and not args.normalize_existing:
         parser.error("provide --zip or --normalize-existing")
+    exp_prefix = args.exp_prefix
 
     zip_paths = [Path(path).resolve() for path in (args.zip or [])]
     for path in zip_paths:
@@ -456,7 +498,8 @@ def main():  # noqa: C901, PLR0912, PLR0915
                     continue
                 converted[name] = preset
         texture_images, texture_records, unavailable_textures = build_texture_bundle(texture_files)
-    available_textures = BUILTIN_TEXTURES | EXISTING_TEXTURE_NAMES | set(texture_images)
+    previously_vendored = load_texture_splitter().read_images() if zip_paths else {}
+    available_textures = compute_available_textures(texture_images, previously_vendored)
     unavailable_texture_names = {
         item["name"].lower() for item in unavailable_textures
     }
@@ -469,7 +512,7 @@ def main():  # noqa: C901, PLR0912, PLR0915
         if normalized in removed_names:
             skipped.append({"sourceName": source_name, "reason": "curated-out name"})
             continue
-        display = EXP_PREFIX + normalized
+        display = exp_prefix + normalized
         if display in existing_exp_names:
             skipped.append({"sourceName": source_name, "reason": "already imported"})
             continue
@@ -505,6 +548,13 @@ def main():  # noqa: C901, PLR0912, PLR0915
             })
             continue
         seen_hashes.add(digest)
+        # Fill absent equation fields before the preset is written. Butterchurn
+        # compiles them as "".concat(field, " return a;"), so a missing field
+        # becomes the literal "undefined" and raises SyntaxError at load time;
+        # visualizer-core's own guards skip non-string values and never catch
+        # it. Run after the digest above so dedup keeps comparing the same
+        # canonical content earlier imports recorded.
+        normalize_equation_fields(preset)
         kept[display] = {
             "preset": preset, "sourceName": source_name, "displayName": display,
             "canonicalHash": digest, "mainlineMatches": matches,
@@ -529,7 +579,7 @@ def main():  # noqa: C901, PLR0912, PLR0915
 
     manifest = {
         "version": 1,
-        "prefix": EXP_PREFIX,
+        "prefix": exp_prefix,
         "physicalChunkBase": PHYSICAL_CHUNK_BASE,
         "sources": [
             source for source in existing_manifest.get("sources", [])

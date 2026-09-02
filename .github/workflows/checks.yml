@@ -5,8 +5,6 @@ name: Checks
 # triggers/permissions and isn't relevant here).
 on:
   pull_request:
-  push:
-    branches: [develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,6 +14,28 @@ permissions:
   contents: read
 
 jobs:
+  tests-windows:
+    # The gates run as the launcher named in .claude/settings.json, and only
+    # this job can show it resolves on Windows. A hook that fails to start
+    # exits non-zero but not 2, which Claude Code treats as a non-blocking
+    # error, so every gate would fail open there in silence.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Run Python tests
+        run: npm run test:py
+      - name: Run interpreter shim tests
+        run: node --test tests/test_run_python.js
+
   agents-md-sync:
     runs-on: ubuntu-latest
     steps:
@@ -26,9 +46,90 @@ jobs:
 
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
+      - name: Check the shared gate files against the manifest
+        run: python3 scripts/sync.py --check-shared
+
+      - name: Check no untested statement entered the hooks
+        run: python3 scripts/check_hook_coverage.py
 
       - name: Check GitHub Actions are pinned
         run: python3 scripts/check_action_pins.py
+
+      - name: Check AGENTS.md style
+        run: python3 scripts/lint_style.py
+
+      - name: Check dashes and ASCII in this repo's own prose
+        run: python3 scripts/check_ascii.py README.md CHANGELOG.md SECURITY.md docs/*.md
+
+      - name: Check AGENTS.md American spelling
+        run: python3 scripts/check_us_spelling.py AGENTS.md
+
+      - name: Check AGENTS.md is English only
+        run: python3 scripts/check_english_only.py AGENTS.md
+
+  banned-agents:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check banned-agent authorship
+        run: |
+          python3 scripts/check_banned_agents.py \
+            --base "origin/${{ github.event.pull_request.base.ref }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
+  branch-name:
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check branch name
+        run: python3 scripts/check_branch_name.py "${{ github.head_ref }}"
+
+  commit-message:
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check commit message style
+        run: |
+          python3 scripts/check_commit_message.py \
+            --base "origin/${{ github.event.pull_request.base.ref }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check persist-credentials on checkout steps
+        run: python3 scripts/check_persist_credentials.py .github/workflows/*.yml
+
+      - name: Check for unjustified MD5/SHA-1
+        run: python3 scripts/check_weak_hashing.py scripts/*.py tools/*.py
+
+      - name: Check for non-root containers
+        run: python3 scripts/check_dockerfile_root.py Dockerfile docker-compose.yml
+
+      - name: Check for likely secrets
+        run: python3 scripts/check_secrets_heuristic.py scripts/*.py tools/*.py .github/workflows/*.yml .pre-commit-config.yaml
 
   lint:
     runs-on: ubuntu-latest
@@ -79,11 +180,46 @@ jobs:
       - name: Install JS dependencies
         run: npm ci --ignore-scripts
 
-      - name: Run Node unit tests
-        run: npm run test:js
+      - name: Cache pip packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-lcov_cobertura-coverage
 
-      - name: Run Python unit tests
-        run: python3 -m unittest discover -s tests
+      - name: Install coverage tools
+        run: pip install lcov_cobertura coverage
+
+      - name: Run Node unit tests with coverage
+        run: |
+          node --test --experimental-test-coverage \
+            --test-reporter=spec \
+            --test-reporter=lcov \
+            --test-reporter-destination=stdout \
+            --test-reporter-destination=coverage.lcov \
+            tests/*.js
+
+      - name: Convert JS coverage to Cobertura
+        run: python3 -m lcov_cobertura coverage.lcov --output coverage-js.xml
+
+      - name: Run Python unit tests with coverage
+        run: python3 -m coverage run -m unittest discover -s tests
+
+      - name: Generate Python Cobertura report
+        run: python3 -m coverage xml -o coverage-python.xml
+
+      - name: Upload JS coverage artifact
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-report-javascript
+          path: coverage-js.xml
+
+      - name: Upload Python coverage artifact
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-report-python
+          path: coverage-python.xml
 
   validate-presets:
     runs-on: ubuntu-latest
@@ -92,19 +228,130 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check whether preset validation is needed
+        id: preset-diff
+        # Full preset-chunk validation parses all of src/presets-extra/
+        # (500+ files); only pay that cost when the diff could plausibly
+        # affect it. Any diff-command failure (e.g. an unusual merge
+        # state) falls back to "relevant=true" so we never silently skip.
+        run: |
+          if git diff --name-only \
+              "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" \
+              > changed-files.txt; then
+            if grep -qE '^(src/presets-extra/|tools/validate-preset-chunks\.js|tools/validate-experimental-presets\.js|package(-lock)?\.json|\.github/workflows/checks\.yml)' changed-files.txt; then
+              echo "relevant=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "relevant=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Node
+        if: steps.preset-diff.outputs.relevant == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: 22
           cache: npm
 
       - name: Install JS dependencies
+        if: steps.preset-diff.outputs.relevant == 'true'
         run: npm ci --ignore-scripts
 
       - name: Validate preset chunk callback IDs
+        if: steps.preset-diff.outputs.relevant == 'true'
         run: npm run validate:presets
 
       - name: Validate experimental presets
+        if: steps.preset-diff.outputs.relevant == 'true'
         run: npm run validate:exp
 
+  html-css-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache vnu.jar
+        id: vnu-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vnu.jar
+          # Keyed on the pinned checksum below, not a mutable version
+          # string, so the cache invalidates itself the moment that hash
+          # is next updated for a new upstream jar.
+          key: vnu-jar-467249d9312a66bea0de153449b7b965a1ff0e5070efd00b8d0cc4237d9a40df
+
+      - name: Download and extract vnu.jar
+        # validator/validator attaches release assets only to its moving
+        # "latest" tag; its per-version git tags carry no assets, so there
+        # is no immutable GitHub URL to pin. Take the jar from the npm
+        # package the same project publishes instead: a published npm
+        # version can never be replaced, so this URL and both hashes stay
+        # valid until someone deliberately bumps the version. Upstream
+        # ships only MD5/SHA-1 checksums (AGENTS.md Rule 7 bars trusting
+        # those), so verify SHA-256 computed at pin time. The tarball hash
+        # covers the download; the jar hash covers what is cached and run.
+        # To bump: fetch the new tarball, confirm it is the version you
+        # want, recompute both hashes, and update them with the cache key.
+        if: steps.vnu-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSLo vnu-jar.tgz https://registry.npmjs.org/vnu-jar/-/vnu-jar-26.8.21.tgz
+          echo "ac60074085475df62ae3b39cf5ae144c135ef01bc85bb72ed22aa280df3422db  vnu-jar.tgz" | sha256sum -c -
+          tar -xzOf vnu-jar.tgz package/build/dist/vnu.jar > vnu.jar
+          rm vnu-jar.tgz
+
+      # Runs on both paths: a fresh extraction and a restored cache entry.
+      - name: Verify vnu.jar checksum
+        run: echo "467249d9312a66bea0de153449b7b965a1ff0e5070efd00b8d0cc4237d9a40df  vnu.jar" | sha256sum -c -
+
+      - name: Validate HTML and CSS
+        run: java -jar vnu.jar --also-check-css src/*.html src/css/*.css
+
+  upload-coverage-javascript:
+    needs: unit-tests
+    if: ${{ !cancelled() && needs.unit-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
+    steps:
+      - name: Download JS coverage artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage-report-javascript
+      - name: Upload JS coverage to GitHub
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+        with:
+          file: coverage-js.xml
+          language: JavaScript
+          label: code-coverage-agent
+
+  upload-coverage-python:
+    needs: unit-tests
+    if: ${{ !cancelled() && needs.unit-tests.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
+    steps:
+      - name: Download Python coverage artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage-report-python
+      - name: Upload Python coverage to GitHub
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+        with:
+          file: coverage-python.xml
+          language: Python
+          label: code-coverage-agent

@@ -1,4 +1,5 @@
 # Security-sensitive instructions, automation, dependencies, and deployment.
+SECURITY.md @itsjustatank
 AGENTS.md @itsjustatank
 **/AGENTS.md @itsjustatank
 CLAUDE.md @itsjustatank
@@ -7,10 +8,16 @@ CONVENTIONS.md @itsjustatank
 **/.cursorrules @itsjustatank
 **/.clinerules @itsjustatank
 **/.windsurfrules @itsjustatank
+.copilot-instructions @itsjustatank
 .github/** @itsjustatank
 scripts/** @itsjustatank
 tools/** @itsjustatank
 patches/** @itsjustatank
+hooks/** @itsjustatank
+Makefile @itsjustatank
+.editorconfig @itsjustatank
+.gitattributes @itsjustatank
+.pre-commit-config.yaml @itsjustatank
 package.json @itsjustatank
 package-lock.json @itsjustatank
 Dockerfile @itsjustatank

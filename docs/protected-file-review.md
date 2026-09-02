@@ -2,6 +2,20 @@
 
 Protected files require the trusted `Protected file review` check.
 
+## Protected paths
+
+`scripts/check_protected_files.py` holds the list. Alongside the agent
+instruction files, deployment config, and runtime pages, it covers:
+
+- `tests/`: a test records a decision about what the code must do. Changing
+  one is a specification change, so it needs the owner's eyes rather than an
+  agent's judgment (AGENTS.md Rule 3).
+- `hooks/` and `.claude/`: the Claude Code gates that stop a test or a
+  destructive command being changed unilaterally. A gate anyone can quietly
+  edit or unregister is not a gate. The local hook is the fast guard; this
+  check is the authoritative one, because a Bash call can still reach a file
+  no `Edit` matcher sees.
+
 ## Owner PRs
 
 Pull requests authored by `@itsjustatank` pass the owner-approval portion of

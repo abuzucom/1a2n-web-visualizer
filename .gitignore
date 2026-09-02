@@ -38,3 +38,9 @@ coverage/
 # Python artifacts
 __pycache__/
 *.pyc
+
+# Coverage reports
+coverage.lcov
+coverage-js.xml
+coverage-python.xml
+.coverage
