@@ -62,6 +62,8 @@ All notable changes to this project are documented here. Format loosely follows
   presets workflow, for building a setlist during a live performance.
 
 ### Fixed
+- Prevented keyboard shortcut keys from wrapping onto multiple lines in the
+  fullscreen help dialog.
 - Fixed an errant double `try-catch` block inside `tools/convert-milk-presets.js` and ensured exceptions are properly logged or handled instead of swallowed.
 - Prevented potential zero-division crashes and eliminated slow/backtracking regular expressions during the preset parsing processes.
 - Eliminated unreachable dead code segments across the tooling scripts.

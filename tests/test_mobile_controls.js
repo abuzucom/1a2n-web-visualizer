@@ -302,3 +302,20 @@ test('fullscreen ?guard=1 pre-arms the audio guard at load', function () {
   const plain = createFullscreenHarness(null, { search: '?diag=1' });
   assert.equal(plain.viz.isAudioGuardArmed(), false);
 });
+
+test('fullscreen keyboard help prevents wrapping shortcut key combinations', function () {
+  const css = fs.readFileSync('src/css/fullscreen.css', 'utf8');
+  const html = fs.readFileSync('src/fullscreen.html', 'utf8');
+
+  assert.match(
+    html,
+    /<td class="k"><kbd>Space<\/kbd> \/ <kbd>N<\/kbd><\/td>/,
+    'fullscreen markup defines the Space / N shortcut in a key cell'
+  );
+  assert.match(
+    css,
+    /#help td\.k\s*\{[^}]*white-space:\s*nowrap/m,
+    'fullscreen stylesheet prevents keyboard shortcut columns from wrapping to multiple lines'
+  );
+});
+
