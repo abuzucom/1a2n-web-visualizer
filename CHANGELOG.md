@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.13.1] (2026-09-28)
+
+### Fixed
+- Moved immutable compliance to an unprivileged pull request trigger and kept
+  checker setup pinned without reading a pull request dependency manifest.
+- Replaced untrusted gate diagnostics with fixed safe labels while preserving
+  branch-correction and unsafe Git configuration diagnostics.
+
 ## [1.13.0] (2026-09-28)
 
 ### Changed

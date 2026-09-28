@@ -25,10 +25,7 @@ CODE_SUFFIXES = {
     ".jsx", ".mjs", ".php", ".py", ".pyw", ".rb", ".rs", ".ts",
     ".tsx",
 }
-TRUSTED_REQUIREMENTS_COMMAND = (
-    "python -m pip install --requirement "
-    "trusted-base/requirements-checkers.txt"
-)
+TRUSTED_YAML_COMMAND = "python -m pip install PyYAML==6.0.3"
 TRUSTED_SCAN_COMMAND = (
     'python "$TRUSTED_CHECKER" --repo "$PR_REPO" --tree "$PR_HEAD_SHA" '
     '--base "$PR_BASE_SHA" --branch "$PR_HEAD_BRANCH" '
@@ -463,14 +460,14 @@ def _action_violations(document: object, path: str) -> list[str]:
     return violations
 
 
-def _pull_target_trigger(document: dict) -> bool:
-    """Return whether a workflow declares pull_request_target."""
+def _has_workflow_trigger(document: dict, event: str) -> bool:
+    """Return whether a workflow declares one exact trigger event."""
     trigger = document.get("on", document.get(True))
     if isinstance(trigger, str):
-        return trigger == "pull_request_target"
+        return trigger == event
     if isinstance(trigger, list):
-        return "pull_request_target" in trigger
-    return isinstance(trigger, dict) and "pull_request_target" in trigger
+        return event in trigger
+    return isinstance(trigger, dict) and event in trigger
 
 
 def _checkout_step(base: bool) -> dict:
@@ -501,8 +498,8 @@ def _trusted_steps() -> list[dict]:
             "with": {"python-version": "3.x"},
         },
         {
-            "name": "Install trusted checker dependencies",
-            "run": TRUSTED_REQUIREMENTS_COMMAND,
+            "name": "Install pinned YAML dependency",
+            "run": TRUSTED_YAML_COMMAND,
         },
         {
             "name": "Scan immutable pull request objects with the trusted checker",
@@ -513,8 +510,14 @@ def _trusted_steps() -> list[dict]:
 
 
 def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
-    """Require the exact closed privileged workflow execution surface."""
-    if not _pull_target_trigger(document):
+    """Require the exact trusted immutable workflow execution surface."""
+    is_target_workflow = _has_workflow_trigger(document, "pull_request_target")
+    jobs = document.get("jobs")
+    is_immutable_workflow = (
+        isinstance(jobs, dict) and "immutable-compliance" in jobs
+    )
+    is_pull_request_workflow = _has_workflow_trigger(document, "pull_request")
+    if not is_target_workflow and not (is_immutable_workflow and is_pull_request_workflow):
         return []
     expected_job = {
         "runs-on": "ubuntu-latest",

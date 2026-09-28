@@ -466,14 +466,14 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
 
 class ImmutableWorkflowTest(unittest.TestCase):
-    """The privileged workflow executes only pinned trusted immutable checks."""
+    """The immutable workflow executes only pinned trusted immutable checks."""
 
     @classmethod
     def setUpClass(cls):
         cls.content = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    def test_uses_only_pull_request_target_with_read_only_permissions(self):
-        self.assertEqual(_workflow_events(self.content), {"pull_request_target"})
+    def test_uses_only_pull_request_with_read_only_permissions(self):
+        self.assertEqual(_workflow_events(self.content), {"pull_request"})
         permission_blocks = _indented_blocks(self.content, "permissions")
         self.assertTrue(permission_blocks)
         for block in permission_blocks:
@@ -517,10 +517,7 @@ class ImmutableWorkflowTest(unittest.TestCase):
                 self.assertTrue(
                     "trusted-base/scripts/" in command
                     or '"$TRUSTED_CHECKER"' in command
-                    or command == (
-                        "python -m pip install --requirement "
-                        "trusted-base/requirements-checkers.txt"
-                    ),
+                    or command == "python -m pip install PyYAML==6.0.3",
                     command,
                 )
 
