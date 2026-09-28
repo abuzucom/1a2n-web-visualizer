@@ -417,6 +417,21 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, tree, path, "job schema")
 
+    def test_privileged_checkout_cannot_redirect_trusted_checker(self):
+        with RetryingTemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _initialize_repo(repo)
+            content = WORKFLOW_PATH.read_text(encoding="utf-8").replace(
+                "repository: abuzucom/agents",
+                "repository: ${{ env.PR_HEAD_REPOSITORY }}",
+                1,
+            )
+            path = ".github/workflows/immutable.yml"
+            _write_file(repo, path, content)
+            tree = _commit_all(repo, "test: redirect trusted checker")
+
+            self._assert_detected(repo, tree, path, "job schema")
+
     def test_privileged_scan_cannot_continue_on_error(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)

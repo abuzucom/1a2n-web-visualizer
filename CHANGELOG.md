@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.13.4] (2026-09-28)
+
+### Fixed
+- Removed the Jira pull request workflow.
+- Moved protected-file review to an unprivileged pull request trigger.
+- Bound immutable scanner bootstrap to the approved pinned source checkout.
+
 ## [1.13.3] (2026-09-28)
 
 ### Fixed
