@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from scripts.handoff_policy import HANDOFF_PATH, is_handoff_path
+    from scripts.handoff_policy import is_handoff_path
 except ModuleNotFoundError:
-    from handoff_policy import HANDOFF_PATH, is_handoff_path
+    from handoff_policy import is_handoff_path
 
 ROOT = Path(__file__).resolve().parent.parent
 DENYLIST_PATH = Path(__file__).resolve().with_name("prose_bans.txt")
