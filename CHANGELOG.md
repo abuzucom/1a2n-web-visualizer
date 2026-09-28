@@ -4,6 +4,11 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.13.5] (2026-09-28)
+
+### Fixed
+- Restored full gate decision reasons in hook prompts and denials.
+
 ## [1.13.4] (2026-09-28)
 
 ### Fixed

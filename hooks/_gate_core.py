@@ -392,23 +392,9 @@ def read_payload(empty_is_session_start: bool = False):
     return parsed if isinstance(parsed, dict) else None
 
 
-def display_reason(reason: str) -> str:
-    """Return a nonsecret diagnostic label for one gate decision."""
-    if "MANDATORY BRANCH CORRECTION" in reason:
-        return "MANDATORY BRANCH CORRECTION"
-    if "cannot clear" in reason:
-        return "cannot clear protected value"
-    for key in EXEC_CAPABLE_KEYS:
-        if key in reason:
-            return f"unsafe Git configuration key: {key}"
-    return "policy requires review"
-
-
-def emit(gate: str, decision: str, reason: str, mode: str = "") -> int:
+def emit(gate: str, decision: str, reason: str) -> int:
     """Print the gate's decision and return the exit code it needs."""
-    message = f"blocked by hooks/{gate}: {display_reason(reason)}"
-    if mode:
-        message += f" (permission_mode {mode})"
+    message = f"blocked by hooks/{gate}: {reason}"
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -429,7 +415,8 @@ def decide(gate: str, payload: dict, decision: str, reason: str) -> int:
         return emit(gate, "deny", reason)
     if require_str(payload.get("permission_mode")) in INTERACTIVE_MODES:
         return emit(gate, "ask", reason)
-    return emit(gate, "deny", reason, mode_label(payload))
+    return emit(gate, "deny", f"{reason}. No interactive session is available "
+                              f"to consent (permission_mode {mode_label(payload)}).")
 
 
 MAX_REASON_VALUE = 160
