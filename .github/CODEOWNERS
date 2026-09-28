@@ -27,3 +27,12 @@ Caddyfile @itsjustatank
 src/*.html @itsjustatank
 src/js/** @itsjustatank
 src/vendor/** @itsjustatank
+.claude/** @itsjustatank
+.codex/** @itsjustatank
+.gemini/** @itsjustatank
+.agents/** @itsjustatank
+docs/agent-policy/** @itsjustatank
+docs/project-orientation.md @itsjustatank
+shared-files.json @itsjustatank
+hook-coverage-baseline.json @itsjustatank
+requirements-checkers.txt @itsjustatank

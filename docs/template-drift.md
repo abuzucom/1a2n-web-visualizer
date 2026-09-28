@@ -1,84 +1,60 @@
 # Template drift
 
 This repository adopts the agent-instruction template from
-[`abuzucom/agents`](https://github.com/abuzucom/agents). `scripts/sync.py`
-keeps the AGENTS.md family in step; every file under `scripts/`, `hooks/`, and
-`tests/` was copied by hand and is maintained here, so a local edit is
-invisible upstream until somebody diffs the two repositories.
+[`abuzucom/agents`](https://github.com/abuzucom/agents). The template's
+`DRIFT.md` owns the drift policy and its three categories.
+`adopters/1a2n-web-visualizer.md` in the template owns the adopted-at commit
+and the taken and declined lists. This file owns the local differences and
+the reason for each.
 
-This file owns what differs locally and why. The template owns the rest:
-`DRIFT.md` holds the policy and the three categories, and
-`adopters/1a2n-web-visualizer.md` holds the adopted-at commit and the full list
-of what this repository took versus declined. This file does not restate
-either.
+## Adopted revision
 
-One part of this is mechanical. `scripts/sync.py --check-shared` compares the
-eight files carrying gate decisions against `shared-files.json`, a manifest of
-SHA-256 digests committed in both repositories, and it runs in CI here. The
-Bash parser is manifest-covered because parsing determines which commands
-reach those decisions. A gate fix landing upstream and not here fails this
-repository's check on the next run.
+Template commit `848d069`. One commit copies `scripts/` and `hooks/` whole,
+together with `AGENTS.md`, `docs/agent-policy/*.md`,
+`shared-files.json`, `hook-coverage-baseline.json`, the four client hook
+registrations, and the template tests for every adopted hook and checker.
+`scripts/complete_gate_adoption.py` installed the registrations as one
+transaction.
 
-Everything below that manifest is a convention. Nothing verifies it.
+`scripts/sync.py --check-shared` compares the gate files against
+`shared-files.json` in CI. A gate fix landing upstream and not here fails that
+check on the next run. Everything outside the manifest is a convention that
+no check verifies.
 
 ## What differs, and why
 
-### `hooks/claude-code-settings.example.json`
+### `docs/project-orientation.md` and `docs/repo-guide.md`
 
-Lists only the hooks this repository runs. The template's copy also registers
-`enforce_branch_name.py` and `enforce_git_identity.py`, neither of which is
-adopted here. Expected to differ.
-
-### `tests/test_require_consent.py`
-
-Deliberately outside the shared manifest, for the reason below.
-
-Carries `HOOK_MATCHERS` and `test_configured_launcher_resolves_on_this_platform`,
-which upstream live in `tests/test_enforce_branch_name.py`. That suite is not
-adopted here, and dropping it would have dropped both assertions with it.
-
-Losing them costs more than it looks. `HOOK_MATCHERS` fails when a registered
-hook is not declared, so a hook can be wired to a matcher nobody reviewed. The
-launcher test asserts that the `command` string in each settings file resolves
-on the running platform, and Claude Code treats a hook that fails to start as a
-non-blocking error, so a launcher that does not resolve makes every gate wave
-its call through in silence. The behavioral tests launch hooks through
-`sys.executable` and keep passing against exactly that configuration.
-
-This is the one difference that reads as true drift without its cause attached.
-It is not: it follows from a declined file.
-
-### `hook-coverage-baseline.json`
-
-Per repo by nature, not drift. The baseline records what the suite leaves unrun
-in `hooks/`, and this repository declined `tests/test_enforce_branch_name.py`
-and `tests/test_enforce_git_identity.py`, which exercise the template's Git
-write context paths. Its baseline therefore records 211 unreached statements
-across 64 functions where the template records 118 across 59. A shared
-baseline would be wrong in both.
-
-Both baselines are measured in CI, and the tool refuses to write one as root: a mode 000 file is readable for root, so the two `OSError` branches a permission denial takes never fire in a root shell.
+Expected to differ. `scripts/sync.py` caps the assembled policy at 64 KiB.
+The template's `AGENTS.md` plus `docs/agent-policy/*.md` already fill all but
+about 600 bytes of it. The orientation stub therefore names only the paths
+that must never be hand-edited and points to `docs/repo-guide.md`. The guide
+holds the full commands, protected paths, architecture, and gotchas outside
+the injected policy.
 
 ### GitHub Actions pinning
 
-This repository pins every action to a full commit SHA and enforces it with
-`scripts/check_action_pins.py`. The template pins by released tag. Do not copy a
-tag-pinned step from the template into a workflow here; read the SHA from the
-action's own repository. Expected to differ.
+Expected to differ. This repository pins every action to a full commit SHA
+with a release comment and enforces it with `scripts/check_action_pins.py`.
+Copy a template workflow step only after confirming its SHA pin.
 
-### Checkers this repository holds alone
+### Workflow wiring
 
-`scripts/check_action_pins.py`, `scripts/check_protected_files.py`, and
-`scripts/jira_sync.py` have no template counterpart. Porting
-`check_protected_files.py` upstream was raised and declined, so the template
-ships no protected-file check. The server-side backstop for edits to `hooks/`
-and `.claude/` is this repository's own, through
+Expected to differ. The template's own workflows are not copied. The adopted
+checks run from `.github/workflows/checks.yml` instead. This adoption
+holds back the template tests that assert the template's own workflow files,
+Makefile, and pre-commit wiring. Those tests arrive with that wiring.
+
+### Checkers and tests this repository holds alone
+
+`scripts/check_protected_files.py` and `scripts/jira_sync.py` have no template
+counterpart. The template declined `check_protected_files.py`. The
+server-side backstop for edits to `hooks/`, `.claude/`, `.codex/`, `.gemini/`,
+`.agents/`, and `docs/agent-policy/` is this repository's own, through
 [`protected-file-review.md`](protected-file-review.md).
 
-## When you change a template file here
+## Changing a template file here
 
-Record the change in the table above, then open an issue in `abuzucom/agents`
-naming the file, the change, and whether you recommend upstreaming it. A
-difference nobody upstreams is a difference somebody re-derives later, which is
-how three checker fixes in this repository sat unnoticed until a hand diff found
-them.
+Record the change above. Open an issue in `abuzucom/agents` naming the file,
+the change, and whether it belongs upstream. The template adoption steps
+require that issue. No check enforces it.

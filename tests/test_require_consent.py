@@ -17,7 +17,6 @@ otherwise pass every behavioral test in this file.
 import importlib.util
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -186,6 +185,19 @@ class GateTest(TestFileFixture):
         _, parsed = run_hook(payload)
         self.assertEqual(decision_of(parsed), "ask")
 
+    def test_direct_git_metadata_edit_asks(self):
+        git_dir = Path(self.tmp.name) / ".git"
+        git_dir.mkdir()
+        head = git_dir / "HEAD"
+        head.write_text("ref: refs/heads/feat/example\n", encoding="utf-8")
+        payload = edit_payload(
+            str(head),
+            "ref: refs/heads/feat/example",
+            "ref: refs/heads/feat/renamed",
+        )
+        _, parsed = run_hook(payload)
+        self.assertEqual(decision_of(parsed), "ask")
+
     def test_multiedit_asks_when_any_edit_is_not_additive(self):
         payload = {
             "hook_event_name": "PreToolUse",
@@ -227,6 +239,55 @@ class GateTest(TestFileFixture):
         _, parsed = run_hook(edit_payload(str(self.test_file), old, ""))
         reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
         self.assertIn("Approving a plan is not authorization for this edit", reason)
+
+    def test_banned_models_edit_asks_and_cites_rule_22(self):
+        models_file = Path(self.tmp.name) / "scripts" / "banned_models.txt"
+        models_file.parent.mkdir(parents=True, exist_ok=True)
+        models_file.write_text("grok*\n", encoding="utf-8")
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "permission_mode": "default",
+            "tool_input": {
+                "file_path": str(models_file),
+                "old_string": "grok*\n",
+                "new_string": "grok*\nxai\n",
+            },
+        }
+        _, parsed = run_hook(payload)
+        self.assertEqual(decision_of(parsed), "ask")
+        reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("Rule 22", reason)
+
+    def test_banned_models_edit_denies_in_unattended_mode(self):
+        models_file = Path(self.tmp.name) / "scripts" / "banned_models.txt"
+        models_file.parent.mkdir(parents=True, exist_ok=True)
+        models_file.write_text("grok*\n", encoding="utf-8")
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "permission_mode": "headless",
+            "tool_input": {
+                "file_path": str(models_file),
+                "old_string": "grok*\n",
+                "new_string": "grok*\nxai\n",
+            },
+        }
+        code, parsed = run_hook(payload)
+        self.assertEqual(code, BLOCKING_EXIT_CODE)
+        self.assertEqual(decision_of(parsed), "deny")
+
+    def test_banned_models_windows_decorations_ask(self):
+        module = load_hook_module("require_consent_windows_decorations")
+        for decorated in (
+            "scripts/banned_models.txt:stream",
+            "scripts/banned_models.txt.",
+            "scripts/banned_models.txt ",
+        ):
+            with self.subTest(decorated=decorated):
+                target = str(Path(self.tmp.name) / decorated)
+                self.assertTrue(module.is_protected_path(target, self.tmp.name))
+        self.assertFalse(module.is_protected_path("/outside/path.txt", self.tmp.name))
 
 
 class PreservedTextEvasionTest(TestFileFixture):
@@ -567,6 +628,18 @@ class PathReasonTest(unittest.TestCase):
             "what this edit changes",
         )
 
+    def test_installed_policy_root_is_protected_from_another_working_directory(self):
+        target = str(Path(self.module.__file__).resolve().parent / "_gate_core.py")
+        payload = edit_payload(target, "old", "new")
+        reason = self.module._write_reason(
+            payload,
+            target,
+            target,
+            str(self.root),
+            self.module.core.policy_root(),
+        )
+        self.assertIn("decides whether these gates run", reason)
+
 
 class FailClosedInputTest(unittest.TestCase):
     """A gate that cannot read its input must not answer 'fine'."""
@@ -723,55 +796,6 @@ class SettingsWiringTest(unittest.TestCase):
 
     def test_example_settings_register_the_hook(self):
         self._assert_registered(EXAMPLE_SETTINGS)
-
-    HOOK_MATCHERS = {
-        "block_destructive_bash.py": {"Bash"},
-        "block_destructive_powershell.py": {"PowerShell"},
-        "require_consent.py": {EDIT_MATCHER},
-    }
-
-    def test_configured_launcher_resolves_on_this_platform(self):
-        """A launcher that does not resolve makes every gate fail open.
-
-        Claude Code spawns the exec form directly, with no shell, so
-        `command` must name a real executable on PATH. A startup failure
-        exits non-zero but not 2, which Claude Code treats as a
-        non-blocking error, and the gate waves the call through.
-
-        Asserting on the configured string is the point: the behavioral
-        tests launch hooks through `sys.executable`, so they keep passing
-        against a configuration that never starts.
-        """
-        for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
-            settings = json.loads(path.read_text(encoding="utf-8"))
-            launchers = {
-                entry.get("command", "")
-                for event in settings.get("hooks", {}).values()
-                for matcher in event
-                for entry in matcher.get("hooks", [])
-            }
-            for launcher in launchers:
-                with self.subTest(path=path.name, launcher=launcher):
-                    self.assertIsNotNone(
-                        shutil.which(launcher),
-                        f"{path.name} launches hooks as {launcher!r}, which "
-                        f"does not resolve here. Windows has no python3.exe; "
-                        f"use 'python' or 'py'. Debian without "
-                        f"python-is-python3 has no 'python'; use 'python3'.",
-                    )
-
-    def test_every_registered_hook_declares_its_matchers(self):
-        """A PreToolUse hook absent from the table above is unreviewed wiring."""
-        for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
-            settings = json.loads(path.read_text(encoding="utf-8"))
-            for matcher in settings["hooks"]["PreToolUse"]:
-                for entry in matcher.get("hooks", []):
-                    invocation = " ".join(
-                        [entry.get("command", "")] + list(entry.get("args", [])))
-                    with self.subTest(path=path.name, command=invocation):
-                        self.assertTrue(
-                            any(name in invocation for name in self.HOOK_MATCHERS),
-                            f"{invocation} is registered but not declared")
 
     def test_entries_use_the_exec_form(self):
         """Shell form splits a project path containing spaces and the hook never runs."""

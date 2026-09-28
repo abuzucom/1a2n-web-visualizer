@@ -67,7 +67,6 @@ WRAPPERS = frozenset({"&", "start-process", "invoke-expression", "iex",
 # interpreters leaves `bash -c 'rm -rf /etc'` as a hole, and on a Windows box
 # carrying Git Bash that line runs.
 INTERPRETERS = core.SHELL_INTERPRETERS
-INTERPRETER_PAYLOAD_FLAGS = core.SHELL_PAYLOAD_FLAGS
 REDIRECTIONS = frozenset({">", ">>", "2>", "2>>", "*>", "*>>", "3>", "4>",
                           "5>", "6>"})
 # Start-Process hands its target a plain argument list rather than a command
@@ -133,14 +132,8 @@ def _argument_list_verdict(program: str, rest: list, depth: int) -> tuple:
 def _payload_verdict(flag: str, rest: list, depth: int) -> tuple:
     """Return the verdict for a command string handed to an interpreter."""
     if not rest:
-        return "", ""
-    if depth >= core.MAX_COMMAND_DEPTH:
-        return "deny", "shell command nesting exceeds the inspection limit"
-    # cmd takes the remainder of the line; PowerShell takes one string
-    # after -Command.
-    if flag.startswith("/"):
-        return classify(" ".join(rest), depth + 1)
-    return classify(rest[0], depth + 1)
+        return "deny", "a shell command-string flag has no payload"
+    return "deny", "a shell interpreter executes a command-string payload"
 
 
 def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
@@ -157,12 +150,12 @@ def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
         if kind == "deny":
             return "deny", value
         if kind == "command":
-            return classify(value, depth + 1)
+            return "deny", "PowerShell executes a command-string payload"
     for index, token in enumerate(args):
         lowered = token.lower()
         if lowered in ARGUMENT_LIST_FLAGS:
             return _argument_list_verdict(program, args[index + 1:], depth)
-        if lowered in INTERPRETER_PAYLOAD_FLAGS:
+        if core.is_shell_payload_flag(token):
             return _payload_verdict(lowered, args[index + 1:], depth)
     return "", ""
 
@@ -233,6 +226,12 @@ def _named_program_verdict(program: str, args: list, depth: int) -> tuple:
     None means the name is not one of the three the gate reads whole, so
     the caller runs it past every other check instead.
     """
+    prohibited = core.prohibited_command_verdict(program, args)
+    if prohibited[0]:
+        return prohibited
+    curl_verdict = core.curl_transfer_verdict(program, args)
+    if curl_verdict[0]:
+        return curl_verdict
     if program in INTERPRETERS:
         return _interpreter_verdict(program, args, depth)
     if program in core.DELETE_PROGRAMS:
@@ -244,37 +243,48 @@ def _named_program_verdict(program: str, args: list, depth: int) -> tuple:
 
 def _program_verdict(tokens: list, redirects: list, depth: int) -> tuple:
     """Return (decision, reason) for the cmdlet this statement runs."""
+    policy = (core.powershell_policy_verdict(tokens[0], tokens[1:], redirects)
+              if tokens else ("", ""))
     stripped = _strip_wrappers(tokens)
     if len(stripped) < len(tokens) and len(stripped) == 1 and " " in stripped[0]:
         # Invoke-Expression and the call operator take a command as one
         # string. Reading it as a program name sees the whole statement.
         if depth >= core.MAX_COMMAND_DEPTH:
             return "deny", "PowerShell command nesting exceeds the inspection limit"
-        return classify(stripped[0], depth + 1)
+        return core.strongest(policy, classify(stripped[0], depth + 1))
     tokens = [token for token in stripped if token not in REDIRECTIONS]
     if not tokens:
-        return core.test_write_verdict("", [], redirects)
+        return core.strongest(
+            policy, core.test_write_verdict("", [], redirects))
     program = os.path.basename(tokens[0]).lower()
     args = tokens[1:]
+    policy = core.strongest(
+        core.strongest(
+            policy, core.github_routing_verdict(program, args, _CWD[0])),
+        core.forge_verdict(program, args, _CWD[0]),
+    )
+    policy = core.strongest(
+        policy, core.cloudflare_pages_verdict(program, args, _CWD[0]))
     named = _named_program_verdict(program, args, depth)
     if named is not None:
-        return named
-    for verdict in (core.destruction_verdict(program, args),
-                    core.alias_verdict(program, args),
-                    core.mode_change_verdict(program, args),
-                    core.truncation_verdict(program, args, redirects),
-                    core.process_verdict(program, args),
-                    core.schedule_verdict(program, args),
-                    core.forge_verdict(program, args),
-                    core.filesystem_repair_verdict(program, args),
-                    core.profile_verdict(program, args, redirects),
-                    core.protected_write_verdict(
-                        program, args, redirects, _CWD[0]),
-                    core.cmd_delete_verdict(program, args),
-                    core.test_write_verdict(program, args, redirects)):
-        if verdict[0]:
-            return verdict
-    return "", ""
+        return core.strongest(policy, named)
+    verdict = policy
+    for candidate in (core.destruction_verdict(program, args),
+                      core.alias_verdict(program, args),
+                      core.mode_change_verdict(program, args),
+                      core.truncation_verdict(program, args, redirects),
+                      core.process_verdict(program, args),
+                      core.schedule_verdict(program, args),
+                      core.filesystem_repair_verdict(program, args),
+                      core.infrastructure_path_verdict(
+                          program, args, redirects, _CWD[0]),
+                      core.profile_verdict(program, args, redirects),
+                      core.protected_write_verdict(
+                          program, args, redirects, _CWD[0]),
+                      core.cmd_delete_verdict(program, args),
+                      core.test_write_verdict(program, args, redirects)):
+        verdict = core.strongest(verdict, candidate)
+    return verdict
 
 
 def classify(command, depth: int = 0) -> tuple:

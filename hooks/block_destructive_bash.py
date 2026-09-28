@@ -54,6 +54,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     import _gate_core as core
     import _bash_parser as bash_parser
+    import _platform_policy as platform_policy
 except ImportError as error:  # pragma: no cover
     # The adoption test exercises this import failure.
     # Fail closed. Claude Code treats any non-zero exit other than 2 as a
@@ -78,7 +79,6 @@ GATED_KEYWORDS = core.gated_keywords()
 # interpreters leaves `powershell -Command 'Remove-Item -Recurse -Force /etc'`
 # as a hole, and on Windows that line runs.
 INTERPRETERS = core.SHELL_INTERPRETERS
-INTERPRETER_PAYLOAD_FLAGS = core.SHELL_PAYLOAD_FLAGS
 IMPLAUSIBLE_PROGRAM_CHARS = frozenset("<>&|;")
 
 
@@ -119,24 +119,16 @@ def _powershell_interpreter_verdict(program: str, args: list,
     if kind == "deny":
         return "deny", value
     if kind == "command":
-        return _nested_command_verdict(value, depth, "PowerShell")
+        return "deny", "PowerShell executes a command-string payload"
     return None
 
 
 def _interpreter_argument_verdict(token: str, rest: list, depth: int):
     """Return a command-payload verdict for one interpreter argument."""
-    lowered = token.lower()
-    if lowered in INTERPRETER_PAYLOAD_FLAGS:
+    if core.is_shell_payload_flag(token):
         if not rest:
-            return "", ""
-        # A POSIX shell takes one string after -c. CMD takes the whole
-        # remainder of the line after /c or /k.
-        payload = " ".join(rest) if lowered.startswith("/") else rest[0]
-        return _nested_command_verdict(payload, depth, "shell")
-    if token.startswith("-") and not token.startswith("--") and "c" in token:
-        if not rest:
-            return "", ""
-        return _nested_command_verdict(rest[0], depth, "shell")
+            return "deny", "a shell command-string flag has no payload"
+        return "deny", "a shell interpreter executes a command-string payload"
     return None
 
 
@@ -159,7 +151,15 @@ def _interpreter_verdict(program: str, args: list, depth: int) -> tuple:
         lowered = token.lower()
         if not token.startswith(("-", "/")) and lowered in INTERPRETERS:
             return _interpreter_verdict(lowered, rest, depth)
-    return "", ""
+    if any(argument.casefold() == "--version" for argument in args):
+        return "", ""
+    fixed_script = next(
+        (argument for argument in args if not argument.startswith(("-", "/"))),
+        "",
+    )
+    if fixed_script:
+        return "ask", "a fixed local script executes code outside inspection"
+    return "ask", "a shell invocation changes the active interpreter"
 
 
 def _eval_verdict(args: list, depth: int) -> tuple:
@@ -182,6 +182,7 @@ def _segment_verdict(tokens: list, depth: int) -> tuple:
     tokens, environment, complete = bash_parser.strip_prefixes(tokens)
     if not complete:
         return "ask", "env -S command text could not be inspected"
+    privileged = core.strongest(privileged, core.privilege_verdict(tokens))
     return core.strongest(
         privileged, _program_verdict(tokens, redirects, environment, depth))
 
@@ -194,6 +195,12 @@ def _named_program_verdict(program: str, args: list,
     so the caller runs it past every other check instead.
     """
     lowered = program.lower()
+    prohibited = core.prohibited_command_verdict(program, args)
+    if prohibited[0]:
+        return prohibited
+    curl_verdict = core.curl_transfer_verdict(program, args)
+    if curl_verdict[0]:
+        return curl_verdict
     if lowered == "eval":
         return _eval_verdict(args, depth)
     if lowered in INTERPRETERS:
@@ -214,25 +221,41 @@ def _program_verdict(tokens: list, redirects: list,
             core.test_write_verdict("", [], redirects))
     program = os.path.basename(tokens[0])
     args = tokens[1:]
+    policy = (core.powershell_policy_verdict(program, args, redirects)
+              if core.powershell_policy_applies_in_bash(program) else ("", ""))
+    policy = core.strongest(
+        core.strongest(
+            policy, core.github_routing_verdict(program, args, _CWD[0])),
+        core.forge_verdict(program, args, _CWD[0]),
+    )
+    policy = core.strongest(
+        policy, core.cloudflare_pages_verdict(program, args, _CWD[0]))
     named = _named_program_verdict(program, args, environment, depth)
     if named is not None:
-        return named
-    for verdict in (core.destruction_verdict(program, args),
-                    core.alias_verdict(program, args),
-                    core.environment_assignment_verdict(program, args),
-                    core.mode_change_verdict(program, args),
-                    core.truncation_verdict(program, args, redirects),
-                    core.process_verdict(program, args),
-                    core.schedule_verdict(program, args),
-                    core.forge_verdict(program, args),
-                    core.filesystem_repair_verdict(program, args),
-                    core.profile_verdict(program, args, redirects),
-                    core.protected_write_verdict(
-                        program, args, redirects, _CWD[0]),
-                    core.cmd_delete_verdict(program, args),
-                    core.test_write_verdict(program, args, redirects)):
-        if verdict[0]:
-            return verdict
+        return core.strongest(policy, named)
+    # GitHub routing and forge verdicts merge into policy above.
+    # That placement covers named programs without evaluating twice below.
+    verdict = policy
+    for candidate in (platform_policy.classify_platform_command(
+                          sys.platform, program, args),
+                      core.destruction_verdict(program, args),
+                      core.alias_verdict(program, args),
+                      core.environment_assignment_verdict(program, args),
+                      core.mode_change_verdict(program, args),
+                      core.truncation_verdict(program, args, redirects),
+                      core.process_verdict(program, args),
+                      core.schedule_verdict(program, args),
+                      core.filesystem_repair_verdict(program, args),
+                      core.infrastructure_path_verdict(
+                          program, args, redirects, _CWD[0]),
+                      core.profile_verdict(program, args, redirects),
+                      core.protected_write_verdict(
+                          program, args, redirects, _CWD[0]),
+                      core.cmd_delete_verdict(program, args),
+                      core.test_write_verdict(program, args, redirects)):
+        verdict = core.strongest(verdict, candidate)
+    if verdict[0]:
+        return verdict
     if core.is_ambiguous(program):
         return "ask", ("the command name contains an expansion the gate "
                        "cannot inspect")

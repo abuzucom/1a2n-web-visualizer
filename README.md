@@ -237,22 +237,31 @@ through `.github/workflows/checks.yml`. Pull requests also run a banned-agent
 authorship check, branch-name and commit-message shape checks (skipped for
 Dependabot, whose own naming does not follow this repo's conventions), and
 static checks for `persist-credentials: false` on checkout steps, unjustified
-MD5/SHA-1, non-root containers, and likely secrets.
+MD5/SHA-1, non-root containers, and likely secrets. They also verify commit
+identities and attribution, changelog versioning, external repository
+references, the assembled policy size, and that the complete gate set is
+adopted and every configured hook launcher resolves.
 
-These checks come from the `abuzucom/agents` AI-agent-instructions template
-(see AGENTS.md's own history for the adoption). `sync.py` keeps only the
-AGENTS.md family in step; every `scripts/`, `hooks/`, and `tests/` file was
-copied by hand, so
-[`docs/template-drift.md`](docs/template-drift.md) records what differs here
-and why. `make sync` (or
+These checks come from the `abuzucom/agents` AI-agent-instructions template,
+whose `scripts/` and `hooks/` directories this repository adopts whole.
+[`docs/template-drift.md`](docs/template-drift.md) records the adopted
+revision, what differs here, and why. The policy copies (`CLAUDE.md` and the
+others) assemble `AGENTS.md`, `docs/agent-policy/*.md`, and
+`docs/project-orientation.md`; the repository orientation itself lives in
+[`docs/repo-guide.md`](docs/repo-guide.md). `make sync` (or
 `python3 scripts/sync.py`) regenerates the tool-specific copies after editing
-`AGENTS.md`; `make check` verifies them without writing; `make lint` runs the
+those sources; `make check` verifies them without writing; `make lint` runs the
 AGENTS.md-specific style checks below, additive to `npm run lint` (ESLint and
 Ruff), not a replacement for it. Running `pre-commit install` after cloning
 also wires most of the same checks in as local git hooks (`.pre-commit-config.yaml`).
 
-`hooks/` holds three Claude Code hooks, wired through `.claude/settings.json`,
-that run before a tool call rather than after a commit.
+`hooks/` holds the template's agent hooks, registered for Claude Code
+(`.claude/settings.json`), Codex (`.codex/`), Gemini (`.gemini/settings.json`),
+and Antigravity (`.agents/hooks.json`), that run before a tool call rather than
+after a commit. Besides the gates described here, they enforce branch names,
+commit identity, infrastructure-access denial, complete gate adoption, and
+policy reinjection at session start; `docs/gate-threat-model.md` lists what
+each covers and its limits.
 `block_destructive_bash.py` and `block_destructive_powershell.py` gate
 destructive and history-rewriting commands on the `Bash` and `PowerShell`
 matchers. Which commands deny and which prompt is stated once, in AGENTS.md
@@ -307,7 +316,13 @@ not the other fails the other's suite.
 | `scripts/check_weak_hashing.py` | No weak hashing in security-sensitive contexts | Yes |
 | `scripts/check_dockerfile_root.py` | No root containers without explicit consent | Yes |
 | `scripts/check_secrets_heuristic.py` | No secrets in version control (heuristic, not entropy-based) | Yes |
-| `scripts/check_hook_coverage.py` | Nothing untested enters `hooks/` | Wired into CI. Runs the suite with `tools/hook-trace` on `PYTHONPATH`, which traces every interpreter the suite starts; the gates run as subprocesses, so ordinary in-process coverage sees almost none of their decision code. Compares against `hook-coverage-baseline.json`, which is per repo: this repo declined two hook suites, so what its run leaves unrun differs from the template's |
+| `scripts/check_hook_coverage.py` | Nothing untested enters `hooks/` | Wired into CI. Runs the suite with `tools/hook-trace` on `PYTHONPATH`, which traces every interpreter the suite starts; the gates run as subprocesses, so ordinary in-process coverage sees almost none of their decision code. Compares against `hook-coverage-baseline.json`, taken from the template with the whole hook suite |
+| `scripts/check_gate_adoption.py` | Complete gate set adopted (Rule 18) | Yes |
+| `scripts/check_hook_launchers.py` | Every configured hook launcher resolves | Yes |
+| `scripts/check_policy_size.py` | Assembled policy stays under 64 KiB | Yes |
+| `scripts/check_changelog.py` | Versioned, dated changelog that advances per PR | Yes |
+| `scripts/check_git_identity.py`, `scripts/check_commit_attribution.py` | Git identity and attribution (Rule 14) | Yes |
+| `scripts/check_external_pr_refs.py` | No external repository cross-references (Rule 17) | Yes |
 | `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Wired into CI against `README.md`, `CHANGELOG.md`, `SECURITY.md`, and `docs/`. It reads prose, so a table delimiter row, a list marker, and an inline code span spanning two lines are excluded from the dash rule rather than rewritten |
 
 Protected-file review runs from the trusted default branch through

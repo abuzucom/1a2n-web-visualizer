@@ -1,50 +1,37 @@
-import tempfile
+#!/usr/bin/env python3
+"""Test workflow action pin validation."""
+import sys
 import unittest
 from pathlib import Path
 
-from scripts.check_action_pins import find_failures
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import check_action_pins
 
 
-PINNED_ACTION = "a" * 40
+class ActionPinTest(unittest.TestCase):
+    """External actions require immutable revisions."""
 
+    def test_full_sha_passes(self):
+        text = "jobs:\n  test:\n    steps:\n      - uses: actions/checkout@" + "a" * 40
+        self.assertEqual(check_action_pins.find_violations(text, "x.yml"), [])
 
-class CheckActionPinsTests(unittest.TestCase):
-    def test_checks_yml_and_yaml_and_both_uses_forms(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            workflow_dir = Path(directory)
-            (workflow_dir / "checks.yml").write_text(
-                f"steps:\n  - uses: actions/checkout@{PINNED_ACTION}\n",
-                encoding="utf-8",
-            )
-            (workflow_dir / "deploy.yaml").write_text(
-                f"steps:\n  uses: actions/deploy@{PINNED_ACTION}\n",
-                encoding="utf-8",
-            )
+    def test_tag_fails(self):
+        found = check_action_pins.find_violations(
+            "jobs:\n  test:\n    steps:\n      - uses: actions/checkout@v4\n", "x.yml")
+        self.assertEqual(len(found), 1)
 
-            self.assertEqual(find_failures(workflow_dir), [])
+    def test_local_reference_passes(self):
+        text = "jobs:\n  test:\n    uses: ./.github/workflows/reuse.yml\n"
+        self.assertEqual(check_action_pins.find_violations(text, "x.yml"), [])
 
-    def test_rejects_mutable_refs(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            workflow_dir = Path(directory)
-            (workflow_dir / "checks.yml").write_text(
-                "steps:\n  - uses: actions/checkout@v7\n",
-                encoding="utf-8",
-            )
+    def test_container_digest_passes(self):
+        text = "jobs:\n  test:\n    steps:\n      - uses: docker://alpine@sha256:" + "a" * 64
+        self.assertEqual(check_action_pins.find_violations(text, "x.yml"), [])
 
-            failures = find_failures(workflow_dir)
-
-            self.assertEqual(len(failures), 1)
-            self.assertIn("must use a 40-character commit SHA", failures[0])
-
-    def test_allows_local_actions(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            workflow_dir = Path(directory)
-            (workflow_dir / "checks.yml").write_text(
-                "steps:\n  - uses: ./actions/local\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(find_failures(workflow_dir), [])
+    def test_container_tag_fails(self):
+        text = "jobs:\n  test:\n    steps:\n      - uses: docker://alpine:latest\n"
+        found = check_action_pins.find_violations(text, "x.yml")
+        self.assertEqual(len(found), 1)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm ci --ignore-scripts
+      - name: Install checker dependencies
+        run: python -m pip install --requirement requirements-checkers.txt
       - name: Run Python tests
         run: npm run test:py
       - name: Run interpreter shim tests
@@ -44,8 +46,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install checker dependencies
+        run: python3 -m pip install --requirement requirements-checkers.txt
+
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
+      - name: Check the assembled policy size
+        run: python3 scripts/check_policy_size.py
+      - name: Check the complete gate set is adopted
+        run: python3 scripts/check_gate_adoption.py
+      - name: Probe configured hook launchers
+        run: python3 scripts/check_hook_launchers.py
+      - name: Check versioned changelog
+        run: python3 scripts/check_changelog.py
       - name: Check the shared gate files against the manifest
         run: python3 scripts/sync.py --check-shared
 
@@ -83,6 +96,37 @@ jobs:
             --base "origin/${{ github.event.pull_request.base.ref }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
+      - name: Check commit identities
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 scripts/check_git_identity.py \
+            --base "$PR_BASE_SHA" \
+            --head "$PR_HEAD_SHA"
+
+      - name: Check strict commit attribution
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: >-
+          python3 scripts/check_commit_attribution.py
+          --repo .
+          --repository "$REPOSITORY"
+          --base "$PR_BASE_SHA"
+          --head "$PR_HEAD_SHA"
+
+      - name: Check changelog version advance
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/check_changelog.py --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA"
+
+      - name: Check external repository references
+        run: python3 scripts/check_external_pr_refs.py
+
   branch-name:
     if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
@@ -118,6 +162,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
+      - name: Install checker dependencies
+        run: python3 -m pip install --requirement requirements-checkers.txt
 
       - name: Check persist-credentials on checkout steps
         run: python3 scripts/check_persist_credentials.py .github/workflows/*.yml
@@ -188,6 +235,9 @@ jobs:
 
       - name: Install coverage tools
         run: pip install lcov_cobertura coverage
+
+      - name: Install checker dependencies
+        run: python3 -m pip install --requirement requirements-checkers.txt
 
       - name: Run Node unit tests with coverage
         run: |

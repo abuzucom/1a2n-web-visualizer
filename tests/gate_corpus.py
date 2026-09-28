@@ -15,6 +15,33 @@ two copies of these gates.
 Rows carry the reason they exist. A row without one is a row nobody can
 judge when the expected verdict changes.
 """
+try:
+    from tests.json_line_worker import JsonLineWorkerProcess
+except ImportError:
+    from json_line_worker import JsonLineWorkerProcess
+
+
+class HookWorker:
+    """Invoke one hook process repeatedly through a JSON-line protocol."""
+
+    def __init__(self, hook_path, request_timeout: float = 5.0):
+        self.transport = JsonLineWorkerProcess(
+            "hook",
+            hook_path,
+            request_timeout=request_timeout,
+        )
+        self.process = self.transport.process
+
+    def invoke(self, payload: dict) -> tuple:
+        """Return the hook's code, stdout, and stderr for one payload."""
+        response = self.transport.request(payload)
+        if "worker_error" in response:
+            raise RuntimeError(response["worker_error"])
+        return response["code"], response["stdout"], response["stderr"]
+
+    def close(self) -> None:
+        """Close the request stream and join the worker process."""
+        self.transport.close()
 
 DENY = "deny"
 ASK = "ask"
@@ -23,23 +50,27 @@ ALLOW = "allow"
 # (command, expected verdict, why this row exists)
 BASH_CASES = (
     # Wrappers that hid the real command.
-    ("bash -c 'rm -rf /tmp/x'", ASK,
-     "a shell interpreter takes its payload from -c and returned ALLOW"),
-    ("sh -c 'rm -rf /tmp/x'", ASK, "same, through a different interpreter"),
-    ("cmd /c rd /s /q build", ASK,
+    ("bash -c 'rm -rf /tmp/x'", DENY,
+      "a shell interpreter takes its payload from -c and returned ALLOW"),
+    ("sh -c 'rm -rf /tmp/x'", DENY, "same, through a different interpreter"),
+    ("cmd /c rd /s /q build", DENY,
      "CMD reaches this gate nested; /c takes the rest of the line"),
     ("echo /tmp/x | xargs rm -rf", ASK, "xargs supplies the target"),
     ("sudo -u root rm -rf /tmp/x", ASK,
      "an option argument was read as the wrapped command"),
     ("sudo -n rm -rf /", DENY, "the wrapped command still decides the verdict"),
+    ("su -s /bin/sh deploy", ASK, "an option value precedes a fixed account"),
+    ("su -- root", DENY, "the option terminator still leaves a root target"),
+    ("su -m deploy", ASK, "preserving the environment does not hide the target"),
+    ('su "$TARGET"', DENY, "a dynamic account target cannot be inspected"),
     ("git myalias", ASK,
      "an alias hid its subcommand; unresolvable ones ask"),
     ("powershell -Command 'Remove-Item -Recurse -Force /etc'", DENY,
      "each gate knew only its own shell's interpreters, so a PowerShell"
      " payload crossed the Bash gate untouched"),
     ("pwsh -c 'Remove-Item -Recurse -Force /'", DENY, "same, under the other name"),
-    ("powershell -Command 'Remove-Item -Recurse -Force build'", ASK,
-     "the nested payload keeps its own verdict rather than inheriting one"),
+    ("powershell -Command 'Remove-Item -Recurse -Force build'", DENY,
+     "PowerShell command payloads deny before nested command classification"),
 
     # Statement boundaries the gate did not read.
     ("true\nrm -rf /tmp/x", ASK, "a newline separates statements"),
@@ -111,7 +142,7 @@ BASH_CASES = (
     ("kill 1234", ASK, "what a termination loses is not a gate's to weigh"),
     ("echo 'export X=1' >> ~/.bashrc", ASK, "runs at the start of every session"),
     ("find . -name '*.tmp' -delete", ASK, "find deletes without naming rm"),
-    ("shred -u secret.txt", ASK, "overwrites before unlinking"),
+    ("shred -u secret.txt", DENY, "agents may not overwrite and unlink files"),
 
     # Allowed. A gate that fires on these gets switched off.
     ("ls -la", ALLOW, "reading"),
@@ -143,7 +174,31 @@ POWERSHELL_CASES = (
     ("Remove-Item -Recurse C:\\work\\build", ASK,
      "backslash is a path separator here, not an escape"),
     ("Invoke-Expression 'Remove-Item -Recurse -Force /'", DENY,
-     "a cmdlet that runs another command was opaque"),
+      "a cmdlet that runs another command was opaque"),
+    ("Invoke-Expression 'Get-Date'", DENY,
+     "arbitrary expression execution bypasses static command inspection"),
+    ("pwsh -Command 'Get-ChildItem'", DENY,
+     "a command payload gives a nested interpreter arbitrary code"),
+    ("Add-Type -TypeDefinition 'public class X {}'", DENY,
+     "dynamic compilation can invoke arbitrary Windows APIs"),
+    ("[System.Reflection.Assembly]::Load($bytes)", DENY,
+     "dynamic assembly loading bypasses named-program inspection"),
+    ("Set-MpPreference -DisableRealtimeMonitoring $true", DENY,
+     "Defender tampering weakens host security controls"),
+    ("Register-ScheduledTask -TaskName x -Action $action", DENY,
+     "scheduled task creation establishes persistence"),
+    ("Copy-Item source.database '\\\\server\\share'", DENY,
+     "a UNC destination can exfiltrate local data"),
+    ("Start-Process notepad.exe", ASK,
+     "starting a separate process detaches execution from the tool call"),
+    ("Import-Module Pester", ASK,
+     "module import executes code outside the visible command"),
+    ("Get-Credential", ASK,
+     "credential prompts require an approved interactive broker"),
+    ("Invoke-WebRequest https://example.test/data.json", ASK,
+     "outbound requests expose data and depend on a remote endpoint"),
+    ("Test-NetConnection example.test -Port 443", ASK,
+     "network enumeration reveals reachable topology"),
     ("& { Remove-Item -Recurse -Force /etc }", DENY, "the call operator"),
     ("Start-Process cmd -ArgumentList '/c rd /s /q C:\\'", DENY,
      "CMD nested inside a process launch"),
@@ -153,8 +208,11 @@ POWERSHELL_CASES = (
      "an -ArgumentList payload that will not tokenize; the handler called"
      " unparseable_verdict with one argument and raised, and a raise is an"
      " exit code Claude Code ignores"),
-    ("sh -c 'rm -rf build'", ASK, "the nested payload keeps its own verdict"),
+    ("sh -c 'rm -rf build'", DENY,
+     "command-string payloads deny before nested classification"),
     ("Get-ChildItem", ALLOW, "reading"),
+    ("Set-Content application.state value", ALLOW,
+     "a fixed ordinary file stays outside sensitive and broad targets"),
     ("Remove-Item build.log", ALLOW, "a single file, not recursive"),
 )
 
@@ -175,4 +233,6 @@ CONSENT_CASES = (
      "the cheapest defeat of a gate is an edit to the gate"),
     (".claude/settings.json", True, ASK,
      "the file deciding whether the gate runs at all"),
+    ("scripts/banned_models.txt", True, ASK,
+     "the banned models denylist requires active-human consent"),
 )

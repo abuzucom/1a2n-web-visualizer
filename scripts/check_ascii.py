@@ -85,7 +85,7 @@ def main() -> int:
         for message in all_violations:
             print(message, file=sys.stderr)
         print(
-            "fix: rewrite as separate sentences or use a comma/colon/semicolon",
+            "fix: rewrite the prose as separate sentences",
             file=sys.stderr,
         )
         return 1

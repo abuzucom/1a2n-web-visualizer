@@ -30,10 +30,18 @@ PROTECTED_PREFIXES = (
     "tests/",
     "hooks/",
     ".claude/",
+    # Every other client registration decides which gates run for that
+    # client, and the agent-policy files are injected into every session.
+    ".codex/",
+    ".gemini/",
+    ".agents/",
+    "docs/agent-policy/",
+    "docs/project-orientation.md",
 )
 PROTECTED_FILES = {
     "package.json", "package-lock.json", "Dockerfile", "docker-compose.yml",
     "Caddyfile", ".dockerignore",
+    "shared-files.json", "hook-coverage-baseline.json", "requirements-checkers.txt",
 }
 
 

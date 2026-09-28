@@ -11,6 +11,7 @@ GROUPING = frozenset({"(", ")", "{", "}", "`", "\n"})
 # shlex's default punctuation set plus the backtick, so `cmd` splits
 # into its own tokens instead of arriving glued to the words beside it.
 PUNCTUATION_CHARS = "();<>|&`"
+MAX_COMMAND_CHARACTERS = 65536
 REDIRECTION_CHARS = frozenset("<>&0123456789")
 WRAPPERS = frozenset({
     "sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs",
@@ -160,9 +161,12 @@ def _split_segments(tokens: list) -> list:
     segments = _split_plain_segments(tokens)
     if "`" not in tokens:
         return segments
+    seen = {tuple(segment) for segment in segments}
     for segment in _split_plain_segments(_collapse_backticks(tokens)):
-        if segment not in segments:
+        key = tuple(segment)
+        if key not in seen:
             segments.append(segment)
+            seen.add(key)
     return segments
 
 
@@ -182,6 +186,8 @@ def _tokenize_line(line: str) -> tuple:
 
 def command_segments(command: str) -> tuple:
     """Return parsed segments and whether every line parsed completely."""
+    if not isinstance(command, str) or len(command) > MAX_COMMAND_CHARACTERS:
+        return [], False
     segments = []
     complete = True
     for line in command.splitlines():
@@ -189,6 +195,27 @@ def command_segments(command: str) -> tuple:
         segments.extend(_split_segments(tokens))
         complete = complete and parsed
     return segments, complete
+
+
+def has_quoted_redirects(command: str) -> bool:
+    """Detect operator data that tokenization cannot distinguish from redirects."""
+    quote = ""
+    escaped = False
+    for character in command:
+        if escaped:
+            if character in "<>":
+                return True
+            escaped = False
+        elif character == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            if character == quote:
+                quote = ""
+            elif character in "<>":
+                return True
+        elif character in "\"'":
+            quote = character
+    return False
 
 
 def _ambiguous_context(label: str, error: str, cwd: str) -> dict:
@@ -206,6 +233,7 @@ def git_write_operation(command: str, resolve_git, cwd: str = "") -> list:
     if not isinstance(command, str):
         return []
     contexts = []
+    recovered_git = False
     segments, parsed = command_segments(command)
     for segment in segments:
         executable, assignments, complete = strip_prefixes(segment)
@@ -219,14 +247,12 @@ def git_write_operation(command: str, resolve_git, cwd: str = "") -> list:
         program = os.path.basename(executable[0]).lower().removesuffix(".exe")
         if program != "git":
             continue
+        recovered_git = True
         context = resolve_git(executable[1:], cwd, assignments)
         if context:
             contexts.append(context)
-    if not parsed:
-        # block_destructive_bash.classify fails closed on this same flag.
-        # Dropping it here let a line continuation split a git write
-        # across two segments that neither gate recognized. It goes last
-        # so a write the parse did recover still names itself first.
+    if not parsed and recovered_git:
+        # Only recovered Git syntax supplies evidence of an ambiguous Git write.
         contexts.append(_ambiguous_context(
             "unparseable command",
             "the command could not be parsed, so a git write it names "
