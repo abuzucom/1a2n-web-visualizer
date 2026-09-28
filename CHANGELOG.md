@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.13.6] (2026-09-28)
+
+### Fixed
+- Gated Python unit tests on `scripts/run_tests.py` and measured coverage in
+  one process. Subprocess coverage tracing conflicted with the hook coverage
+  tracer-scope test.
+- Scoped the `tempfile.tempdir` override in `tests/test_trusted_gh.py` to
+  that module.
+
 ## [1.13.5] (2026-09-28)
 
 ### Fixed

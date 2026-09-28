@@ -5,9 +5,6 @@ line-length = 120
 select = ["E", "F", "W", "B", "C90", "PLR", "FIX", "RET", "BLE"]
 
 [tool.coverage.run]
-# scripts/run_tests.py runs each test class in a subprocess.
-parallel = true
-patch = ["subprocess"]
 # Tests copy scripts into temporary fixture repositories that are gone by
 # report time. Those copies duplicate files the report already covers.
 omit = ["*/tmp*/*"]
