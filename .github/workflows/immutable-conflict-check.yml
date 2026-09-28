@@ -20,7 +20,7 @@ env:
   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
   PR_AUTHOR: ${{ github.event.pull_request.user.login }}
   PR_REPO: pr-head
-  TRUSTED_CHECKER: trusted-base/scripts/check_compliance_tree.py
+  TRUSTED_CHECKER: trusted-checker/scripts/check_compliance_tree.py
   GIT_ALTERNATE_OBJECT_DIRECTORIES: ${{ github.workspace }}/trusted-base/.git/objects
 
 jobs:
@@ -37,6 +37,14 @@ jobs:
           path: trusted-base
           persist-credentials: false
           fetch-depth: 201
+      - name: Check out the pinned immutable scanner
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: abuzucom/agents
+          ref: 868023434592f232f4f1b250cf3855428f5aab1f
+          path: trusted-checker
+          persist-credentials: false
+          fetch-depth: 1
       - name: Check out the exact pull request head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

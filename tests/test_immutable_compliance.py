@@ -489,7 +489,7 @@ class ImmutableWorkflowTest(unittest.TestCase):
 
     def test_security_commands_use_trusted_immutable_scanning(self):
         self.assertIn(
-            "TRUSTED_CHECKER: trusted-base/scripts/check_compliance_tree.py",
+            "TRUSTED_CHECKER: trusted-checker/scripts/check_compliance_tree.py",
             self.content,
         )
         commands = [
@@ -501,7 +501,7 @@ class ImmutableWorkflowTest(unittest.TestCase):
         for command in commands:
             with self.subTest(command=command):
                 self.assertTrue(
-                    "trusted-base/scripts/" in command or '"$TRUSTED_CHECKER"' in command,
+                    "trusted-checker/scripts/" in command or '"$TRUSTED_CHECKER"' in command,
                     command,
                 )
                 self.assertRegex(command, r"--repo\s+[\"']?\$PR_REPO[\"']?")
@@ -515,7 +515,7 @@ class ImmutableWorkflowTest(unittest.TestCase):
                 continue
             with self.subTest(command=command):
                 self.assertTrue(
-                    "trusted-base/scripts/" in command
+                    "trusted-checker/scripts/" in command
                     or '"$TRUSTED_CHECKER"' in command
                     or command == "python -m pip install PyYAML==6.0.3",
                     command,
