@@ -96,7 +96,7 @@ class _WeakHashVisitor(ast.NodeVisitor):
         if isinstance(target, (ast.Tuple, ast.List)) and isinstance(
             value, (ast.Tuple, ast.List)
         ) and len(target.elts) == len(value.elts):
-            for child_target, child_value in zip(target.elts, value.elts):
+            for child_target, child_value in zip(target.elts, value.elts, strict=True):
                 self._bind_assignment(child_target, child_value)
             return
         self._bind(target, self._kind(value))
@@ -173,7 +173,7 @@ def _python_violations(text: str, path: str) -> list[str]:
         comments = _python_comments(text)
         visitor = _WeakHashVisitor()
         visitor.visit(tree)
-    except Exception:
+    except (SyntaxError, ValueError, RecursionError, MemoryError, tokenize.TokenError):
         return [f"{path}: malformed Python cannot be checked (Rule 7)"]
     violations = [
         f"{path}:{call.lineno}: MD5/SHA-1 call without a "

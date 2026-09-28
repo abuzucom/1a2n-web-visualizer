@@ -25,6 +25,13 @@ REPOSITORY_NAME = re.compile(r"\A[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?
 BRANCH_NAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._/-]{0,199}\Z")
 GLOBAL_VALUE_OPTIONS = frozenset(("-R", "--repo", "--hostname"))
 
+# An OWNER/REPOSITORY slug has exactly two parts.
+SLUG_PARTS = 2
+# Length of the bare short option "-R".
+SHORT_REPO_OPTION_LENGTH = 2
+# The account request prints ID and login separated by a tab.
+ACCOUNT_FIELDS = 2
+
 
 def find_literal_escape_sequences(arguments: list[str]) -> list[str]:
     """Return prose options containing escape text instead of real newlines."""
@@ -128,7 +135,7 @@ def _repository_from_origin(origin: str) -> str:
         raise ValueError("repository origin is not a supported GitHub remote")
     path = path.removesuffix(".git")
     parts = path.split("/")
-    if len(parts) != 2 or not all(REPOSITORY_NAME.fullmatch(part) for part in parts):
+    if len(parts) != SLUG_PARTS or not all(REPOSITORY_NAME.fullmatch(part) for part in parts):
         raise ValueError("repository origin has an invalid owner or repository")
     return "/".join(parts)
 
@@ -160,7 +167,7 @@ def _has_repository_option(arguments: list[str]) -> bool:
     for index, argument in enumerate(arguments):
         if argument in ("-R", "--repo") and index + 1 < len(arguments):
             return True
-        if argument.startswith("--repo=") or argument.startswith("-R") and len(argument) > 2:
+        if argument.startswith("--repo=") or argument.startswith("-R") and len(argument) > SHORT_REPO_OPTION_LENGTH:
             return True
     return False
 
@@ -328,7 +335,7 @@ def parse_account(output: str) -> dict:
     if len(output) > ACCOUNT_OUTPUT_LIMIT:
         raise ValueError("GitHub account output exceeds the bound")
     fields = output.strip().split("\t")
-    if len(fields) != 2 or not fields[0].isdigit() or int(fields[0]) < 1:
+    if len(fields) != ACCOUNT_FIELDS or not fields[0].isdigit() or int(fields[0]) < 1:
         raise ValueError("GitHub account output has an invalid account ID")
     if not LOGIN.fullmatch(fields[1]):
         raise ValueError("GitHub account output has an invalid login")
@@ -347,53 +354,77 @@ def authenticated_account(repo_root) -> dict:
     return parse_account(result.stdout)
 
 
-def _run_requested_command(repo_root, arguments: list[str]) -> int:
-    """Run one authenticated GitHub CLI command with bounded output."""
+POLICY_DENIED_MESSAGE = "error: GitHub command denied by policy; review the command"
+# Checked in order. FileNotFoundError precedes its OSError parent.
+RUN_ERROR_MESSAGES = (
+    (subprocess.TimeoutExpired, "error: GitHub CLI timed out; verify connectivity and retry"),
+    (ValueError, "error: GitHub CLI input or repository metadata is invalid; inspect and retry"),
+    (FileNotFoundError,
+     "error: GitHub CLI or repository metadata is unavailable; inspect installation"),
+    (OSError, "error: GitHub CLI execution failed; inspect connectivity and repository context"),
+)
+ACCOUNT_ERROR_MESSAGES = (
+    (subprocess.TimeoutExpired, "error: GitHub CLI timed out; verify connectivity and retry"),
+    (ValueError, "error: GitHub account metadata is invalid; inspect authentication"),
+    (FileNotFoundError, "error: GitHub CLI is unavailable; inspect installation"),
+    (OSError, "error: GitHub authentication failed; inspect connectivity and account state"),
+)
+
+
+def _report_error(error: BaseException, messages) -> int:
+    """Print the fixed message for the first matching error type and return 1."""
+    for error_type, message in messages:
+        if isinstance(error, error_type):
+            print(message, file=sys.stderr)
+            return 1
+    raise error
+
+
+def _preflight_error(arguments: list[str]) -> str:
+    """Return the refusal message for arguments the wrapper never runs."""
     if not arguments:
-        print("error: run requires GitHub CLI arguments", file=sys.stderr)
-        return 2
-    escape_options = find_literal_escape_sequences(arguments)
-    if escape_options:
-        print(
-            "error: an argument contains literal escape text; use real newlines "
-            "or --body-file",
-            file=sys.stderr,
-        )
-        return 2
+        return "error: run requires GitHub CLI arguments"
+    if find_literal_escape_sequences(arguments):
+        return ("error: an argument contains literal escape text; use real newlines "
+                "or --body-file")
+    return ""
+
+
+def _load_gate_core():
+    """Import the shared GitHub command policy, or return None when absent."""
     hooks_directory = Path(__file__).resolve().parent.parent / "hooks"
     sys.path.insert(0, str(hooks_directory))
     try:
         import _gate_core as gate_core
-    except ImportError as error:
+    except ImportError:
+        return None
+    return gate_core
+
+
+def _run_requested_command(repo_root, arguments: list[str]) -> int:
+    """Run one authenticated GitHub CLI command with bounded output."""
+    refusal = _preflight_error(arguments)
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 2
+    gate_core = _load_gate_core()
+    if gate_core is None:
         print("error: GitHub safety policy is unavailable; repair adoption", file=sys.stderr)
         return 2
-    decision, reason = gate_core.forge_verdict("gh", arguments)
+    decision, _reason = gate_core.forge_verdict("gh", arguments)
     if decision == "deny":
-        print("error: GitHub command denied by policy; review the command", file=sys.stderr)
+        print(POLICY_DENIED_MESSAGE, file=sys.stderr)
         return 2
     try:
         effective_arguments = with_repository_context(Path(repo_root), arguments)
-        decision, reason = gate_core.forge_verdict("gh", effective_arguments)
+        decision, _reason = gate_core.forge_verdict("gh", effective_arguments)
         if decision == "deny":
-            print("error: GitHub command denied by policy; review the command", file=sys.stderr)
+            print(POLICY_DENIED_MESSAGE, file=sys.stderr)
             return 2
         authenticated_account(repo_root)
         result = run_gh(repo_root, effective_arguments)
-    except subprocess.TimeoutExpired:
-        print("error: GitHub CLI timed out; verify connectivity and retry", file=sys.stderr)
-        return 1
-    except ValueError:
-        print("error: GitHub CLI input or repository metadata is invalid; inspect and retry",
-              file=sys.stderr)
-        return 1
-    except FileNotFoundError:
-        print("error: GitHub CLI or repository metadata is unavailable; inspect installation",
-              file=sys.stderr)
-        return 1
-    except OSError:
-        print("error: GitHub CLI execution failed; inspect connectivity and repository context",
-              file=sys.stderr)
-        return 1
+    except (subprocess.TimeoutExpired, OSError, ValueError) as error:
+        return _report_error(error, RUN_ERROR_MESSAGES)
     sys.stdout.write(result.stdout[:COMMAND_OUTPUT_LIMIT])
     sys.stderr.write(result.stderr[:COMMAND_OUTPUT_LIMIT])
     return result.returncode
@@ -408,19 +439,8 @@ def main() -> int:
         return _run_requested_command(os.getcwd(), sys.argv[2:])
     try:
         account = authenticated_account(os.getcwd())
-    except subprocess.TimeoutExpired:
-        print("error: GitHub CLI timed out; verify connectivity and retry", file=sys.stderr)
-        return 1
-    except ValueError:
-        print("error: GitHub account metadata is invalid; inspect authentication", file=sys.stderr)
-        return 1
-    except FileNotFoundError:
-        print("error: GitHub CLI is unavailable; inspect installation", file=sys.stderr)
-        return 1
-    except OSError:
-        print("error: GitHub authentication failed; inspect connectivity and account state",
-              file=sys.stderr)
-        return 1
+    except (subprocess.TimeoutExpired, OSError, ValueError) as error:
+        return _report_error(error, ACCOUNT_ERROR_MESSAGES)
     print(json.dumps(account, sort_keys=True))
     return 0
 

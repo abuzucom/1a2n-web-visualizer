@@ -43,6 +43,9 @@ MAX_COMMITS = 200
 MAX_COMMIT_BYTES = 256 * 1024
 MAX_TOTAL_COMMIT_BYTES = 4 * 1024 * 1024
 
+# Fields in the NUL-separated commit metadata record.
+COMMIT_METADATA_FIELDS = 6
+
 
 def _compile_wildcard(pattern: str) -> re.Pattern[str]:
     """Translate a simple glob pattern with * to an anchored regex."""
@@ -100,43 +103,47 @@ def _matches_denylist(
     is_disclosure: bool = False,
 ) -> bool:
     """Return True if an author, committer, or model disclosure names a banned agent."""
-    name_lower = name.strip().lower()
     local_part = email.strip().lower().split("@", 1)[0]
-    normalized_name = re.sub(r"[^a-z0-9]", "", name_lower)
-    normalized_local = re.sub(r"[^a-z0-9]", "", local_part)
-    for term in DENYLIST_NAMES:
-        if term in normalized_name or term in normalized_local:
-            return True
-    domain = email.strip().lower().rsplit("@", 1)[-1] if "@" in email else ""
-    if any(
-        domain == denied or domain.endswith(f".{denied}")
-        for denied in DENYLIST_EMAIL_DOMAINS
-    ):
+    candidates = (
+        re.sub(r"[^a-z0-9]", "", name.strip().lower()),
+        re.sub(r"[^a-z0-9]", "", local_part),
+    )
+    if _matches_vendor(candidates, email):
         return True
     active_exact = DENYLIST_MODELS if exact_bans is None else exact_bans
     if is_disclosure:
-        for model in active_exact:
-            if model in normalized_name or model in normalized_local:
-                return True
-        if wildcards:
-            for pattern in wildcards:
-                if pattern.match(normalized_name) or pattern.match(normalized_local):
-                    return True
+        model_hit = any(
+            model in candidate for model in active_exact for candidate in candidates
+        )
     else:
         # Human/bot author or committer field: match exact model identifier or bot login
-        for model in active_exact:
-            if (
-                normalized_name == model
-                or normalized_local == model
-                or normalized_name == f"{model}bot"
-                or normalized_local == f"{model}bot"
-            ):
-                return True
-        if wildcards:
-            for pattern in wildcards:
-                if pattern.match(normalized_name) or pattern.match(normalized_local):
-                    return True
-    return False
+        model_hit = any(
+            model in candidates or f"{model}bot" in candidates
+            for model in active_exact
+        )
+    return model_hit or _matches_wildcard(candidates, wildcards)
+
+
+def _matches_vendor(candidates: tuple[str, str], email: str) -> bool:
+    """Return True when a name, local part, or email domain names a banned vendor."""
+    if any(term in candidate for term in DENYLIST_NAMES for candidate in candidates):
+        return True
+    domain = email.strip().lower().rsplit("@", 1)[-1] if "@" in email else ""
+    return any(
+        domain == denied or domain.endswith(f".{denied}")
+        for denied in DENYLIST_EMAIL_DOMAINS
+    )
+
+
+def _matches_wildcard(
+    candidates: tuple[str, str], wildcards: list[re.Pattern[str]] | None,
+) -> bool:
+    """Return True when any wildcard pattern matches a normalized candidate."""
+    return any(
+        pattern.match(candidate)
+        for pattern in wildcards or ()
+        for candidate in candidates
+    )
 
 
 def _extract_pr_disclosures(body: str) -> list[str]:
@@ -183,6 +190,37 @@ def _terminal_trailers(body: str) -> list[tuple[str, str]]:
     return trailers
 
 
+def _commit_violations(
+    commit: dict, exact_bans: set[str], wildcards: list[re.Pattern[str]],
+) -> list[str]:
+    """Return banned-agent signals from one commit's identities and trailers."""
+    sha = commit["sha"][:12]
+    violations = []
+    for role in ("author", "committer"):
+        name = commit[f"{role}_name"]
+        email = commit[f"{role}_email"]
+        if _matches_denylist(
+            name, email, exact_bans, wildcards, is_disclosure=False
+        ):
+            violations.append(f"{sha}: banned-agent {role} '{name} <{email}>'")
+    for key, value in _terminal_trailers(commit.get("body", "")):
+        norm_key = key.lower().replace(" ", "-")
+        match = CO_AUTHOR.fullmatch(value)
+        if norm_key not in ("co-authored-by", "assisted-by") or not match:
+            continue
+        name = match.group("name").strip()
+        email = match.group("email") or ""
+        if not _matches_denylist(
+            name, email, exact_bans, wildcards, is_disclosure=True
+        ):
+            continue
+        if norm_key == "assisted-by":
+            violations.append(f"{sha}: banned-agent model '{name}'")
+        else:
+            violations.append(f"{sha}: banned-agent co-author '{name} <{email}>'")
+    return violations
+
+
 def find_violations(
     commits: list[dict],
     pr_author: str = "",
@@ -197,30 +235,7 @@ def find_violations(
     exact_bans, wildcards = load_banned_models(banned_models_file)
     violations = []
     for commit in commits:
-        sha = commit["sha"][:12]
-        for role in ("author", "committer"):
-            name = commit[f"{role}_name"]
-            email = commit[f"{role}_email"]
-            if _matches_denylist(
-                name, email, exact_bans, wildcards, is_disclosure=False
-            ):
-                violations.append(f"{sha}: banned-agent {role} '{name} <{email}>'")
-        for key, value in _terminal_trailers(commit.get("body", "")):
-            norm_key = key.lower().replace(" ", "-")
-            if norm_key not in ("co-authored-by", "assisted-by"):
-                continue
-            match = CO_AUTHOR.fullmatch(value)
-            if not match:
-                continue
-            name = match.group("name").strip()
-            email = match.group("email") or ""
-            if _matches_denylist(
-                name, email, exact_bans, wildcards, is_disclosure=True
-            ):
-                if norm_key == "assisted-by":
-                    violations.append(f"{sha}: banned-agent model '{name}'")
-                else:
-                    violations.append(f"{sha}: banned-agent co-author '{name} <{email}>'")
+        violations.extend(_commit_violations(commit, exact_bans, wildcards))
     if pr_author and _matches_denylist(
         pr_author, "", exact_bans, wildcards, is_disclosure=False
     ):
@@ -261,12 +276,13 @@ def _load_commit(repository, sha: str) -> dict:
         timeout=30,
     )
     fields = result.stdout.split("\x00", 5)
-    if len(fields) != 6 or fields[0] != sha:
+    if len(fields) != COMMIT_METADATA_FIELDS or fields[0] != sha:
         raise ValueError(f"malformed metadata for commit {sha}")
     return dict(
         zip(
             ("sha", "author_name", "author_email", "committer_name", "committer_email", "body"),
             fields,
+            strict=True,
         )
     )
 

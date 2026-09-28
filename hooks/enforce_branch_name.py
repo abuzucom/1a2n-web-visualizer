@@ -66,6 +66,12 @@ SEARCH_FLAGS = frozenset({
 })
 MAX_WORKFLOW_ARGUMENTS = 64
 
+# `git -C <path> ...` carries the path at index 2.
+GIT_CONTEXT_PREFIX_TOKENS = 3
+# `git rebase <action>` and `git <verb> <option> <branch>` token counts.
+REBASE_RECOVERY_TOKENS = 3
+BRANCH_RECOVERY_TOKENS = 4
+
 
 def _read_payload() -> dict:
     """Return the hook's stdin JSON, or an empty dict when it carries none.
@@ -106,7 +112,7 @@ def current_branch(project_dir: str, allow_environment: bool = True) -> str:
     head_ref = os.environ.get("GITHUB_HEAD_REF", "") if allow_environment else ""
     git_dir = _git_directory(project_dir)
     branch = _branch_from_git_directory(git_dir)
-    if head_ref and branch != "HEAD" and head_ref != branch:
+    if head_ref and branch not in ("HEAD", head_ref):
         raise ValueError("CI branch metadata disagrees with local HEAD")
     return head_ref or branch
 
@@ -286,30 +292,40 @@ def _content_names_prohibited_ref(content: str) -> bool:
 def _metadata_write_targets(program: str, arguments: list, redirects: list) -> list:
     """Honor copy target-directory options before classifying positional operands."""
     if program == "tee":
-        targets = list(redirects)
-        options = True
-        for argument in arguments:
-            if options and argument == "--":
-                options = False
-            elif not options or not argument.startswith("-"):
-                targets.append(argument)
-        return targets
-    if program not in ("cp", "mv"):
-        return core._known_write_targets(program, arguments, redirects)
+        return _tee_targets(arguments, redirects)
+    if program in ("cp", "mv"):
+        target_directory = _copy_target_directory(arguments)
+        if target_directory is not None:
+            return redirects + [target_directory]
+    return core._known_write_targets(program, arguments, redirects)
+
+
+def _tee_targets(arguments: list, redirects: list) -> list:
+    """Return tee output files plus shell redirect targets."""
+    targets = list(redirects)
+    options = True
+    for argument in arguments:
+        if options and argument == "--":
+            options = False
+        elif not options or not argument.startswith("-"):
+            targets.append(argument)
+    return targets
+
+
+def _copy_target_directory(arguments: list):
+    """Return a cp/mv --target-directory or -t value, or None when absent."""
     for index, token in enumerate(arguments):
         if token == "--":
-            break
+            return None
+        following = arguments[index + 1] if index + 1 < len(arguments) else ""
         option, separator, value = token.partition("=")
         if option.startswith("--") and "--target-directory".startswith(option):
-            if not separator:
-                value = arguments[index + 1] if index + 1 < len(arguments) else ""
-            return redirects + [value]
+            return value if separator else following
         if token.startswith("-") and not token.startswith("--"):
             prefix, marker, value = token[1:].partition("t")
             if marker and all(flag in "abdfilnprRsuvx" for flag in prefix):
-                value = value or (arguments[index + 1] if index + 1 < len(arguments) else "")
-                return redirects + [value]
-    return core._known_write_targets(program, arguments, redirects)
+                return value or following
+    return None
 
 
 def _segment_names_prohibited_metadata(
@@ -510,20 +526,29 @@ def _push_has_literal_target(arguments: list) -> bool:
     return bool(operands if explicit_remote else operands[1:])
 
 
+def _branch_mutation_reason(context: dict) -> str:
+    """Return why a branch-mutating Git command's targets cannot be verified."""
+    if context.get("subcommand") not in BRANCH_MUTATION_SUBCOMMANDS:
+        return ""
+    arguments = context.get("arguments", [])
+    if any(value in ("--stdin", "--all", "--mirror") for value in arguments):
+        return "Git branch targets depend on uninspected input or reference sets"
+    if any(core.is_ambiguous(value) or "*" in value or "?" in value for value in arguments):
+        return "Git branch arguments contain unresolved expansion"
+    if context["subcommand"] == "push" and not _push_has_literal_target(arguments):
+        return "Git push requires an explicit target refspec"
+    return ""
+
+
 def _git_context_reason(context: dict, project_dir: str) -> str:
     """Validate resolved targets before checking the effective checkout."""
     if context.get("error"):
         return context["error"]
     if _context_names_prohibited_branch(context):
         return "Git operation targets a prohibited claude/ branch"
-    if context.get("subcommand") in BRANCH_MUTATION_SUBCOMMANDS:
-        arguments = context.get("arguments", [])
-        if any(value in ("--stdin", "--all", "--mirror") for value in arguments):
-            return "Git branch targets depend on uninspected input or reference sets"
-        if any(core.is_ambiguous(value) or "*" in value or "?" in value for value in arguments):
-            return "Git branch arguments contain unresolved expansion"
-        if context["subcommand"] == "push" and not _push_has_literal_target(arguments):
-            return "Git push requires an explicit target refspec"
+    mutation_reason = _branch_mutation_reason(context)
+    if mutation_reason:
+        return mutation_reason
     if context.get("repository_override"):
         return find_violation(project_dir, context)
     return ""
@@ -537,6 +562,15 @@ def _segment_execution_reason(segment: list, project_dir: str, roots: tuple = ()
     if not executable:
         return ""
     program = core.normalize_windows_command_name(executable[0])
+    reason = _segment_program_reason(segment, executable, program)
+    if reason:
+        return reason
+    return _segment_target_reason(
+        segment, (executable, assignments, program), project_dir, roots)
+
+
+def _segment_program_reason(segment: list, executable: list, program: str) -> str:
+    """Reject wrappers and program names the metadata checks cannot inspect."""
     if executable[0].casefold() not in (program, program + ".exe"):
         return "A script or executable path cannot claim an inspectable program name"
     # Prefix options can change cwd or remove inherited configuration.
@@ -548,6 +582,13 @@ def _segment_execution_reason(segment: list, project_dir: str, roots: tuple = ()
         return "Command wrapper changes unresolved execution settings"
     if program != "git" and program not in INSPECTABLE_PROGRAMS:
         return "Opaque command execution requires an inspectable operation"
+    return ""
+
+
+def _segment_target_reason(segment: list, command: tuple, project_dir: str,
+                           roots: tuple) -> str:
+    """Check metadata write targets for one (executable, assignments, program)."""
+    executable, assignments, program = command
     if _segment_names_prohibited_metadata(segment, project_dir, roots):
         return "Git metadata write targets a prohibited claude/ branch"
     targets = _metadata_write_targets(
@@ -669,11 +710,25 @@ def _command_text(tool_name: str, tool_input: dict) -> str:
 
 def _recovery_tokens(tokens: list, project_dir: str) -> list:
     """Remove one verified current-repository Git context prefix."""
-    if len(tokens) < 3 or tokens[1] != "-C":
+    if len(tokens) < GIT_CONTEXT_PREFIX_TOKENS or tokens[1] != "-C":
         return tokens
     if os.path.realpath(tokens[2]) != os.path.realpath(project_dir):
         return []
     return [tokens[0], *tokens[3:]]
+
+
+def _recovery_command_tokens(command: str, project_dir: str) -> list:
+    """Return the tokens of one bounded single-line git command, or []."""
+    if (len(command) > bash_parser.MAX_COMMAND_CHARACTERS
+            or "\n" in command or "\r" in command):
+        return []
+    tokens, complete = bash_parser._tokenize_line(command)
+    if not complete:
+        return []
+    tokens = _recovery_tokens(tokens, project_dir)
+    if not tokens or tokens[0] != "git":
+        return []
+    return tokens
 
 
 def _valid_recovery(
@@ -683,18 +738,12 @@ def _valid_recovery(
     rebase_active: bool = False,
 ) -> bool:
     """Return True only for one exact branch correction command."""
-    if (len(command) > bash_parser.MAX_COMMAND_CHARACTERS
-            or "\n" in command or "\r" in command):
-        return False
-    tokens, complete = bash_parser._tokenize_line(command)
-    if not complete:
-        return False
-    tokens = _recovery_tokens(tokens, project_dir)
-    if not tokens or tokens[0] != "git":
+    tokens = _recovery_command_tokens(command, project_dir)
+    if not tokens:
         return False
     if rebase_active:
-        return len(tokens) == 3 and tokens[1] == "rebase" and tokens[2] in REBASE_RECOVERY_COMMANDS
-    if len(tokens) != 4:
+        return len(tokens) == REBASE_RECOVERY_TOKENS and tokens[1] == "rebase" and tokens[2] in REBASE_RECOVERY_COMMANDS
+    if len(tokens) != BRANCH_RECOVERY_TOKENS:
         return False
     target = tokens[3]
     if check_branch(target, strict=True):
@@ -730,15 +779,23 @@ def _python_workflow(tokens: list, project_dir: str) -> bool:
     return tuple(tokens[2:]) in WORKFLOW_SCRIPT_ARGUMENTS.get(tokens[1], ())
 
 
-def _workflow_needs_consent(command: str, project_dir: str) -> bool:
-    """Limit workflow consent to one literal invocation without wrappers or redirection."""
+def _literal_workflow_tokens(command: str) -> list:
+    """Return the tokens of one literal, unredirected, bounded command, or []."""
     if "\n" in command or "\r" in command or len(command) > bash_parser.MAX_COMMAND_CHARACTERS:
-        return False
+        return []
     tokens, complete = bash_parser._tokenize_line(command)
     if not complete or not 1 < len(tokens) <= MAX_WORKFLOW_ARGUMENTS:
-        return False
+        return []
     if any(core.is_ambiguous(token) or token in (";", "&", "&&", "|", "||", "(", ")")
            or any(character in token for character in "<>%!^\0") for token in tokens):
+        return []
+    return tokens
+
+
+def _workflow_needs_consent(command: str, project_dir: str) -> bool:
+    """Limit workflow consent to one literal invocation without wrappers or redirection."""
+    tokens = _literal_workflow_tokens(command)
+    if not tokens:
         return False
     if tokens[0] in ("python", "python3", "python.exe", "python3.exe"):
         return _python_workflow(tokens, project_dir)
@@ -862,15 +919,27 @@ def _handle_pre_tool_use(payload: dict, project_dir: str, client: str) -> int:
             branch_name,
         )
     tool_name, tool_input = _tool_call(payload, client)
-    if not isinstance(tool_name, str):
-        return _deny(client, "Tool name is missing or malformed")
-    if tool_name in FILE_WRITE_TOOLS and isinstance(tool_input, dict):
-        reason = _file_metadata_reason(tool_input, project_dir)
-        if reason:
-            return _deny(client, reason)
+    reason = _tool_input_reason(tool_name, tool_input, project_dir)
+    if reason:
+        return _deny(client, reason)
     if tool_name not in SHELL_TOOLS or not isinstance(tool_input, dict):
         return 0
-    command_text = _command_text(tool_name, tool_input)
+    return _handle_shell_command(
+        payload, project_dir, client, tool_name, _command_text(tool_name, tool_input))
+
+
+def _tool_input_reason(tool_name, tool_input, project_dir: str) -> str:
+    """Return a denial for a malformed tool name or a metadata file write."""
+    if not isinstance(tool_name, str):
+        return "Tool name is missing or malformed"
+    if tool_name in FILE_WRITE_TOOLS and isinstance(tool_input, dict):
+        return _file_metadata_reason(tool_input, project_dir)
+    return ""
+
+
+def _handle_shell_command(payload: dict, project_dir: str, client: str,
+                          tool_name: str, command_text: str) -> int:
+    """Allow bootstrap, route workflows to consent, and deny unsafe commands."""
     if _valid_bootstrap(command_text, project_dir):
         return 0
     if _workflow_needs_consent(command_text, project_dir):

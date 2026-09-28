@@ -37,6 +37,11 @@ LINUX_PACKAGE_MANAGERS = frozenset({
     "zypper",
 })
 
+# Shortest drive-letter path, such as "c:/".
+MIN_DRIVE_PATH_LENGTH = 3
+# A copy names a source and a destination.
+TRANSFER_ENDPOINT_COUNT = 2
+
 
 def normalize_program_name(program: str) -> str:
     """Return one case-insensitive executable basename."""
@@ -47,7 +52,7 @@ def is_remote_endpoint(endpoint: str, platform_name: str = sys.platform) -> bool
     """Return whether a transfer endpoint names a remote host."""
     candidate = endpoint.strip().strip('"').strip("'")
     if (platform_name.startswith("win")
-            and len(candidate) >= 3
+            and len(candidate) >= MIN_DRIVE_PATH_LENGTH
             and candidate[0].isalpha()
             and candidate[1] == ":"
             and candidate[2] in "\\/"):
@@ -72,7 +77,7 @@ def classify_transfer_direction(
 ) -> tuple[str, str]:
     """Classify a two-endpoint copy from local and remote path properties."""
     endpoints = [argument for argument in arguments if not argument.startswith("-")]
-    if len(endpoints) < 2:
+    if len(endpoints) < TRANSFER_ENDPOINT_COUNT:
         return "ask", "a transfer endpoint is missing or cannot be resolved"
     source_endpoint = endpoints[-2]
     destination_endpoint = endpoints[-1]
@@ -88,33 +93,70 @@ def classify_transfer_direction(
     return "", ""
 
 
+def _launchctl_verdict(lowered_arguments: list[str]) -> tuple[str, str]:
+    """Deny launchctl service mutation and ask for service reads."""
+    mutating_operations = {"bootstrap", "enable", "kickstart", "load", "submit"}
+    if lowered_arguments and lowered_arguments[0] in mutating_operations:
+        return "deny", "launchctl changes persistent or active service execution"
+    return "ask", "launchctl reads service and persistence state"
+
+
+def _security_verdict(lowered_arguments: list[str]) -> tuple[str, str]:
+    """Deny keychain destruction or export and ask for other access."""
+    destructive_operations = {"delete-keychain", "export", "set-keychain-password"}
+    if lowered_arguments and lowered_arguments[0] in destructive_operations:
+        return "deny", "security changes or exports credential material"
+    return "ask", "security accesses credential or trust state"
+
+
+def _denied_when(marker: str, reason: str):
+    """Return a classifier that denies when an argument equals the marker."""
+    def classify(lowered_arguments: list[str]) -> tuple[str, str]:
+        return ("deny", reason) if marker in lowered_arguments else ("", "")
+    return classify
+
+
+def _always_denied(reason: str):
+    """Return a classifier that denies every invocation."""
+    def classify(_lowered_arguments: list[str]) -> tuple[str, str]:
+        return "deny", reason
+    return classify
+
+
+MACOS_COMMAND_POLICIES = {
+    "launchctl": _launchctl_verdict,
+    "spctl": _denied_when("--master-disable", "spctl disables Gatekeeper policy"),
+    "xattr": _denied_when("com.apple.quarantine", "xattr changes executable quarantine state"),
+    "tccutil": _always_denied("tccutil changes privacy authorization state"),
+    "diskutil": _always_denied("diskutil access is prohibited for agents"),
+    "tmutil": _denied_when("delete", "tmutil deletes backup data"),
+    "security": _security_verdict,
+}
+
+
 def classify_macos_command(
     program_name: str,
     arguments: list[str],
 ) -> tuple[str, str]:
     """Classify one macOS-native command family."""
-    lowered_arguments = [argument.casefold() for argument in arguments]
-    if program_name == "launchctl":
-        mutating_operations = {"bootstrap", "enable", "kickstart", "load", "submit"}
-        if lowered_arguments and lowered_arguments[0] in mutating_operations:
-            return "deny", "launchctl changes persistent or active service execution"
-        return "ask", "launchctl reads service and persistence state"
-    if program_name == "spctl" and "--master-disable" in lowered_arguments:
-        return "deny", "spctl disables Gatekeeper policy"
-    if program_name == "xattr" and "com.apple.quarantine" in lowered_arguments:
-        return "deny", "xattr changes executable quarantine state"
-    if program_name == "tccutil":
-        return "deny", "tccutil changes privacy authorization state"
-    if program_name == "diskutil":
-        return "deny", "diskutil access is prohibited for agents"
-    if program_name == "tmutil" and "delete" in lowered_arguments:
-        return "deny", "tmutil deletes backup data"
-    if program_name == "security":
-        destructive_operations = {"delete-keychain", "export", "set-keychain-password"}
-        if lowered_arguments and lowered_arguments[0] in destructive_operations:
-            return "deny", "security changes or exports credential material"
-        return "ask", "security accesses credential or trust state"
-    return "", ""
+    policy = MACOS_COMMAND_POLICIES.get(program_name)
+    if policy is None:
+        return "", ""
+    return policy([argument.casefold() for argument in arguments])
+
+
+def _systemctl_verdict(lowered_arguments: list[str]) -> tuple[str, str]:
+    """Deny systemctl service mutation and ask for service reads."""
+    mutating_operations = {"disable", "enable", "mask", "restart", "start", "stop"}
+    if lowered_arguments and lowered_arguments[0] in mutating_operations:
+        return "deny", "systemctl changes active or persistent service state"
+    return "ask", "systemctl reads service state"
+
+
+LINUX_COMMAND_POLICIES = {
+    "systemctl": _systemctl_verdict,
+    "crontab": _denied_when("-r", "crontab -r deletes scheduled persistence"),
+}
 
 
 def classify_linux_command(
@@ -122,18 +164,11 @@ def classify_linux_command(
     arguments: list[str],
 ) -> tuple[str, str]:
     """Classify one Linux-native command family."""
-    lowered_arguments = [argument.casefold() for argument in arguments]
     if program_name in LINUX_STORAGE_DESTRUCTION:
         return "deny", f"{program_name} changes partition or filesystem storage"
-    if program_name == "systemctl":
-        mutating_operations = {"disable", "enable", "mask", "restart", "start", "stop"}
-        if lowered_arguments and lowered_arguments[0] in mutating_operations:
-            return "deny", "systemctl changes active or persistent service state"
-        return "ask", "systemctl reads service state"
-    if program_name == "crontab":
-        if "-r" in lowered_arguments:
-            return "deny", "crontab -r deletes scheduled persistence"
-        return "", ""
+    policy = LINUX_COMMAND_POLICIES.get(program_name)
+    if policy is not None:
+        return policy([argument.casefold() for argument in arguments])
     if program_name in LINUX_PACKAGE_MANAGERS:
         return "ask", f"{program_name} can change installed software"
     if program_name in ("iptables", "nft"):

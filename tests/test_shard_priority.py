@@ -43,7 +43,7 @@ class ShardPriorityTest(unittest.TestCase):
         maximum_heavy = 0
         observed_timeouts = {}
 
-        def run_shard(_root, _environment, label, _name, timeout, _registry):
+        def run_shard(_location, label, _name, timeout, _registry):
             nonlocal active_heavy, maximum_heavy
             heavy = label in shard_runner.RESOURCE_HEAVY_TEST_SHARDS
             with lock:

@@ -2,7 +2,6 @@
 """Require external approval for pull requests that alter gate enforcement."""
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys

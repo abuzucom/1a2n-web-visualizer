@@ -35,6 +35,15 @@ All notable changes to this project are documented here. Format loosely follows
   repository references.
 - Added `plan/HANDOFF.md.example` and `docs/gate-threat-model.md` from the
   template.
+- Added the template workflows (`sync-check.yml`, `agents-compliance.yml`,
+  `agents-md-compliance.yml`, `immutable-conflict-check.yml`,
+  `gate-integrity.yml`, `dependabot-changelog.yml`) retargeted to `develop`,
+  the Makefile and pre-commit wiring they check, and the 13 wiring tests.
+- Ran the Python suite through `scripts/run_tests.py`, which isolates each test
+  class, and measured coverage across its subprocesses.
+- Fixed the 152 ruff findings and the code-scanning findings in the template
+  files as recorded drift. Every gate verdict over the test corpus is
+  unchanged.
 
 ### Fixed
 - Prevented keyboard shortcut keys from wrapping onto multiple lines in the

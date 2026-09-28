@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for scripts/check_external_pr_refs.py and its wiring."""
+import importlib
 import io
 import json
 import sys
@@ -16,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts import check_external_pr_refs
+check_external_pr_refs = importlib.import_module("scripts.check_external_pr_refs")
 
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "agents-compliance.yml"
 SYNC_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "sync-check.yml"

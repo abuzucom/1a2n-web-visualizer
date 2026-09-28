@@ -23,12 +23,15 @@ BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 MAX_TITLE_LENGTH = 160
 MAX_FILES_IN_BODY = 20
 
+# Upper bound on the GitHub event payload read from disk.
+MAX_EVENT_BYTES = 1_000_000
+
 
 def _event_path() -> Path:
     """Return the bounded GitHub event path."""
     value = os.environ.get("GITHUB_EVENT_PATH", "")
     path = Path(value)
-    if not value or not path.is_file() or path.stat().st_size > 1_000_000:
+    if not value or not path.is_file() or path.stat().st_size > MAX_EVENT_BYTES:
         raise ValueError("GitHub event payload is unavailable or too large")
     return path
 

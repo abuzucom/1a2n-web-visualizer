@@ -69,6 +69,20 @@ CHECKER_NAMES = (
     "check_branch_name",
 )
 
+# Highest code point rendered as a two-digit hex escape.
+MAX_LATIN1_CODEPOINT = 0xFF
+# UTF-16 and UTF-32 code unit widths in bytes.
+UTF16_UNIT_BYTES = 2
+UTF32_UNIT_BYTES = 4
+# NUL-byte ratios that identify BOM-less UTF-16/32 text. A position that
+# is almost always NUL marks the high bytes; one that is rarely NUL marks
+# the low byte.
+UTF32_HIGH_NUL_RATIO = 0.6
+UTF16_HIGH_NUL_RATIO = 0.4
+LOW_NUL_RATIO = 0.2
+# The trusted immutable-compliance job has exactly five steps.
+IMMUTABLE_JOB_STEP_COUNT = 5
+
 
 def _sanitize(value: object) -> str:
     """Render untrusted data as bounded printable ASCII."""
@@ -76,7 +90,7 @@ def _sanitize(value: object) -> str:
     for character in str(value):
         if " " <= character <= "~":
             rendered.append(character)
-        elif ord(character) <= 0xFF:
+        elif ord(character) <= MAX_LATIN1_CODEPOINT:
             rendered.append(f"\\x{ord(character):02x}")
         else:
             rendered.append(f"\\u{ord(character):04x}")
@@ -395,18 +409,18 @@ def _zero_ratio(content: bytes, offset: int, width: int) -> float:
 def _decode_bomless_unicode(content: bytes) -> str | None:
     """Decode UTF-16/32 text whose byte-position NUL pattern identifies it."""
     candidates = []
-    if len(content) % 4 == 0 and len(content) >= 4:
-        ratios = [_zero_ratio(content, offset, 4) for offset in range(4)]
-        if min(ratios[1:]) > 0.6 and ratios[0] < 0.2:
+    if len(content) % UTF32_UNIT_BYTES == 0 and len(content) >= UTF32_UNIT_BYTES:
+        ratios = [_zero_ratio(content, offset, UTF32_UNIT_BYTES) for offset in range(UTF32_UNIT_BYTES)]
+        if min(ratios[1:]) > UTF32_HIGH_NUL_RATIO and ratios[0] < LOW_NUL_RATIO:
             candidates.append("utf-32-le")
-        if min(ratios[:3]) > 0.6 and ratios[3] < 0.2:
+        if min(ratios[:3]) > UTF32_HIGH_NUL_RATIO and ratios[3] < LOW_NUL_RATIO:
             candidates.append("utf-32-be")
-    if len(content) % 2 == 0 and len(content) >= 2:
-        even = _zero_ratio(content, 0, 2)
-        odd = _zero_ratio(content, 1, 2)
-        if odd > 0.4 and even < 0.2:
+    if len(content) % UTF16_UNIT_BYTES == 0 and len(content) >= UTF16_UNIT_BYTES:
+        even = _zero_ratio(content, 0, UTF16_UNIT_BYTES)
+        odd = _zero_ratio(content, 1, UTF16_UNIT_BYTES)
+        if odd > UTF16_HIGH_NUL_RATIO and even < LOW_NUL_RATIO:
             candidates.append("utf-16-le")
-        if even > 0.4 and odd < 0.2:
+        if even > UTF16_HIGH_NUL_RATIO and odd < LOW_NUL_RATIO:
             candidates.append("utf-16-be")
     for encoding in candidates:
         try:
@@ -513,7 +527,7 @@ def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
     if isinstance(candidate_job, dict):
         candidate_job = dict(candidate_job)
         candidate_steps = candidate_job.get("steps")
-        if isinstance(candidate_steps, list) and len(candidate_steps) == 5:
+        if isinstance(candidate_steps, list) and len(candidate_steps) == IMMUTABLE_JOB_STEP_COUNT:
             python_step = candidate_steps[2]
             version = (python_step.get("with", {}).get("python-version")
                        if isinstance(python_step, dict)
@@ -559,7 +573,7 @@ def _workflow_violations(
     """Check immutable actions and privileged workflow execution policy."""
     try:
         documents = list(persist_checker.yaml.safe_load_all(text))
-    except Exception:
+    except (persist_checker.yaml.YAMLError, ValueError, TypeError, RecursionError):
         return [f"{path}: malformed workflow YAML cannot be checked"]
     violations = []
     for document in documents:
@@ -577,8 +591,7 @@ def _scan_blob(
         checkers["check_secrets_heuristic"].find_violations(text, path))
     if mode == "120000":
         critical = (
-            path == "requirements-checkers.txt"
-            or path == "scripts/trusted_git.py"
+            path in ("requirements-checkers.txt", "scripts/trusted_git.py")
             or path.startswith("scripts/check_")
             or path.startswith(".github/workflows/")
         )
@@ -785,7 +798,11 @@ def main() -> int:
         violations = _scan_tree(repo, object_id, checkers)
         violations.extend(_scan_metadata(values, repo, checkers))
         return _report(violations)
-    except (Exception, KeyboardInterrupt) as error:
+    except (
+        OSError, ValueError, RuntimeError, LookupError, TypeError,
+        AttributeError, ImportError, RecursionError, MemoryError,
+        subprocess.SubprocessError, KeyboardInterrupt,
+    ) as error:
         print(f"error: {_sanitize(error)}", file=sys.stderr)
         return 1
 

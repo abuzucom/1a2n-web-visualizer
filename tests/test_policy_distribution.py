@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for repository-only and adoptable policy content."""
+import importlib
 import sys
 import unittest
 from pathlib import Path
@@ -8,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 POLICY_PATH = REPO_ROOT / "AGENTS.md"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import sync
+sync = importlib.import_module("sync")
 
 
 class AdoptablePolicyTest(unittest.TestCase):

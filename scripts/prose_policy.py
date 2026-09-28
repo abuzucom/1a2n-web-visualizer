@@ -273,16 +273,23 @@ def _overlaps(finding: Finding, occupied: list[tuple[int, int]]) -> bool:
                for start, end in occupied)
 
 
-def _collect_pattern(
-        text: str, pattern: re.Pattern, category: str, detail: str,
-        findings: list[Finding], occupied: list[tuple[int, int]]) -> None:
-    """Collect non-overlapping matches for one policy category."""
-    for match in pattern.finditer(text):
-        finding = Finding(match.start(), match.end(), category, detail)
-        if _overlaps(finding, occupied):
-            continue
-        findings.append(finding)
-        occupied.append((finding.start, finding.end))
+class _FindingCollector:
+    """Accumulate non-overlapping findings in collection priority order."""
+
+    def __init__(self) -> None:
+        self.findings: list[Finding] = []
+        self.occupied: list[tuple[int, int]] = []
+
+    def collect(
+            self, text: str, pattern: re.Pattern, category: str,
+            detail: str) -> None:
+        """Collect non-overlapping matches for one policy category."""
+        for match in pattern.finditer(text):
+            finding = Finding(match.start(), match.end(), category, detail)
+            if _overlaps(finding, self.occupied):
+                continue
+            self.findings.append(finding)
+            self.occupied.append((finding.start, finding.end))
 
 
 def _format_finding(text: str, path: str, finding: Finding) -> str:
@@ -303,68 +310,54 @@ def find_violations(
     if normalized_path == DENYLIST_RELATIVE_PATH:
         return []
     denylist = entries if entries is not None else load_denylist()
-    findings = []
-    occupied = []
+    collector = _FindingCollector()
 
     for entry in denylist:
         if entry.scope == "handoff-exempt" and is_handoff_path(normalized_path):
             continue
-        _collect_pattern(
+        collector.collect(
             text,
             _entry_pattern(entry.text),
             "controlled vocabulary",
             f"denylist line {entry.line}",
-            findings,
-            occupied,
         )
 
     prose = mask_markdown_code(text)
     pronoun_pattern = _phrase_pattern(PERSONAL_PRONOUNS)
-    _collect_pattern(
+    collector.collect(
         prose, pronoun_pattern, "personal pronoun", "impersonal voice",
-        findings, occupied,
     )
-    _collect_pattern(
+    collector.collect(
         prose, PASSIVE_PATTERN, "passive voice", "active voice preferred",
-        findings, occupied,
     )
 
-    _collect_pattern(
+    collector.collect(
         prose, COMMA_TAIL_PATTERN, "comma-led tail", "separate sentence",
-        findings, occupied,
     )
-    _collect_pattern(
+    collector.collect(
         prose, SEMICOLON_CLAUSE_PATTERN, "clause join", "semicolon",
-        findings, occupied,
     )
-    _collect_pattern(
+    collector.collect(
         prose, COLON_CLAUSE_PATTERN, "clause join", "colon",
-        findings, occupied,
     )
-    _collect_pattern(
+    collector.collect(
         prose,
         INLINE_ENUMERATION_PATTERN,
         "punctuation chain",
         "inline enumeration",
-        findings,
-        occupied,
     )
     for pattern in RHETORICAL_PATTERNS:
-        _collect_pattern(
+        collector.collect(
             prose,
             pattern,
             "rhetorical contrast",
             "direct statement preferred",
-            findings,
-            occupied,
         )
-    _collect_pattern(
+    collector.collect(
         prose,
         LITERAL_ESCAPE_PATTERN,
         "literal escape sequence",
         "use real newlines and whitespace",
-        findings,
-        occupied,
     )
 
     discourse_patterns = (
@@ -391,11 +384,14 @@ def find_violations(
             "state a durable fact",
         ),)
     for pattern, category, detail in discourse_patterns:
-        _collect_pattern(
-            prose, pattern, category, detail, findings, occupied,
+        collector.collect(
+            prose, pattern, category, detail,
         )
 
-    findings.sort(key=lambda item: (item.start, item.end, item.category))
+    findings = sorted(
+        collector.findings,
+        key=lambda item: (item.start, item.end, item.category),
+    )
     return [
         _format_finding(text, normalized_path, finding)
         for finding in findings

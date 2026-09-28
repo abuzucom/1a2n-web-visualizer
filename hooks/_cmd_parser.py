@@ -107,55 +107,75 @@ def parse_cmd_command(command_text: str) -> CmdParseResult:
     return scan_cmd_characters(command_text)
 
 
+class _CmdScanner:
+    """Carry CMD quoting, escaping, and token state across characters."""
+
+    def __init__(self) -> None:
+        self.command_segments: list[tuple[str, ...]] = []
+        self.command_tokens: list[str] = []
+        self.token_characters: list[str] = []
+        self.inside_quotes = False
+        self.escaped = False
+        self.previous_character = ""
+
+    def feed(self, current_character: str) -> None:
+        """Consume one character of command text."""
+        handled = (self._consume_escape_or_quote(current_character)
+                   or self._consume_structural(current_character))
+        if not handled:
+            self.token_characters.append(current_character)
+        self.previous_character = current_character
+
+    def _consume_escape_or_quote(self, current_character: str) -> bool:
+        """Handle an escaped character, a quote toggle, or a caret escape."""
+        if self.escaped:
+            if current_character == OUTPUT_REDIRECT:
+                self.token_characters.append("^")
+            self.token_characters.append(current_character)
+            self.escaped = False
+            return True
+        if current_character == '"':
+            self.inside_quotes = not self.inside_quotes
+            return True
+        if current_character == "^" and not self.inside_quotes:
+            self.escaped = True
+            return True
+        return False
+
+    def _consume_structural(self, current_character: str) -> bool:
+        """Handle unquoted redirects, separators, and whitespace."""
+        if self.inside_quotes:
+            return False
+        if current_character == OUTPUT_REDIRECT:
+            append_token(self.token_characters, self.command_tokens)
+            self.command_tokens.append(OUTPUT_REDIRECT)
+            return True
+        if current_character == "&" and self.previous_character == OUTPUT_REDIRECT:
+            self.token_characters.append(current_character)
+            return True
+        if current_character in COMMAND_SEPARATORS:
+            append_token(self.token_characters, self.command_tokens)
+            append_segment(self.command_tokens, self.command_segments)
+            return True
+        if current_character.isspace():
+            append_token(self.token_characters, self.command_tokens)
+            return True
+        return False
+
+    def result(self) -> CmdParseResult:
+        """Close the final token and segment and return the parse state."""
+        if self.escaped or self.inside_quotes:
+            return CmdParseResult("malformed")
+        append_token(self.token_characters, self.command_tokens)
+        append_segment(self.command_tokens, self.command_segments)
+        if not self.command_segments:
+            return CmdParseResult("empty")
+        return CmdParseResult("complete", tuple(self.command_segments))
+
+
 def scan_cmd_characters(command_text: str) -> CmdParseResult:
     """Scan CMD quoting, escaping, tokens, and command separators once."""
-    command_segments: list[tuple[str, ...]] = []
-    command_tokens: list[str] = []
-    token_characters: list[str] = []
-    inside_quotes = False
-    escaped = False
-    previous_character = ""
+    scanner = _CmdScanner()
     for current_character in command_text:
-        if escaped:
-            if current_character == OUTPUT_REDIRECT:
-                token_characters.append("^")
-            token_characters.append(current_character)
-            escaped = False
-            previous_character = current_character
-            continue
-        if current_character == '"':
-            inside_quotes = not inside_quotes
-            previous_character = current_character
-            continue
-        if current_character == "^" and not inside_quotes:
-            escaped = True
-            previous_character = current_character
-            continue
-        if not inside_quotes and current_character == OUTPUT_REDIRECT:
-            append_token(token_characters, command_tokens)
-            command_tokens.append(OUTPUT_REDIRECT)
-            previous_character = current_character
-            continue
-        if (not inside_quotes and current_character == "&"
-                and previous_character == OUTPUT_REDIRECT):
-            token_characters.append(current_character)
-            previous_character = current_character
-            continue
-        if not inside_quotes and current_character in COMMAND_SEPARATORS:
-            append_token(token_characters, command_tokens)
-            append_segment(command_tokens, command_segments)
-            previous_character = current_character
-            continue
-        if not inside_quotes and current_character.isspace():
-            append_token(token_characters, command_tokens)
-            previous_character = current_character
-            continue
-        token_characters.append(current_character)
-        previous_character = current_character
-    if escaped or inside_quotes:
-        return CmdParseResult("malformed")
-    append_token(token_characters, command_tokens)
-    append_segment(command_tokens, command_segments)
-    if not command_segments:
-        return CmdParseResult("empty")
-    return CmdParseResult("complete", tuple(command_segments))
+        scanner.feed(current_character)
+    return scanner.result()

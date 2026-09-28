@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for bounded and sanitized Git state output."""
+import importlib
 import json
 import subprocess
 import sys
@@ -12,8 +13,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "read_git_state.py"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import read_git_state
-import trusted_git
+read_git_state = importlib.import_module("read_git_state")
+trusted_git = importlib.import_module("trusted_git")
 
 
 class TrustedGitRunnerTest(unittest.TestCase):

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test fail-closed loading of the GitHub CLI denylist."""
+import importlib
 import sys
 import unittest
 from pathlib import Path
@@ -8,7 +9,7 @@ from unittest.mock import patch
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPOSITORY_ROOT / "hooks"))
 
-import _gate_core
+_gate_core = importlib.import_module("_gate_core")
 
 
 class GithubCommandDenylistTest(unittest.TestCase):

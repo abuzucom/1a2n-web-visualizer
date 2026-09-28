@@ -3,7 +3,7 @@
 import re
 import sys
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, NamedTuple
 
 import yaml
 from yaml.constructor import ConstructorError
@@ -25,6 +25,12 @@ class _MarkedMapping(dict):
         super().__init__()
         self.line = line
 
+    def __eq__(self, other: object) -> bool:
+        """Compare contents only. The source line is location metadata."""
+        return dict.__eq__(self, other)
+
+    __hash__ = None
+
 
 def _construct_unique_mapping(
     loader: yaml.SafeLoader, node: MappingNode
@@ -33,7 +39,7 @@ def _construct_unique_mapping(
     mapping = _MarkedMapping(node.start_mark.line)
     yield mapping
     explicit_keys = set()
-    for key_node, value_node in node.value:
+    for key_node, _value_node in node.value:
         if key_node.tag == "tag:yaml.org,2002:merge":
             continue
         key = loader.construct_object(key_node, deep=True)
@@ -79,20 +85,16 @@ def _is_exception_comment(line: str) -> bool:
 
 def _is_root_user(value: object) -> bool:
     """Return whether a runtime identity is root or invalid."""
-    if isinstance(value, bool):
-        return True
-    if isinstance(value, int):
+    if isinstance(value, int) and not isinstance(value, bool):
         return value <= 0
-    if not isinstance(value, str) or not value.strip():
-        return True
-    if "$" in value:
+    # Booleans, non-strings, blanks, and variable expansions cannot name a
+    # verified non-root user.
+    if not isinstance(value, str) or not value.strip() or "$" in value:
         return True
     principal = value.strip().split()[0].split(":", 1)[0].strip().lower()
-    if principal == "root":
-        return True
     if principal.lstrip("+-").isdigit():
         return int(principal) <= 0
-    return False
+    return principal == "root"
 
 
 def _mapping_line_numbers(lines: list[str], mapping: dict) -> set[int]:
@@ -263,16 +265,23 @@ def _effective_security_value(container: dict, pod: dict, key: str) -> object:
     return None
 
 
+class _SourceContext(NamedTuple):
+    """The manifest text and path a container violation cites."""
+
+    lines: list[str]
+    exception_lines: set[int]
+    path: str
+
+
 def _container_violation(
     container: object,
     pod: dict,
-    kind: str,
-    index: int,
-    lines: list[str],
-    exception_lines: set[int],
-    path: str,
+    slot: tuple[str, int],
+    source: _SourceContext,
 ) -> str | None:
-    """Return a violation for one Kubernetes container."""
+    """Return a violation for one Kubernetes container in a kind/index slot."""
+    kind, index = slot
+    lines, exception_lines, path = source
     if not isinstance(container, dict):
         return f"{path}: {kind}[{index}] is not a container mapping (Rule 12)"
     if _has_mapping_exception(lines, exception_lines, container):
@@ -310,7 +319,8 @@ def _k8s_violations(
                 continue
             for index, container in enumerate(containers):
                 violation = _container_violation(
-                    container, pod, kind, index, lines, exception_lines, path
+                    container, pod, (kind, index),
+                    _SourceContext(lines, exception_lines, path),
                 )
                 if violation is not None:
                     violations.append(violation)
@@ -337,7 +347,8 @@ def find_violations(text: str, path: str) -> list[str]:
             return _compose_violations(
                 documents, lines, exception_lines, path)
         return _k8s_violations(documents, lines, exception_lines, path)
-    except Exception:
+    except (yaml.YAMLError, ValueError, TypeError, AttributeError, KeyError,
+            IndexError, RecursionError):
         return [f"{path}: malformed YAML cannot be checked (Rule 12)"]
 
 

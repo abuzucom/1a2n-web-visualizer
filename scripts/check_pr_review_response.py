@@ -17,6 +17,9 @@ VALID_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
 FINDING_KEYS = {"severity", "class", "file", "line", "title"}
 RESPONSE_LIMIT = 1_000_000
 
+# The program name plus the one response-file argument.
+EXPECTED_ARGV_LENGTH = 2
+
 
 class ResponseError(ValueError):
     """Report a response-contract failure."""
@@ -89,7 +92,7 @@ def validate_response(response: str) -> tuple[str, dict[str, Any]]:
 
 def main() -> int:
     """Validate the response file and print a normalized verdict."""
-    if len(sys.argv) != 2:
+    if len(sys.argv) != EXPECTED_ARGV_LENGTH:
         print("usage: check_pr_review_response.py RESPONSE_FILE", file=sys.stderr)
         return 2
     try:
