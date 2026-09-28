@@ -394,7 +394,7 @@ def read_payload(empty_is_session_start: bool = False):
 
 def emit(gate: str, decision: str, reason: str) -> int:
     """Print the gate's decision and return the exit code it needs."""
-    message = f"blocked by hooks/{gate}: {reason}"
+    message = f"blocked by hooks/{gate}"
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
