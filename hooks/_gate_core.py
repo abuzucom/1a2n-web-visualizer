@@ -396,6 +396,8 @@ def display_reason(reason: str) -> str:
     """Return a nonsecret diagnostic label for one gate decision."""
     if "MANDATORY BRANCH CORRECTION" in reason:
         return "MANDATORY BRANCH CORRECTION"
+    if "cannot clear" in reason:
+        return "cannot clear protected value"
     for key in EXEC_CAPABLE_KEYS:
         if key in reason:
             return f"unsafe Git configuration key: {key}"

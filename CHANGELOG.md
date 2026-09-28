@@ -4,6 +4,11 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.13.2] (2026-09-28)
+
+### Fixed
+- Preserved the fixed protected-value diagnostic for malformed CMD payloads.
+
 ## [1.13.1] (2026-09-28)
 
 ### Fixed
