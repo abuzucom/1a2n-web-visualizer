@@ -167,7 +167,7 @@ def _normalize_path(path: str | Path) -> str:
         try:
             candidate = candidate.resolve().relative_to(ROOT.resolve())
         except (OSError, ValueError):
-            pass
+            candidate = Path(path)
     normalized = str(candidate).replace("\\", "/")
     while normalized.startswith("./"):
         normalized = normalized[2:]
