@@ -195,12 +195,10 @@ def _named_program_verdict(program: str, args: list,
     so the caller runs it past every other check instead.
     """
     lowered = program.lower()
-    prohibited = core.prohibited_command_verdict(program, args)
-    if prohibited[0]:
-        return prohibited
-    curl_verdict = core.curl_transfer_verdict(program, args)
-    if curl_verdict[0]:
-        return curl_verdict
+    for policy in (core.prohibited_command_verdict, core.curl_transfer_verdict):
+        verdict = policy(program, args)
+        if verdict[0]:
+            return verdict
     if lowered == "eval":
         return _eval_verdict(args, depth)
     if lowered in INTERPRETERS:

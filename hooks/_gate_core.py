@@ -82,6 +82,20 @@ HISTORY_SUBCOMMANDS = {
 }
 STRENGTH = {"": 0, "ask": 1, "deny": 2}
 
+# `wrangler pages deploy <path>` needs at least three arguments.
+PAGES_DEPLOY_MIN_ARGUMENTS = 3
+# Shortest normalized Windows path that names a tree below a drive, "c:/x".
+MIN_WINDOWS_TREE_PATH_LENGTH = 4
+# A denylist `family` line names exactly one noun.
+DENYLIST_FAMILY_FIELDS = 2
+# gh commands take a noun and an action.
+GH_COMMAND_PATH_LENGTH = 2
+# A short option is a dash and one character, such as "-R".
+SHORT_OPTION_LENGTH = 2
+# owner/name, optionally preceded by a GitHub host.
+OWNER_NAME_SEGMENTS = 2
+HOST_OWNER_NAME_SEGMENTS = 3
+
 
 def require_str(value):
     """Return `value` when it is a string, otherwise None.
@@ -698,10 +712,16 @@ def cloudflare_pages_verdict(program: str, args: list, cwd: str = "") -> tuple:
     if name != "wrangler":
         return "", ""
     lowered = [token.casefold() for token in args]
-    if len(args) < 3 or lowered[0:2] != ["pages", "deploy"]:
+    if len(args) < PAGES_DEPLOY_MIN_ARGUMENTS or lowered[0:2] != ["pages", "deploy"]:
         return "deny", "only Wrangler Pages deployment is allowed"
+    path_verdict = _pages_target_verdict(args[2], cwd)
+    if path_verdict[0]:
+        return path_verdict
+    return _pages_options_verdict(args[PAGES_DEPLOY_MIN_ARGUMENTS:])
 
-    deploy_path = args[2]
+
+def _pages_target_verdict(deploy_path: str, cwd: str) -> tuple:
+    """Require a literal, existing, non-protected workspace deployment path."""
     if deploy_path.startswith("-") or is_ambiguous(deploy_path):
         return "deny", "Pages deployment path must be a literal workspace path"
     root = os.path.realpath(os.path.abspath(cwd or os.getcwd()))
@@ -709,41 +729,60 @@ def cloudflare_pages_verdict(program: str, args: list, cwd: str = "") -> tuple:
     within_workspace = _pages_path_is_within(root, resolved_path)
     if not within_workspace or not os.path.isdir(resolved_path):
         return "deny", "Pages deployment path must be an existing workspace directory"
-    path_verdict = _pages_deployment_path_verdict(root, resolved_path)
-    if path_verdict[0]:
-        return path_verdict
+    return _pages_deployment_path_verdict(root, resolved_path)
 
+
+def _pages_options_verdict(options: list) -> tuple:
+    """Allow only one literal --project-name and at most one literal --branch."""
     project_name = ""
     seen_options = set()
-    index = 3
-    while index < len(args):
-        option = args[index]
-        lowered_option = option.casefold()
-        option_name = lowered_option.split("=", 1)[0]
+    index = 0
+    while index < len(options):
+        option_name = options[index].casefold().split("=", 1)[0]
         if option_name in {"--project-name", "--branch"}:
             if option_name in seen_options:
                 return "deny", "Wrangler Pages options cannot be repeated"
             seen_options.add(option_name)
-        if lowered_option.startswith("--project-name="):
-            project_name = option.split("=", 1)[1]
-        elif lowered_option == "--project-name":
-            index += 1
-            if index >= len(args):
-                return "deny", "Pages deployment requires a project name"
-            project_name = args[index]
-        elif lowered_option.startswith("--branch="):
-            branch = option.split("=", 1)[1]
-            if not _safe_pages_value(branch):
-                return "deny", "Pages deployment branch must be literal"
-        elif lowered_option == "--branch":
-            index += 1
-            if index >= len(args) or not _safe_pages_value(args[index]):
-                return "deny", "Pages deployment branch must be literal"
-        else:
-            return "deny", "Wrangler Pages option is outside the deployment allowance"
+        value, index, error = _pages_option_value(options, index)
+        if error:
+            return "deny", error
+        if option_name == "--project-name":
+            project_name = value
         index += 1
     if not _safe_pages_value(project_name):
         return "deny", "Pages deployment requires a literal project name"
+    return "", ""
+
+
+def _pages_option_value(options: list, index: int) -> tuple:
+    """Return (value, last consumed index, error) for one Pages option."""
+    option = options[index]
+    lowered_option = option.casefold()
+    if lowered_option.startswith(("--project-name=", "--branch=")):
+        value = option.split("=", 1)[1]
+    elif lowered_option in ("--project-name", "--branch"):
+        index += 1
+        if index >= len(options):
+            if lowered_option == "--project-name":
+                return "", index, "Pages deployment requires a project name"
+            return "", index, "Pages deployment branch must be literal"
+        value = options[index]
+    else:
+        return "", index, "Wrangler Pages option is outside the deployment allowance"
+    if lowered_option.startswith("--branch") and not _safe_pages_value(value):
+        return "", index, "Pages deployment branch must be literal"
+    return value, index, ""
+
+
+def _first_match(rules) -> tuple:
+    """Return the (decision, reason) of the first rule whose condition holds.
+
+    Each rule is (condition, decision, reason). Conditions are plain values,
+    so every one must be safe to evaluate whatever the earlier ones found.
+    """
+    for condition, decision, reason in rules:
+        if condition:
+            return decision, reason
     return "", ""
 
 
@@ -752,19 +791,22 @@ def prohibited_command_verdict(program: str, args: list) -> tuple:
     name = normalize_windows_command_name(program)
     if name == "wrangler":
         return "", ""
-    if name in PROHIBITED_COMMANDS or name.startswith(PROHIBITED_COMMAND_PREFIXES):
-        return "deny", f"{sanitize(name)} is prohibited for agent execution"
     _verb, separator, noun = name.partition("-")
-    if separator and (noun.startswith("az") or "netfirewall" in noun):
-        return "deny", f"{sanitize(name)} is prohibited for agent execution"
-    lowered = [token.casefold() for token in args]
-    if name == "gpt" and lowered and lowered[0] == "destroy":
-        return "deny", "gpt destroy removes partition metadata"
-    if name == "log" and lowered and lowered[0] == "erase":
-        return "deny", "log erase removes system log records"
-    if _account_delete_command(name, args):
-        return "deny", "account and group deletion is prohibited for agents"
-    return "", ""
+    first = args[0].casefold() if args else ""
+    prohibited = (
+        name in PROHIBITED_COMMANDS
+        or name.startswith(PROHIBITED_COMMAND_PREFIXES)
+        or bool(separator and (noun.startswith("az") or "netfirewall" in noun))
+    )
+    return _first_match((
+        (prohibited, "deny", f"{sanitize(name)} is prohibited for agent execution"),
+        (name == "gpt" and first == "destroy", "deny",
+         "gpt destroy removes partition metadata"),
+        (name == "log" and first == "erase", "deny",
+         "log erase removes system log records"),
+        (_account_delete_command(name, args), "deny",
+         "account and group deletion is prohibited for agents"),
+    ))
 
 
 def _infrastructure_manifest_text(path: str) -> str:
@@ -779,6 +821,21 @@ def _infrastructure_manifest_text(path: str) -> str:
         return ""
 
 
+def _is_infrastructure_filename(basename: str) -> bool:
+    """Return whether a lowercased basename names infrastructure configuration."""
+    return (
+        basename in KUBERNETES_FILENAMES
+        or basename.startswith(("values-", "values."))
+        or basename.endswith((".tf", ".tf.json", ".tfvars", ".tfvars.json"))
+        or basename.startswith("terraform.tfstate")
+        or basename in {".terraform.lock.hcl", ".netrc", "_netrc", ".terraformrc",
+                        "terraform.rc", "cdk.json", "samconfig.toml"}
+        or basename.endswith((".bicep", ".bicepparam", ".pkr.hcl", ".pkr.json"))
+        or (basename.startswith("pulumi.")
+            and basename.endswith((".yaml", ".yml", ".json")))
+    )
+
+
 def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = "") -> bool:
     """Return whether a path reaches protected infrastructure configuration."""
     candidate = path.strip().strip('"').strip("'")
@@ -789,24 +846,10 @@ def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = ""
     normalized = "/" + resolved.replace("\\", "/").casefold().strip("/")
     padded = normalized + ("/" if not normalized.endswith("/") else "")
     basename = normalized.rsplit("/", 1)[-1]
-    if any(marker in padded for marker in INFRASTRUCTURE_PATH_MARKERS):
+    if any(marker in padded
+           for marker in INFRASTRUCTURE_PATH_MARKERS + KUBERNETES_DIRECTORY_MARKERS):
         return True
-    if any(marker in padded for marker in KUBERNETES_DIRECTORY_MARKERS):
-        return True
-    if basename in KUBERNETES_FILENAMES or basename.startswith(("values-", "values.")):
-        return True
-    terraform_suffixes = (".tf", ".tf.json", ".tfvars", ".tfvars.json")
-    if basename.endswith(terraform_suffixes):
-        return True
-    if basename.startswith("terraform.tfstate") or basename == ".terraform.lock.hcl":
-        return True
-    if basename in {".netrc", "_netrc", ".terraformrc", "terraform.rc"}:
-        return True
-    if basename in {"cdk.json", "samconfig.toml"}:
-        return True
-    if basename.endswith((".bicep", ".bicepparam", ".pkr.hcl", ".pkr.json")):
-        return True
-    if basename.startswith("pulumi.") and basename.endswith((".yaml", ".yml", ".json")):
+    if _is_infrastructure_filename(basename):
         return True
     if basename.endswith((".yaml", ".yml", ".json")):
         manifest = content or _infrastructure_manifest_text(resolved)
@@ -1043,67 +1086,115 @@ def _powershell_interpreter_policy(name: str, args: list) -> tuple:
     if name not in {"powershell", "pwsh"}:
         return "", ""
     for index, token in enumerate(args):
-        lowered = token.lower().split(":", 1)[0]
-        if lowered in POWERSHELL_ENCODED_FLAGS or lowered in {
-                "-c", "-command", "--command"}:
-            return "deny", "PowerShell receives an arbitrary command payload"
-        if lowered in {"-windowstyle", "-w"} and index + 1 < len(args):
-            if args[index + 1].lower() == "hidden":
-                return "deny", "PowerShell starts with a hidden window"
-        if lowered in {"-executionpolicy", "-ex", "-ep"}:
-            if index + 1 < len(args):
-                policy = args[index + 1].lower()
-                if policy in {"bypass", "unrestricted"}:
-                    return "deny", "PowerShell disables execution policy controls"
-            return "ask", "PowerShell overrides the process execution policy"
-        if lowered in {"-file", "-f"}:
-            if index + 1 < len(args) and is_ambiguous(args[index + 1]):
-                return "deny", "PowerShell receives a dynamic script path"
-            return "ask", "PowerShell executes a script file"
-        if lowered in {"-noprofile", "-nop"}:
-            return "ask", "PowerShell bypasses the configured profile"
+        following = args[index + 1] if index + 1 < len(args) else None
+        verdict = _powershell_launch_option_verdict(
+            token.lower().split(":", 1)[0], following)
+        if verdict[0]:
+            return verdict
     return "", ""
+
+
+def _powershell_launch_option_verdict(lowered: str, following) -> tuple:
+    """Classify one PowerShell launch option given the token after it, if any."""
+    following_lower = following.lower() if following is not None else None
+    dynamic_following = following is not None and is_ambiguous(following)
+    if lowered in {"-windowstyle", "-w"}:
+        return _first_match((
+            (following_lower == "hidden", "deny", "PowerShell starts with a hidden window"),
+        ))
+    return _first_match((
+        (lowered in POWERSHELL_ENCODED_FLAGS or lowered in {"-c", "-command", "--command"},
+         "deny", "PowerShell receives an arbitrary command payload"),
+        (lowered in {"-executionpolicy", "-ex", "-ep"}
+         and following_lower in {"bypass", "unrestricted"},
+         "deny", "PowerShell disables execution policy controls"),
+        (lowered in {"-executionpolicy", "-ex", "-ep"},
+         "ask", "PowerShell overrides the process execution policy"),
+        (lowered in {"-file", "-f"} and dynamic_following,
+         "deny", "PowerShell receives a dynamic script path"),
+        (lowered in {"-file", "-f"}, "ask", "PowerShell executes a script file"),
+        (lowered in {"-noprofile", "-nop"},
+         "ask", "PowerShell bypasses the configured profile"),
+    ))
 
 
 def _powershell_cli_policy(name: str, args: list) -> tuple:
     """Classify native administration tools by operation instead of operands."""
     lowered = [token.lower() for token in args]
-    if name == "auditpol":
-        return (("deny", "audit policy modification weakens security controls")
-                if any(token.startswith(("/set", "/clear", "/remove"))
-                       for token in lowered) else ("", ""))
-    if name == "wevtutil":
-        return (("deny", "event log modification removes security evidence")
-                if lowered and lowered[0] in {"cl", "clear-log", "sl", "set-log"}
-                else ("", ""))
-    if name == "manage-bde":
-        if lowered and all(token == "-status" or token.startswith("-") is False
-                           for token in lowered):
-            return "", ""
-        return "deny", "BitLocker modification changes storage protection"
-    if name == "bcdedit":
-        markers = {"/set", "/delete", "/deletevalue", "/create", "/copy",
-                   "/import", "/export", "/sysstore"}
-        return (("deny", "boot policy modification changes host security")
-                if markers.intersection(lowered) else ("", ""))
-    if name == "secedit":
-        if any(token in {"/configure", "/import", "/export"} for token in lowered):
-            return "deny", "local security policy modification changes host controls"
-        return "ask", "local security policy inspection accesses privileged state"
-    if name == "netsh":
-        return "deny", "netsh changes firewall, proxy, or network configuration"
-    if name == "route":
-        if lowered and lowered[0] in {"add", "change", "delete"}:
-            return "deny", "route changes network egress configuration"
-        return "ask", "route enumerates network topology"
-    if name == "reg":
-        text = " ".join(lowered).replace("/", "\\")
-        sensitive = ("hklm\\sam", "hklm\\security", "hklm\\system")
-        if any(marker in text for marker in sensitive):
-            return "deny", "registry access reaches credential or security hives"
     if name in {"winrs", "schtasks"}:
         return "deny", f"{sanitize(name)} enables remote execution or persistence"
+    handler = _NATIVE_TOOL_POLICIES.get(name)
+    return handler(lowered) if handler else ("", "")
+
+
+def _auditpol_policy(lowered: list) -> tuple:
+    """Deny audit policy changes."""
+    return (("deny", "audit policy modification weakens security controls")
+            if any(token.startswith(("/set", "/clear", "/remove"))
+                   for token in lowered) else ("", ""))
+
+
+def _wevtutil_policy(lowered: list) -> tuple:
+    """Deny event log clearing and reconfiguration."""
+    return (("deny", "event log modification removes security evidence")
+            if lowered and lowered[0] in {"cl", "clear-log", "sl", "set-log"}
+            else ("", ""))
+
+
+def _manage_bde_policy(lowered: list) -> tuple:
+    """Allow only BitLocker status reads."""
+    if lowered and all(token == "-status" or token.startswith("-") is False
+                       for token in lowered):
+        return "", ""
+    return "deny", "BitLocker modification changes storage protection"
+
+
+def _bcdedit_policy(lowered: list) -> tuple:
+    """Deny boot configuration changes."""
+    markers = {"/set", "/delete", "/deletevalue", "/create", "/copy",
+               "/import", "/export", "/sysstore"}
+    return (("deny", "boot policy modification changes host security")
+            if markers.intersection(lowered) else ("", ""))
+
+
+def _secedit_policy(lowered: list) -> tuple:
+    """Deny local security policy changes and ask for inspection."""
+    if any(token in {"/configure", "/import", "/export"} for token in lowered):
+        return "deny", "local security policy modification changes host controls"
+    return "ask", "local security policy inspection accesses privileged state"
+
+
+def _netsh_policy(_lowered: list) -> tuple:
+    """Deny every netsh invocation."""
+    return "deny", "netsh changes firewall, proxy, or network configuration"
+
+
+def _route_policy(lowered: list) -> tuple:
+    """Deny route changes and ask for route enumeration."""
+    if lowered and lowered[0] in {"add", "change", "delete"}:
+        return "deny", "route changes network egress configuration"
+    return "ask", "route enumerates network topology"
+
+
+def _reg_policy(lowered: list) -> tuple:
+    """Deny registry access to credential and security hives."""
+    text = " ".join(lowered).replace("/", "\\")
+    sensitive = ("hklm\\sam", "hklm\\security", "hklm\\system")
+    if any(marker in text for marker in sensitive):
+        return "deny", "registry access reaches credential or security hives"
     return "", ""
+
+
+_NATIVE_TOOL_POLICIES = {
+    "auditpol": _auditpol_policy,
+    "wevtutil": _wevtutil_policy,
+    "manage-bde": _manage_bde_policy,
+    "bcdedit": _bcdedit_policy,
+    "secedit": _secedit_policy,
+    "netsh": _netsh_policy,
+    "route": _route_policy,
+    "reg": _reg_policy,
+}
 
 
 def _powershell_path_policy(name: str, args: list, redirects: list) -> tuple:
@@ -1111,6 +1202,27 @@ def _powershell_path_policy(name: str, args: list, redirects: list) -> tuple:
     if name not in POWERSHELL_FILE_WRITERS:
         return "", ""
     targets = _known_write_targets(name, args, redirects)
+    target_verdict = _write_target_location_verdict(targets)
+    if target_verdict[0]:
+        return target_verdict
+    broad_values = list(targets)
+    if name in {"copy-item", "move-item", "rename-item"}:
+        broad_values.extend(token for token in args if not token.startswith("-"))
+    # broad_values starts with every target, so this also covers an
+    # expansion inside a known write target.
+    return _first_match((
+        (any(is_ambiguous(value) for value in broad_values),
+         "ask", "a file path contains an expansion the gate cannot resolve"),
+        (any("*" in value or "?" in value for value in broad_values),
+         "ask", "a file operation uses a broad wildcard path"),
+        (any(token.lower() in RECURSE_PREFIXES for token in args),
+         "ask", "a file operation recursively changes a directory tree"),
+        (name == "clear-content", "ask", "Clear-Content removes all data from a file"),
+    ))
+
+
+def _write_target_location_verdict(targets: list) -> tuple:
+    """Deny write targets on remote UNC paths or protected Windows trees."""
     for value in targets:
         cleaned = value.strip().strip('"').strip("'")
         normalized = cleaned.lower().replace("\\", "/")
@@ -1118,25 +1230,12 @@ def _powershell_path_policy(name: str, args: list, redirects: list) -> tuple:
             return "deny", "a file operation reaches a remote UNC path"
         if is_protected_windows_path(normalized):
             return "deny", "a file operation reaches a protected system path"
-    if any(is_ambiguous(value) for value in targets):
-        return "ask", "a file path contains an expansion the gate cannot resolve"
-    broad_values = list(targets)
-    if name in {"copy-item", "move-item", "rename-item"}:
-        broad_values.extend(token for token in args if not token.startswith("-"))
-    if any(is_ambiguous(value) for value in broad_values):
-        return "ask", "a file path contains an expansion the gate cannot resolve"
-    if any("*" in value or "?" in value for value in broad_values):
-        return "ask", "a file operation uses a broad wildcard path"
-    if any(token.lower() in RECURSE_PREFIXES for token in args):
-        return "ask", "a file operation recursively changes a directory tree"
-    if name == "clear-content":
-        return "ask", "Clear-Content removes all data from a file"
     return "", ""
 
 
 def is_protected_windows_path(normalized_path: str) -> bool:
     """Return whether a normalized path enters a protected Windows tree."""
-    if len(normalized_path) < 4:
+    if len(normalized_path) < MIN_WINDOWS_TREE_PATH_LENGTH:
         return False
     if not normalized_path[0].isalpha() or normalized_path[1:3] != ":/":
         return False
@@ -1146,6 +1245,20 @@ def is_protected_windows_path(normalized_path: str) -> bool:
 
 def _powershell_indirect_policy(name: str, text: str, args: list) -> tuple:
     """Classify indirect execution, security bypass, and persistence."""
+    verdict = _powershell_marker_verdict(name, text)
+    if verdict[0]:
+        return verdict
+    if name in POWERSHELL_POLICY_DENY:
+        return "deny", f"{sanitize(name)} belongs to a denied PowerShell family"
+    if name in {"scp", "sftp", "ftp", "azcopy", "rclone"}:
+        return "deny", "a transfer utility can send local data to a remote system"
+    if name == "curl":
+        return curl_transfer_verdict(name, args)
+    return _powershell_indirect_command_verdict(name, text, args)
+
+
+def _powershell_marker_verdict(name: str, text: str) -> tuple:
+    """Deny text naming static APIs, security controls, or persistence."""
     if any(marker in text for marker in POWERSHELL_STATIC_API_MARKERS):
         return "deny", "a static .NET API enables indirect code or network access"
     if any(marker in text for marker in POWERSHELL_SECURITY_BYPASS_MARKERS):
@@ -1154,12 +1267,11 @@ def _powershell_indirect_policy(name: str, text: str, args: list) -> tuple:
         return "deny", "the command targets WMI event persistence"
     if "$profile" in text and name in POWERSHELL_FILE_WRITERS:
         return "deny", "a file write targets a PowerShell profile"
-    if name in POWERSHELL_POLICY_DENY:
-        return "deny", f"{sanitize(name)} belongs to a denied PowerShell family"
-    if name in {"scp", "sftp", "ftp", "azcopy", "rclone"}:
-        return "deny", "a transfer utility can send local data to a remote system"
-    if name == "curl":
-        return curl_transfer_verdict(name, args)
+    return "", ""
+
+
+def _powershell_indirect_command_verdict(name: str, text: str, args: list) -> tuple:
+    """Classify object construction, remote sessions, and dynamic targets."""
     if name == "new-object":
         if "-comobject" in text or "wscript.shell" in text:
             return "deny", "a COM object enables indirect process or script execution"
@@ -1170,10 +1282,10 @@ def _powershell_indirect_policy(name: str, text: str, args: list) -> tuple:
         if any(_powershell_parameter(token, parameter, minimum)
                for token in args for parameter, minimum in remote):
             return "deny", "Invoke-Command executes on a remote session"
-    if name in POWERSHELL_MODULE_PROGRAMS and any(is_ambiguous(arg) for arg in args):
+    dynamic = any(is_ambiguous(arg) for arg in args)
+    if name in POWERSHELL_MODULE_PROGRAMS and dynamic:
         return "deny", "a dynamic module reference hides executable code"
-    if name in {"start-process", "invoke-item"} and any(
-            is_ambiguous(arg) for arg in args):
+    if name in {"start-process", "invoke-item"} and dynamic:
         return "deny", "a dynamic process target bypasses static inspection"
     return "", ""
 
@@ -1195,27 +1307,38 @@ def _powershell_state_policy(name: str, text: str) -> tuple:
 
 def _powershell_web_policy(name: str, args: list) -> tuple:
     """Classify executable downloads and request bodies without basename literals."""
-    if name in {"invoke-webrequest", "invoke-restmethod", "start-bitstransfer"}:
-        values = [value.lower().split("?", 1)[0] for value in args]
-        if any(value.endswith(POWERSHELL_EXECUTABLE_SUFFIXES) for value in values):
-            return "deny", "a network operation transfers executable content"
-        for index, value in enumerate(args):
-            flag, separator, attached = value.lower().partition(":")
-            if (name == "start-bitstransfer"
-                    and _powershell_parameter(flag, "transfertype", 9)):
-                transfer_type = attached if separator else ""
-                if not transfer_type and index + 1 < len(args):
-                    transfer_type = args[index + 1].lower()
-                if transfer_type == "upload":
-                    return "deny", "BITS uploads local data to a remote endpoint"
-            if flag in {"-body", "-form", "-infile"}:
-                return "deny", "a web request can send local data to a remote endpoint"
-            if flag == "-method":
-                method = attached if separator else ""
-                if not method and index + 1 < len(args):
-                    method = args[index + 1].lower()
-                if method in {"connect", "delete", "patch", "post", "put"}:
-                    return "deny", "a web request uses a state-changing HTTP method"
+    if name not in {"invoke-webrequest", "invoke-restmethod", "start-bitstransfer"}:
+        return "", ""
+    values = [value.lower().split("?", 1)[0] for value in args]
+    if any(value.endswith(POWERSHELL_EXECUTABLE_SUFFIXES) for value in values):
+        return "deny", "a network operation transfers executable content"
+    for index, value in enumerate(args):
+        verdict = _web_parameter_verdict(name, args, index, value)
+        if verdict[0]:
+            return verdict
+    return "", ""
+
+
+def _parameter_value(args: list, index: int, separator: str, attached: str) -> str:
+    """Return an attached `-Name:value` value or the following token, lowered."""
+    value = attached if separator else ""
+    if not value and index + 1 < len(args):
+        value = args[index + 1].lower()
+    return value
+
+
+def _web_parameter_verdict(name: str, args: list, index: int, value: str) -> tuple:
+    """Deny one web-request parameter that uploads data or changes state."""
+    flag, separator, attached = value.lower().partition(":")
+    if (name == "start-bitstransfer"
+            and _powershell_parameter(flag, "transfertype", 9)
+            and _parameter_value(args, index, separator, attached) == "upload"):
+        return "deny", "BITS uploads local data to a remote endpoint"
+    if flag in {"-body", "-form", "-infile"}:
+        return "deny", "a web request can send local data to a remote endpoint"
+    if flag == "-method" and _parameter_value(
+            args, index, separator, attached) in {"connect", "delete", "patch", "post", "put"}:
+        return "deny", "a web request uses a state-changing HTTP method"
     return "", ""
 
 
@@ -1916,20 +2039,30 @@ def _shell_alias_write_label(expansion: str, entries: dict,
     return "", "git shell alias may execute an uninspectable command"
 
 
-def _alias_write_label(subcommand: str, rest: list,
-                       entries: dict, depth: int = 0,
-                       visited: frozenset = frozenset()) -> tuple:
-    """Return a resolved write label and an alias-resolution error."""
+def _alias_terminal_label(subcommand: str, entries: dict, depth: int,
+                          visited: frozenset):
+    """Return a final (label, error) before alias expansion, or None to expand."""
+    normalized_subcommand = subcommand.lower()
     if depth >= MAX_GIT_ALIAS_DEPTH:
         return "", "git alias expansion exceeds the inspection limit"
     if subcommand in ("commit", "push"):
         return f"git {subcommand}", ""
-    normalized_subcommand = subcommand.lower()
     if normalized_subcommand in visited:
         return "", "git alias expansion contains a cycle"
-    expansion = entries.get(f"alias.{normalized_subcommand}", "")
-    if not expansion:
+    if not entries.get(f"alias.{normalized_subcommand}", ""):
         return "", ""
+    return None
+
+
+def _alias_write_label(subcommand: str, rest: list,
+                       entries: dict, depth: int = 0,
+                       visited: frozenset = frozenset()) -> tuple:
+    """Return a resolved write label and an alias-resolution error."""
+    terminal = _alias_terminal_label(subcommand, entries, depth, visited)
+    if terminal is not None:
+        return terminal
+    normalized_subcommand = subcommand.lower()
+    expansion = entries[f"alias.{normalized_subcommand}"]
     next_visited = visited | {normalized_subcommand}
     if expansion.startswith("!"):
         return _shell_alias_write_label(
@@ -2087,6 +2220,35 @@ def resolve_alias(cwd: str, subcommand: str) -> str:
     return entries.get(f"alias.{subcommand.lower()}", "")
 
 
+def _alias_text_problem(expansion) -> str:
+    """Return why an alias expansion cannot be inspected, or an empty string."""
+    if not expansion:
+        return "Git alias is unresolved"
+    if expansion.startswith("!"):
+        return "Git shell alias has opaque execution"
+    if len(expansion) > MAX_CONFIG_BYTES:
+        return "Git alias exceeds the inspection limit"
+    return ""
+
+
+def _branch_alias_expansion(subcommand: str, entries: dict, visited: set) -> tuple:
+    """Return (expanded tokens, error) for one alias step, recording the visit."""
+    if subcommand in visited:
+        return [], "Git alias expansion contains a cycle"
+    visited.add(subcommand)
+    expansion = entries.get(f"alias.{subcommand}")
+    reason = _alias_text_problem(expansion)
+    if reason:
+        return [], reason
+    try:
+        expanded = shlex.split(expansion)
+    except ValueError:
+        return [], "Git alias syntax is incomplete"
+    if not expanded or expanded[0].startswith("-"):
+        return [], "Git alias changes unresolved invocation settings"
+    return expanded, ""
+
+
 def resolve_branch_alias(subcommand: str, arguments: list, entries: dict) -> tuple:
     """Return literal Git arguments or an explicit alias inspection error."""
     visited = set()
@@ -2095,22 +2257,9 @@ def resolve_branch_alias(subcommand: str, arguments: list, entries: dict) -> tup
             return subcommand, arguments, "Git subcommand is unresolved"
         if subcommand in KNOWN_SUBCOMMANDS or subcommand in ("symbolic-ref", "update-ref"):
             return subcommand, arguments, ""
-        if subcommand in visited:
-            return subcommand, arguments, "Git alias expansion contains a cycle"
-        visited.add(subcommand)
-        expansion = entries.get(f"alias.{subcommand}")
-        if not expansion:
-            return subcommand, arguments, "Git alias is unresolved"
-        if expansion.startswith("!"):
-            return subcommand, arguments, "Git shell alias has opaque execution"
-        if len(expansion) > MAX_CONFIG_BYTES:
-            return subcommand, arguments, "Git alias exceeds the inspection limit"
-        try:
-            expanded = shlex.split(expansion)
-        except ValueError:
-            return subcommand, arguments, "Git alias syntax is incomplete"
-        if not expanded or expanded[0].startswith("-"):
-            return subcommand, arguments, "Git alias changes unresolved invocation settings"
+        expanded, reason = _branch_alias_expansion(subcommand, entries, visited)
+        if reason:
+            return subcommand, arguments, reason
         subcommand = expanded[0]
         arguments = expanded[1:] + arguments
     return subcommand, arguments, "Git alias expansion exceeds the inspection limit"
@@ -2253,6 +2402,13 @@ def git_branch_context(args: list, cwd: str, assignments: list) -> dict:
     if state is None:
         return _ambiguous_git_context(
             _fallback_git_state(cwd), environment, assignments, subcommand, reason)
+    return _branch_context_from_state(state, environment, assignments, (subcommand, arguments))
+
+
+def _branch_context_from_state(state, environment: dict, assignments: list,
+                               invocation: tuple) -> dict:
+    """Finish a branch context from resolved Git state and (subcommand, arguments)."""
+    subcommand, arguments = invocation
     if "GIT_CONFIG_PARAMETERS" in environment:
         return _ambiguous_git_context(state, environment, assignments, subcommand,
                                       "GIT_CONFIG_PARAMETERS cannot be inspected safely")
@@ -2556,37 +2712,38 @@ SU_VALUE_OPTIONS = frozenset({
 })
 
 
-def su_target_verdict(arguments: list) -> tuple:
-    """Classify the effective target and command payload of one su call."""
-    for argument in arguments:
-        lowered_argument = argument.casefold()
-        option_name = lowered_argument.split("=", 1)[0]
-        if option_name in SU_COMMAND_OPTIONS:
-            return "deny", "su executes a command-string payload"
-        if argument.startswith("-") and not argument.startswith("--"):
-            if "c" in argument[1:]:
-                return "deny", "su executes a command-string payload"
+def _su_command_payload(argument: str) -> bool:
+    """Return whether one su argument passes a command string."""
+    option_name = argument.casefold().split("=", 1)[0]
+    if option_name in SU_COMMAND_OPTIONS:
+        return True
+    return (argument.startswith("-") and not argument.startswith("--")
+            and "c" in argument[1:])
+
+
+def _su_target_user(arguments: list) -> str:
+    """Return the first positional account, or su's default of root."""
     argument_index = 0
-    target_user = "root"
-    target_found = False
     while argument_index < len(arguments):
         argument = arguments[argument_index]
         if argument in SU_VALUE_OPTIONS:
             argument_index += 2
             continue
-        if argument in ("-", "-l", "--login", "-m", "-p", "--preserve-environment"):
-            argument_index += 1
-            continue
         if argument == "--":
-            argument_index += 1
-            if not target_found and argument_index < len(arguments):
-                target_user = arguments[argument_index]
-                target_found = True
-            break
-        if not target_found and not argument.startswith("-"):
-            target_user = argument
-            target_found = True
+            following = argument_index + 1
+            return arguments[following] if following < len(arguments) else "root"
+        if not argument.startswith("-"):
+            return argument
+        # Flags such as -l, --login, -m, -p and unknown dash options take no value.
         argument_index += 1
+    return "root"
+
+
+def su_target_verdict(arguments: list) -> tuple:
+    """Classify the effective target and command payload of one su call."""
+    if any(_su_command_payload(argument) for argument in arguments):
+        return "deny", "su executes a command-string payload"
+    target_user = _su_target_user(arguments)
     if is_ambiguous(target_user):
         return "deny", "su uses a dynamic target account"
     if target_user.casefold() == "root":
@@ -2776,7 +2933,7 @@ def _load_github_command_denylist() -> tuple[frozenset, frozenset]:
         fields = line.split()
         if not fields or fields[0].startswith("#"):
             continue
-        if fields[0] == "family" and len(fields) == 2:
+        if fields[0] == "family" and len(fields) == DENYLIST_FAMILY_FIELDS:
             families.add((fields[1],))
         elif fields[0] == "path" and len(fields) > 1:
             paths.add(tuple(fields[1:]))
@@ -2791,26 +2948,34 @@ def _github_command_denylist_verdict(command: list) -> tuple:
         families, paths = _load_github_command_denylist()
     except ValueError as error:
         return "deny", str(error)
-    command_path = _github_command_path(command)
+    reason = _denied_command_path_reason(_github_command_path(command), families, paths)
+    return ("deny", reason) if reason else ("", "")
+
+
+GH_FAMILY_DENIAL_REASONS = {
+    "secret": "gh secret operations expose or change hosted secrets",
+    "variable": "gh variable operations expose or change hosted variables",
+}
+
+
+def _denied_command_path_reason(command_path: tuple, families: set, paths: set) -> str:
+    """Return the denial reason for a denylisted family or path, or empty."""
     if command_path and command_path[:1] in families:
-        if command_path[0] == "secret":
-            return "deny", "gh secret operations expose or change hosted secrets"
-        if command_path[0] == "variable":
-            return "deny", "gh variable operations expose or change hosted variables"
-        return "deny", f"gh {command_path[0]} is denied by policy"
+        return GH_FAMILY_DENIAL_REASONS.get(
+            command_path[0], f"gh {command_path[0]} is denied by policy")
     for path in paths:
         if command_path[:len(path)] == path:
             if path == ("repo", "delete"):
-                return "deny", "gh repo delete removes work and is denied by policy"
-            return "deny", f"gh {' '.join(path)} is denied by policy"
-    return "", ""
+                return "gh repo delete removes work and is denied by policy"
+            return f"gh {' '.join(path)} is denied by policy"
+    return ""
 
 
 def _github_command_path(command: list) -> tuple:
     """Return the noun and action after consuming option values."""
     command_path = []
     index = 0
-    while index < len(command) and len(command_path) < 2:
+    while index < len(command) and len(command_path) < GH_COMMAND_PATH_LENGTH:
         token = command[index]
         if token == "--":
             index += 1
@@ -2826,7 +2991,7 @@ def _github_command_path(command: list) -> tuple:
         if any(token.casefold().startswith(option.casefold())
                and len(token) > len(option)
                for option in GH_COMMAND_VALUE_OPTIONS
-               if len(option) == 2):
+               if len(option) == SHORT_OPTION_LENGTH):
             index += 1
             continue
         if token.startswith("-"):
@@ -2864,7 +3029,7 @@ def _option_value(args: list, names: frozenset) -> str:
     for index, token in enumerate(args):
         lowered = token.lower()
         for name in names:
-            is_short = len(name) == 2 and name.startswith("-") and not name.startswith("--")
+            is_short = len(name) == SHORT_OPTION_LENGTH and name.startswith("-") and not name.startswith("--")
             target = token if is_short else lowered
             option_name = name if is_short else name.lower()
             if target == option_name:
@@ -2872,8 +3037,8 @@ def _option_value(args: list, names: frozenset) -> str:
             prefix = option_name + "="
             if target.startswith(prefix):
                 return token[len(prefix):]
-            if is_short and target.startswith(option_name) and len(token) > 2:
-                return token[2:]
+            if is_short and target.startswith(option_name) and len(token) > SHORT_OPTION_LENGTH:
+                return token[SHORT_OPTION_LENGTH:]
     return ""
 
 
@@ -2925,9 +3090,9 @@ def _repository_target_owner(token: str) -> str:
     value = token.partition("://")[2] or token
     value = value.rpartition("@")[2]
     segments = [segment for segment in value.split("/") if segment]
-    if len(segments) == 3 and _is_github_host(segments[0]):
+    if len(segments) == HOST_OWNER_NAME_SEGMENTS and _is_github_host(segments[0]):
         segments = segments[1:]
-    if len(segments) != 2:
+    if len(segments) != OWNER_NAME_SEGMENTS:
         return ""
     # Splitting dropped empty segments, so the owner is never empty here.
     # A separator left inside it means the token was never owner/name.
@@ -3037,11 +3202,16 @@ def github_cli_verdict(args: list, *, repo_owner: str = "") -> tuple:
     if noun == "auth":
         return _github_auth_verdict(command)
     if noun == "repo" and action == "edit":
-        visibility = _option_value(command, frozenset({"--visibility"})).lower()
-        if visibility == "public" or is_ambiguous(visibility):
-            return "deny", "public repository visibility can expose private content"
-        return "ask", "repository edits change hosted settings"
+        return _repo_edit_verdict(command)
     return _external_target_verdict(args, command, noun, action, repo_owner)
+
+
+def _repo_edit_verdict(command: list) -> tuple:
+    """Deny public visibility changes and ask for other repository edits."""
+    visibility = _option_value(command, frozenset({"--visibility"})).lower()
+    if visibility == "public" or is_ambiguous(visibility):
+        return "deny", "public repository visibility can expose private content"
+    return "ask", "repository edits change hosted settings"
 
 
 def trusted_gh_arguments(program: str, args: list, cwd: str) -> list:
@@ -3094,8 +3264,7 @@ def _token_hostname(token: str) -> str:
     colon_index = candidate.find(":")
     slash_index = candidate.find("/")
     if colon_index >= 0 and (slash_index < 0 or colon_index < slash_index):
-        hostname = candidate[:colon_index].rsplit("@", 1)[-1]
-        return hostname
+        return candidate[:colon_index].rsplit("@", 1)[-1]
     if "/" in candidate and not candidate.startswith("/"):
         return candidate.split("/", 1)[0]
     return ""
@@ -3131,24 +3300,28 @@ def github_routing_verdict(program: str, args: list, cwd: str) -> tuple:
     if wrapped:
         return "", ""
     name = normalize_windows_command_name(program)
-    if name in {"git-credential-manager", "git-credential-manager-core",
-                "credential-manager"}:
-        return "deny", "agents cannot modify Git Credential Manager"
-    if (name in {"start", "start-process", "explorer", "open", "xdg-open"}
-            and _is_github_target(args)):
-        return "deny", "agents cannot open GitHub authentication in a browser"
-    if name == "gh":
-        return "deny", "direct gh lookup is untrusted; use scripts/trusted_gh.py run"
-    if name == "hub":
-        return "deny", "hub bypasses the trusted authenticated GitHub CLI path"
-    if name == "git" and _github_git_substitute(args):
-        lowered = [token.casefold() for token in args]
-        if GH_FALLBACK_CONFIG in lowered:
-            return "ask", "a marked one-time Git fallback follows a failed gh operation"
-        return "deny", "this hosted GitHub operation must use trusted authenticated gh"
-    if name in {"curl", "wget"} and _is_github_target(args):
-        return "deny", "GitHub HTTP operations must use trusted authenticated gh"
-    return "", ""
+    browser = name in {"start", "start-process", "explorer", "open", "xdg-open"}
+    http_client = name in {"curl", "wget"}
+    # Hostname parsing runs only for the programs whose verdict depends on it.
+    github_target = (browser or http_client) and _is_github_target(args)
+    git_substitute = name == "git" and _github_git_substitute(args)
+    marked_fallback = git_substitute and GH_FALLBACK_CONFIG in [
+        token.casefold() for token in args]
+    return _first_match((
+        (name in {"git-credential-manager", "git-credential-manager-core",
+                  "credential-manager"},
+         "deny", "agents cannot modify Git Credential Manager"),
+        (browser and github_target,
+         "deny", "agents cannot open GitHub authentication in a browser"),
+        (name == "gh", "deny", "direct gh lookup is untrusted; use scripts/trusted_gh.py run"),
+        (name == "hub", "deny", "hub bypasses the trusted authenticated GitHub CLI path"),
+        (marked_fallback,
+         "ask", "a marked one-time Git fallback follows a failed gh operation"),
+        (git_substitute,
+         "deny", "this hosted GitHub operation must use trusted authenticated gh"),
+        (http_client and github_target,
+         "deny", "GitHub HTTP operations must use trusted authenticated gh"),
+    ))
 
 
 def forge_verdict(program: str, args: list, cwd: str = "") -> tuple:

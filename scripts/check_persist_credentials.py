@@ -18,6 +18,12 @@ class _MarkedMapping(dict):
         self.line = line
         self.key_lines: dict[object, int] = {}
 
+    def __eq__(self, other: object) -> bool:
+        """Compare contents only. Source lines are location metadata."""
+        return dict.__eq__(self, other)
+
+    __hash__ = None
+
 
 def _construct_unique_mapping(
     loader: yaml.SafeLoader, node: MappingNode
@@ -26,7 +32,7 @@ def _construct_unique_mapping(
     mapping = _MarkedMapping(node.start_mark.line)
     yield mapping
     explicit_keys = set()
-    for key_node, value_node in node.value:
+    for key_node, _value_node in node.value:
         if key_node.tag == "tag:yaml.org,2002:merge":
             continue
         key = loader.construct_object(key_node, deep=True)
@@ -174,7 +180,8 @@ def find_violations(text: str, path: str) -> list[str]:
                     step, lines, exception_lines, path)
             ) is not None
         ]
-    except Exception:
+    except (yaml.YAMLError, ValueError, TypeError, AttributeError, KeyError,
+            IndexError, RecursionError):
         return [f"{path}: malformed YAML cannot be checked (Rule 11)"]
 
 

@@ -33,6 +33,10 @@ TECHNICAL_SUFFIXES = frozenset(
     ("base64", "es2022", "oauth2", "python310", "sha256")
 )
 
+# Length bounds for an opaque generated suffix such as a session hash.
+OPAQUE_TOKEN_MIN_LENGTH = 6
+OPAQUE_TOKEN_MAX_LENGTH = 12
+
 
 def _pattern(prefixes: tuple[str, ...]) -> re.Pattern:
     """Build the <type>/<kebab-description> pattern for the given prefixes."""
@@ -70,7 +74,7 @@ def _description_violations(branch: str) -> list[str]:
             )
     final_token = tokens[-1]
     if (final_token.casefold() not in TECHNICAL_SUFFIXES
-            and 6 <= len(final_token) <= 12
+            and OPAQUE_TOKEN_MIN_LENGTH <= len(final_token) <= OPAQUE_TOKEN_MAX_LENGTH
             and any(character.isalpha() for character in final_token)
             and any(character.isdigit() for character in final_token)):
         violations.append(

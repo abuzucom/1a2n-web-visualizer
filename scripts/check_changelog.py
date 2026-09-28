@@ -33,9 +33,10 @@ def _version_key(match: re.Match[str]) -> tuple:
     return (*[int(match.group(index)) for index in range(1, 4)], 0, tokens)
 
 
-def find_violations(text: str) -> list[str]:
-    """Return blocking findings for one changelog document."""
-    lines = text.splitlines()
+def _scan_headings(
+    lines: list[str],
+) -> tuple[list[tuple[int, re.Match[str]]], list[str]]:
+    """Return versioned headings and heading-shape findings in line order."""
     headings: list[tuple[int, re.Match[str]]] = []
     findings: list[str] = []
     for line_number, line in enumerate(lines, 1):
@@ -47,9 +48,15 @@ def find_violations(text: str) -> list[str]:
         match = VERSION_PATTERN.fullmatch(line)
         if match:
             headings.append((line_number, match))
-            continue
-        if HEADING_PATTERN.fullmatch(line):
+        elif HEADING_PATTERN.fullmatch(line):
             findings.append(f"line {line_number}: invalid version heading")
+    return headings, findings
+
+
+def find_violations(text: str) -> list[str]:
+    """Return blocking findings for one changelog document."""
+    lines = text.splitlines()
+    headings, findings = _scan_headings(lines)
     if not headings:
         findings.append("changelog has no versioned release heading")
         return findings

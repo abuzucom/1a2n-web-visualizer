@@ -262,7 +262,8 @@ reason.
   representative fail-closed classes and executable settings. Equivalent arms
   remain outside coverage.
 - The commit and push context helpers, `git_checker_environment`,
-  `_alias_write_label`, `_shell_alias_write_label`, and both enforcement
+  `_alias_terminal_label`, `_alias_write_label`, `_shell_alias_write_label`,
+  and both enforcement
   handlers retain malformed global options. The same functions retain
   alias-depth variants and shell-alias variants. Absent config sources and
   error-reporting arms also remain.
@@ -275,12 +276,13 @@ reason.
   real devices or mounts.
 - `_protected_path` uses an explicit `ntpath` cross-drive case. Linux and
   Windows therefore reach the same defensive `ValueError` branch.
-- `_pages_deployment_path_verdict` and the added path-validation statements in
-  `cloudflare_pages_verdict` retain four tracer-unreached statements. The
-  Cloudflare regression tests exercise these branches through direct verdicts,
-  persistent shell gates, and a fresh Bash subprocess. The coverage runner
-  still records no trace for these four statements. Keep the measured limit in
-  the baseline until the subprocess tracer can attribute this import path.
+- `_pages_deployment_path_verdict` and the option parsing in
+  `_pages_options_verdict` and `_pages_option_value` retain tracer-unreached
+  statements. The Cloudflare regression tests exercise these branches through
+  direct verdicts, persistent shell gates, and a fresh Bash subprocess. The
+  coverage runner still records no trace for these statements. Keep the
+  measured limit in the baseline until the subprocess tracer can attribute this
+  import path.
 - `is_test_path` retains alternate Windows path-component and drive-relative
   arms. Representative test-shaped and ordinary paths cover each verdict.
 - `su_target_verdict` retains malformed option sequences, unsupported option

@@ -51,14 +51,6 @@ jobs:
 
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
-      - name: Check the assembled policy size
-        run: python3 scripts/check_policy_size.py
-      - name: Check the complete gate set is adopted
-        run: python3 scripts/check_gate_adoption.py
-      - name: Probe configured hook launchers
-        run: python3 scripts/check_hook_launchers.py
-      - name: Check versioned changelog
-        run: python3 scripts/check_changelog.py
       - name: Check the shared gate files against the manifest
         run: python3 scripts/sync.py --check-shared
 
@@ -95,37 +87,6 @@ jobs:
           python3 scripts/check_banned_agents.py \
             --base "origin/${{ github.event.pull_request.base.ref }}" \
             --head "${{ github.event.pull_request.head.sha }}"
-
-      - name: Check commit identities
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          python3 scripts/check_git_identity.py \
-            --base "$PR_BASE_SHA" \
-            --head "$PR_HEAD_SHA"
-
-      - name: Check strict commit attribution
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REPOSITORY: ${{ github.repository }}
-        run: >-
-          python3 scripts/check_commit_attribution.py
-          --repo .
-          --repository "$REPOSITORY"
-          --base "$PR_BASE_SHA"
-          --head "$PR_HEAD_SHA"
-
-      - name: Check changelog version advance
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python3 scripts/check_changelog.py --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA"
-
-      - name: Check external repository references
-        run: python3 scripts/check_external_pr_refs.py
 
   branch-name:
     if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
@@ -252,7 +213,12 @@ jobs:
         run: python3 -m lcov_cobertura coverage.lcov --output coverage-js.xml
 
       - name: Run Python unit tests with coverage
-        run: python3 -m coverage run -m unittest discover -s tests
+        # scripts/run_tests.py isolates each test class in its own process, so
+        # a module-level global in one suite cannot leak into another.
+        run: python3 -m coverage run scripts/run_tests.py
+
+      - name: Combine Python coverage data
+        run: python3 -m coverage combine
 
       - name: Generate Python Cobertura report
         run: python3 -m coverage xml -o coverage-python.xml

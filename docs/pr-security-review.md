@@ -29,7 +29,10 @@ Both `uses:` and `audit_ref` pin foucault release 3.3.14 at
 tag or branch.
 
 The reusable workflow runs these files from this repository's own base
-checkout. Each file is a verbatim copy from the pinned foucault revision:
+checkout. Each file comes from the pinned foucault revision.
+`ci/call_model.py`, `ci/run_model_command.py`, and
+`scripts/check_pr_review_response.py` carry local lint fixes recorded in
+`docs/template-drift.md`:
 
 - `ci/build_pr_case.py`
 - `ci/run_model_command.py`

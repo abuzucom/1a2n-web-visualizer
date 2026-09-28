@@ -37,6 +37,10 @@ ENDPOINTS_BY_PROTOCOL = {
     "google": "https://generativelanguage.googleapis.com/v1beta",
 }
 
+# Bounds for a provider model identifier.
+MAX_MODEL_NAME_LENGTH = 200
+FIRST_PRINTABLE_CODEPOINT = 32
+
 
 class ProviderError(RuntimeError):
     """Report a provider failure without exposing request or response data."""
@@ -91,7 +95,9 @@ def _load_profile() -> dict[str, Any]:
         raise ProviderError("provider protocol is not allowlisted")
     if not isinstance(endpoint, str) or not isinstance(model, str) or not model:
         raise ProviderError("provider profile is incomplete")
-    if len(model) > 200 or any(ord(character) < 32 for character in model):
+    if len(model) > MAX_MODEL_NAME_LENGTH or any(
+        ord(character) < FIRST_PRINTABLE_CODEPOINT for character in model
+    ):
         raise ProviderError("provider model is invalid")
     profile = dict(profile)
     normalized_endpoint = _validate_endpoint(endpoint)

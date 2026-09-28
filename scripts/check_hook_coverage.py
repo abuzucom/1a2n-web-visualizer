@@ -58,6 +58,9 @@ PRIORITY_TEST_SHARDS = (
 RESOURCE_HEAVY_TEST_SHARDS = frozenset(PRIORITY_TEST_SHARDS)
 EXCLUSIVE_TEST_SHARDS = RESOURCE_HEAVY_TEST_SHARDS
 
+# A trace record is [function name, line number].
+TRACE_RECORD_FIELDS = 2
+
 
 @dataclass(frozen=True)
 class TestShardResult:
@@ -136,7 +139,7 @@ def traced_lines(out_dir: str) -> set:
         if not isinstance(records, list):
             raise ValueError("trace file must contain a list")
         for record in records:
-            valid = (isinstance(record, list) and len(record) == 2
+            valid = (isinstance(record, list) and len(record) == TRACE_RECORD_FIELDS
                      and isinstance(record[0], str)
                      and isinstance(record[1], int)
                      and not isinstance(record[1], bool))
@@ -255,14 +258,17 @@ def terminate_process_tree(process: subprocess.Popen) -> None:
 
 
 def run_test_shard(
-    root: str,
-    environment: dict,
+    location: tuple[str, dict],
     label: str,
     import_name: str,
     timeout: float,
     process_registry: ActiveProcessRegistry | None = None,
 ) -> TestShardResult:
-    """Run one test class with a timeout and return its captured result."""
+    """Run one test class with a timeout and return its captured result.
+
+    location holds the repository root and the child process environment.
+    """
+    root, environment = location
     print("hook coverage: started %s" % label, file=sys.stderr, flush=True)
     started = time.monotonic()
     creationflags = 0
@@ -318,12 +324,15 @@ def record_result(result: TestShardResult, timeout: float) -> str:
 def submit_available_shards(
     executor: concurrent.futures.ThreadPoolExecutor,
     active_futures: dict,
-    ordinary_shards: deque,
-    exclusive_shards: deque,
+    shard_queues: tuple[deque, deque],
     worker_count: int,
     shard_arguments: tuple,
 ) -> None:
-    """Fill workers while keeping exclusive work isolated."""
+    """Fill workers while keeping exclusive work isolated.
+
+    shard_queues holds the ordinary queue, then the exclusive queue.
+    """
+    ordinary_shards, exclusive_shards = shard_queues
     exclusive_is_active = any(details[2] for details in active_futures.values())
     if exclusive_is_active:
         return
@@ -341,8 +350,7 @@ def submit_available_shards(
             shard_timeout = max(shard_timeout, RESOURCE_SHARD_TIMEOUT_SECONDS)
         future = executor.submit(
             run_test_shard,
-            shard_arguments[0],
-            shard_arguments[1],
+            (shard_arguments[0], shard_arguments[1]),
             label,
             import_name,
             shard_timeout,
@@ -364,7 +372,7 @@ def collect_completed_results(
         label, _import_name, _is_exclusive, shard_timeout = details
         try:
             shard_result = completed_future.result()
-        except Exception as error:
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
             return f"{label} worker failed before reporting a result: {error}"
         problem = record_result(shard_result, shard_timeout)
         if problem:
@@ -405,8 +413,8 @@ def run_test_shards(root: str, environment: dict,
     try:
         shard_arguments = (root, environment, timeout, process_registry)
         submit_available_shards(
-            executor, active_futures, ordinary_shards,
-            exclusive_shards, worker_count, shard_arguments)
+            executor, active_futures, (ordinary_shards, exclusive_shards),
+            worker_count, shard_arguments)
         while active_futures:
             completed_futures, _pending_futures = concurrent.futures.wait(
                 set(active_futures), timeout=PROGRESS_INTERVAL_SECONDS,
@@ -429,8 +437,8 @@ def run_test_shards(root: str, environment: dict,
                     active_future.cancel()
                 return [problem]
             submit_available_shards(
-                executor, active_futures, ordinary_shards,
-                exclusive_shards, worker_count, shard_arguments)
+                executor, active_futures, (ordinary_shards, exclusive_shards),
+                worker_count, shard_arguments)
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
     return []

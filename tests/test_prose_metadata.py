@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Cover advisory prose checks for commits and pull request metadata."""
+import importlib
 import contextlib
 import io
 import json
@@ -10,8 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-import check_commit_message
-import check_pull_request_message
+check_commit_message = importlib.import_module("check_commit_message")
+check_pull_request_message = importlib.import_module("check_pull_request_message")
 
 
 class CommitProseTest(unittest.TestCase):

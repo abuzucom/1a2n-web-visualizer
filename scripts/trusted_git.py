@@ -24,6 +24,10 @@ SAFE_CONFIG = (
 GITHUB_HOSTS = frozenset(("github.com", "www.github.com"))
 AMBIGUOUS_MARKERS = ("$", "`", "%")
 
+# Argument counts for the fixed transport commands.
+CLONE_ARGUMENT_COUNT = 3
+FETCH_MIN_ARGUMENT_COUNT = 2
+
 
 def _is_inside(path: Path, directory: Path) -> bool:
     """Return whether `path` is within `directory`."""
@@ -114,13 +118,12 @@ def _workspace_root(start: Path) -> Path | None:
         current = parent
 
 
-def run_git(
-    repo_root, arguments: list[str], *, input_text=None, check=False,
-    runner=None, timeout=None,
-):
-    """Run trusted Git against `repo_root` from an external directory."""
-    repository = Path(repo_root).resolve()
-    executable = Path(resolve_git(repository))
+# Keyword options run_git accepts, with their defaults.
+RUN_GIT_DEFAULTS = {"input_text": None, "check": False, "runner": None, "timeout": None}
+
+
+def _trusted_git_environment(repository: Path) -> dict:
+    """Return the inherited environment with repository-steering Git state removed."""
     environment = dict(os.environ)
     for name in (
         "GIT_COMMON_DIR", "GIT_CONFIG", "GIT_CONFIG_COUNT",
@@ -143,6 +146,21 @@ def run_git(
     environment.pop("GIT_EXTERNAL_DIFF", None)
     if os.name == "nt":
         environment["NoDefaultCurrentDirectoryInExePath"] = "1"
+    return environment
+
+
+def run_git(repo_root, arguments: list[str], **options):
+    """Run trusted Git against `repo_root` from an external directory.
+
+    Accepts the keyword options input_text, check, runner, and timeout.
+    """
+    unknown = sorted(set(options) - set(RUN_GIT_DEFAULTS))
+    if unknown:
+        raise TypeError(f"run_git() got unexpected keyword arguments: {', '.join(unknown)}")
+    settings = {**RUN_GIT_DEFAULTS, **options}
+    repository = Path(repo_root).resolve()
+    executable = Path(resolve_git(repository))
+    environment = _trusted_git_environment(repository)
     command = [
         str(executable),
         "-C",
@@ -152,18 +170,18 @@ def run_git(
         *SAFE_CONFIG,
         *arguments,
     ]
-    execute = runner or subprocess.run
+    execute = settings["runner"] or subprocess.run
     return execute(
         command,
         cwd=_safe_directory(repository, executable),
         env=environment,
-        input=input_text,
+        input=settings["input_text"],
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
-        check=check,
-        timeout=timeout,
+        check=settings["check"],
+        timeout=settings["timeout"],
     )
 
 
@@ -213,15 +231,24 @@ def _transport_arguments(workspace: Path, arguments: list[str]) -> list[str] | N
     """Validate the fixed clone and fetch CLI surface."""
     if not arguments or arguments[0] not in {"clone", "fetch"}:
         return None
-    operation = arguments[0]
-    if operation == "clone":
-        if len(arguments) != 3 or not _github_source(arguments[1]):
-            return None
-        destination = _workspace_path(workspace, arguments[2], must_exist=False)
-        if destination is None:
-            return None
-        return ["clone", "--", arguments[1], str(destination)]
-    if len(arguments) < 2:
+    if arguments[0] == "clone":
+        return _clone_arguments(workspace, arguments)
+    return _fetch_arguments(workspace, arguments)
+
+
+def _clone_arguments(workspace: Path, arguments: list[str]) -> list[str] | None:
+    """Validate `clone <github-url> <new-directory>`."""
+    if len(arguments) != CLONE_ARGUMENT_COUNT or not _github_source(arguments[1]):
+        return None
+    destination = _workspace_path(workspace, arguments[2], must_exist=False)
+    if destination is None:
+        return None
+    return ["clone", "--", arguments[1], str(destination)]
+
+
+def _fetch_arguments(workspace: Path, arguments: list[str]) -> list[str] | None:
+    """Validate `fetch <repository-directory> [refspec...]`."""
+    if len(arguments) < FETCH_MIN_ARGUMENT_COUNT:
         return None
     repository = _workspace_path(
         workspace, arguments[1], must_exist=True, allow_root=True,

@@ -5,25 +5,11 @@ from pathlib import Path
 
 try:
     from scripts.check_ascii import (
-        DASH_SUBSTITUTE,
-        EM_EN_DASH,
-        LIST_MARKER,
-        MAX_ASCII_CODEPOINT,
-        TABLE_SEPARATOR,
         find_violations as find_path_violations,
-        strip_code,
-        strip_marker,
     )
 except ModuleNotFoundError:
     from check_ascii import (
-        DASH_SUBSTITUTE,
-        EM_EN_DASH,
-        LIST_MARKER,
-        MAX_ASCII_CODEPOINT,
-        TABLE_SEPARATOR,
         find_violations as find_path_violations,
-        strip_code,
-        strip_marker,
     )
 
 SOURCE = "AGENTS.md"

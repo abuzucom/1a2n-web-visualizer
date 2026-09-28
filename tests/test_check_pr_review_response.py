@@ -31,7 +31,10 @@ class ValidateResponseTest(unittest.TestCase):
             validate_response(response)
 
     def test_rejects_a_finding_with_an_invalid_severity(self):
-        findings = '{"mode": "PR", "verdict": "BLOCK", "findings": [{"severity": "EXTREME", "class": "2.1", "file": "a.py", "line": 1, "title": "x"}]}'
+        findings = (
+            '{"mode": "PR", "verdict": "BLOCK", "findings": [{"severity": "EXTREME", '
+            '"class": "2.1", "file": "a.py", "line": 1, "title": "x"}]}'
+        )
         response = f"VERDICT: BLOCK - one finding\nVERDICT_JSON: {findings}\n"
         with self.assertRaises(ResponseError):
             validate_response(response)

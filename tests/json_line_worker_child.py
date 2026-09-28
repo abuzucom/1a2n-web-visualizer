@@ -10,6 +10,14 @@ from pathlib import Path
 
 
 WORKER_MODES = frozenset({"hook", "main"})
+# Program name, worker mode, and target path.
+EXPECTED_ARGV_LENGTH = 3
+# Failures a target can raise while handling one request. Each one becomes a
+# reported worker_error so the parent test sees it instead of a dead worker.
+REPORTED_WORKER_ERRORS = (
+    OSError, ValueError, TypeError, LookupError, AttributeError, RuntimeError,
+    ImportError, SyntaxError, ArithmeticError, AssertionError, RecursionError,
+)
 
 
 def load_target_module(target_path: Path):
@@ -90,7 +98,7 @@ def process_requests(worker_mode: str, target_path: Path) -> None:
                 response = invoke_hook(target_module, request)
             else:
                 response = invoke_main(target_path, target_module, request)
-        except Exception as error:
+        except REPORTED_WORKER_ERRORS as error:
             response = {
                 "worker_error": f"{type(error).__name__}: {error}",
             }
@@ -100,7 +108,7 @@ def process_requests(worker_mode: str, target_path: Path) -> None:
 
 def main() -> int:
     """Validate fixed worker arguments and run the request protocol."""
-    if len(sys.argv) != 3 or sys.argv[1] not in WORKER_MODES:
+    if len(sys.argv) != EXPECTED_ARGV_LENGTH or sys.argv[1] not in WORKER_MODES:
         print("usage: json_line_worker_child.py <hook|main> <target>", file=sys.stderr)
         return 2
     target_path = Path(sys.argv[2]).resolve()

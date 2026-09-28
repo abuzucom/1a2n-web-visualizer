@@ -43,6 +43,9 @@ RESOURCE_URL = re.compile(
     re.IGNORECASE,
 )
 
+# Path segments in an owner/repository remote path.
+OWNER_REPOSITORY_SEGMENTS = 2
+
 
 def _load_event(path: Path) -> tuple[str, str, str, str]:
     """Load bounded pull request prose, author, and repository owner."""
@@ -60,6 +63,12 @@ def _load_event(path: Path) -> tuple[str, str, str, str]:
     owner = repository.get("owner")
     if not isinstance(owner, dict) or not isinstance(owner.get("login"), str):
         raise ValueError("event payload lacks a repository owner login")
+    title, body, author = _pull_request_fields(pull_request)
+    return title, body, author, owner["login"]
+
+
+def _pull_request_fields(pull_request: dict) -> tuple[str, str, str]:
+    """Return validated, bounded pull request title, body, and author login."""
     title = pull_request.get("title")
     body = pull_request.get("body")
     author = pull_request.get("user")
@@ -73,7 +82,7 @@ def _load_event(path: Path) -> tuple[str, str, str, str]:
         raise ValueError("pull request author must contain a login")
     if len(title) > MAX_TITLE_LENGTH or len(body) > MAX_BODY_LENGTH:
         raise ValueError("pull request prose exceeds the size limit")
-    return title, body, author["login"], owner["login"]
+    return title, body, author["login"]
 
 
 def _sanitize(value: str) -> str:
@@ -116,7 +125,7 @@ def parse_remote_owner(url: str) -> str:
     if not is_github_host(match.group(1)):
         return ""
     segments = [segment for segment in match.group(2).split("/") if segment]
-    return segments[0] if len(segments) == 2 else ""
+    return segments[0] if len(segments) == OWNER_REPOSITORY_SEGMENTS else ""
 
 
 def resolve_owner(explicit: str, environment: dict, repo) -> str:

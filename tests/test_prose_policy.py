@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Cover consolidated prose policy checks and category ownership."""
+import importlib
 import subprocess
 import sys
 import unittest
@@ -10,7 +11,7 @@ REDOS_TIMEOUT_SECONDS = 5
 REDOS_TOKEN_COUNT = 28
 
 sys.path.insert(0, str(ROOT / "scripts"))
-import prose_policy
+prose_policy = importlib.import_module("prose_policy")
 
 
 def findings(text: str, path: str = "sample.md") -> list:

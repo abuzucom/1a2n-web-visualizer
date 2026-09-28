@@ -14,7 +14,6 @@ import importlib.util
 import json
 import os
 import tempfile
-import subprocess
 import sys
 import unittest
 from pathlib import Path

@@ -34,6 +34,10 @@ MAX_METADATA_BYTES = 4 * 1024 * 1024
 RECORD_SEPARATOR = "\x1e"
 FIELD_SEPARATOR = "\x1f"
 
+# Fields in the NUL-separated git log records this checker reads.
+SHA_SUBJECT_FIELDS = 2
+SHA_SUBJECT_BODY_FIELDS = 3
+
 
 def _strip_squash_suffix(subject: str) -> str:
     """Remove a trailing GitHub squash-merge ` (#123)` suffix, if present."""
@@ -156,7 +160,7 @@ def load_commits(base: str, head: str, repo=None) -> list[tuple[str, str]]:
         if not line:
             continue
         fields = line.split("\x00")
-        if len(fields) != 2 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+        if len(fields) != SHA_SUBJECT_FIELDS or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
             raise ValueError("git log returned malformed commit metadata")
         sha, subject = fields
         commits.append((sha, subject))
@@ -173,7 +177,7 @@ def _parse_message_records(stdout: str) -> list[tuple[str, str, str]]:
         if not record:
             continue
         fields = record.split(FIELD_SEPARATOR)
-        if len(fields) != 3 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+        if len(fields) != SHA_SUBJECT_BODY_FIELDS or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
             raise ValueError("git log returned malformed commit metadata")
         messages.append((fields[0], fields[1], fields[2]))
     return messages

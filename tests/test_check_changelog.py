@@ -22,7 +22,11 @@ class ChangelogCheckerTest(unittest.TestCase):
     """Exercise changelog rules through the checker API."""
 
     def test_valid_versioned_changelog_passes(self):
-        text = """# Changelog\n\n## [2.0.0] (2026-09-13)\n\n### Added\n- Add linked policy loading.\n\n## [1.14.0] (2026-09-12)\n\n### Fixed\n- Fix a gate.\n"""
+        text = (
+            "# Changelog\n\n## [2.0.0] (2026-09-13)\n\n### Added\n"
+            "- Add linked policy loading.\n\n## [1.14.0] (2026-09-12)\n\n"
+            "### Fixed\n- Fix a gate.\n"
+        )
         self.assertEqual(checker.find_violations(text), [])
 
     def test_unreleased_heading_fails(self):

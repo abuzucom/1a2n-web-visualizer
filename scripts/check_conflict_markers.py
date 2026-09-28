@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 MAX_LINE_LENGTH = 65536  # 64 KB
@@ -37,6 +38,15 @@ CHECK_ATTR_CHUNK = 500
 MAX_DIAGNOSTIC_LENGTH = 200
 REGULAR_MODES = {"100644", "100755"}
 OBJECT_ID_PATTERN = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
+
+# Highest code point rendered as a two-digit hex escape.
+MAX_LATIN1_CODEPOINT = 0xFF
+# Git writes conflict markers at least this wide.
+MIN_GIT_MARKER_WIDTH = 3
+# A git status entry is a two-character code followed by the path.
+STATUS_CODE_WIDTH = 2
+# Index of the stage number in git ls-files --stage metadata.
+STAGE_FIELD_INDEX = 2
 
 
 def _sanitize(value: object) -> str:
@@ -53,7 +63,7 @@ def _sanitize(value: object) -> str:
     for character in str(value):
         if " " <= character <= "~":
             rendered.append(character)
-        elif ord(character) <= 0xFF:
+        elif ord(character) <= MAX_LATIN1_CODEPOINT:
             rendered.append(f"\\x{ord(character):02x}")
         else:
             rendered.append(f"\\u{ord(character):04x}")
@@ -105,24 +115,38 @@ def decode_content(
             f"limit ({MAX_FILE_SIZE} bytes)"
         )
 
-    if raw_bytes.startswith(b"\xef\xbb\xbf"):
-        decoded = raw_bytes.decode("utf-8-sig", errors="replace")
+    decoded = _decode_bom(raw_bytes)
+    if decoded is None:
+        decoded = _decode_hinted(raw_bytes, encoding_hint)
+    if decoded is not None:
         return decoded.lstrip("\ufeff"), None
+
+    if b"\x00" in raw_bytes[:4096]:
+        return None, None
+
+    return raw_bytes.decode("latin-1"), None
+
+
+def _decode_bom(raw_bytes: bytes) -> str | None:
+    """Decode text that starts with a UTF-8, UTF-32, or UTF-16 BOM."""
+    if raw_bytes.startswith(b"\xef\xbb\xbf"):
+        return raw_bytes.decode("utf-8-sig", errors="replace")
     if raw_bytes.startswith(
         (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")
     ):
-        decoded = raw_bytes.decode("utf-32", errors="replace")
-        return decoded.lstrip("\ufeff"), None
+        return raw_bytes.decode("utf-32", errors="replace")
     if raw_bytes.startswith((b"\xff\xfe", b"\xfe\xff")):
-        decoded = raw_bytes.decode("utf-16", errors="replace")
-        return decoded.lstrip("\ufeff"), None
+        return raw_bytes.decode("utf-16", errors="replace")
+    return None
 
+
+def _decode_hinted(raw_bytes: bytes, encoding_hint: str | None) -> str | None:
+    """Decode through the attribute encoding, then UTF-8, or return None."""
     if encoding_hint and encoding_hint != "unspecified":
         try:
-            decoded = raw_bytes.decode(
+            return raw_bytes.decode(
                 encoding_hint, errors="replace"
             )
-            return decoded.lstrip("\ufeff"), None
         except (LookupError, UnicodeDecodeError):
             # The declared working-tree-encoding did not apply. Fall
             # through to UTF-8 rather than reporting, since the attribute
@@ -130,16 +154,11 @@ def decode_content(
             pass
 
     try:
-        return raw_bytes.decode("utf-8").lstrip("\ufeff"), None
+        return raw_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        # Not UTF-8 either, so treat the file as binary below. A file the
-        # decoder cannot read carries no conflict markers to find.
-        pass
-
-    if b"\x00" in raw_bytes[:4096]:
-        return None, None
-
-    return raw_bytes.decode("latin-1"), None
+        # Not UTF-8 either, so the caller treats the file as binary. A file
+        # the decoder cannot read carries no conflict markers to find.
+        return None
 
 
 class _BlockScan:
@@ -158,7 +177,7 @@ class _BlockScan:
         where .gitattributes asked for it, since a lone "=" or ">" is
         ordinary text in most files.
         """
-        return marker_len >= 3 or (
+        return marker_len >= MIN_GIT_MARKER_WIDTH or (
             self.configured is not None and marker_len == self.configured
         )
 
@@ -240,10 +259,18 @@ def _scan_diff3(scan: _BlockScan, marker_len: int, number: int,
     return []
 
 
-def _scan_separator(scan: _BlockScan, marker_len: int, number: int,
-                    line: str, safe_path: str, markdown: bool,
-                    lines: list) -> list:
+class _FileContext(NamedTuple):
+    """Per-file facts every line handler reads."""
+
+    lines: list
+    safe_path: str
+    markdown: bool
+
+
+def _scan_separator(scan: _BlockScan, context: _FileContext,
+                    marker_len: int, number: int, line: str) -> list:
     """Record the block separator, allowing a Setext heading underline."""
+    lines, safe_path, markdown = context
     if scan.opener_line is not None:
         if marker_len == scan.opener_len:
             scan.has_separator = True
@@ -266,9 +293,10 @@ def _scan_separator(scan: _BlockScan, marker_len: int, number: int,
     return []
 
 
-def _scan_line(scan: _BlockScan, lines: list, number: int, line: str,
-               safe_path: str, markdown: bool) -> list:
+def _scan_line(scan: _BlockScan, context: _FileContext, number: int,
+               line: str) -> list:
     """Dispatch one line to the handler for the marker it carries."""
+    safe_path = context.safe_path
     opener = OPENER_PATTERN.match(line)
     if opener:
         return _scan_opener(scan, len(opener.group(1)), number, safe_path)
@@ -283,8 +311,7 @@ def _scan_line(scan: _BlockScan, lines: list, number: int, line: str,
     separator = SEPARATOR_PATTERN.match(line)
     if separator:
         return _scan_separator(
-            scan, len(separator.group(1)), number, line, safe_path,
-            markdown, lines)
+            scan, context, len(separator.group(1)), number, line)
     return []
 
 
@@ -304,6 +331,7 @@ def check_content(
     lines = text.splitlines()
     markdown = is_markdown_file(path)
     scan = _BlockScan(configured_marker_size)
+    context = _FileContext(lines, safe_path, markdown)
     violations: list[str] = []
 
     for number, line in enumerate(lines, 1):
@@ -316,7 +344,7 @@ def check_content(
         if len(line) > MAX_LINE_LENGTH:
             line = line[:MAX_LINE_LENGTH]
         violations.extend(
-            _scan_line(scan, lines, number, line, safe_path, markdown))
+            _scan_line(scan, context, number, line))
 
     if scan.opener_line is not None and scan.reportable(scan.opener_len):
         violations.append(
@@ -365,30 +393,9 @@ def _safe_read(
     Returns (data, error_message). data is None on skip or error.
     error_message is None when the file is silently skipped.
     """
-    flags = os.O_RDONLY
-    nofollow = hasattr(os, "O_NOFOLLOW")
-    if nofollow:
-        flags |= os.O_NOFOLLOW
-    else:
-        # Without O_NOFOLLOW the check and the open are separate calls, so
-        # this narrows the window rather than closing it. A probe that
-        # fails tells us nothing about the path, so refuse it.
-        is_link = _probe_is_symlink(path)
-        if is_link is None:
-            return None, f"could not determine whether {_sanitize(path)} is a link"
-        if is_link:
-            return None, None
-
-    try:
-        fd = os.open(path, flags)
-    except FileNotFoundError:
-        return None, f"file not found: {path}"
-    except IsADirectoryError:
-        return None, None
-    except OSError as err:
-        if nofollow and err.errno == errno.ELOOP:
-            return None, None  # symlink with O_NOFOLLOW
-        return None, f"could not open {path}: {err}"
+    fd, error = _open_regular_candidate(path)
+    if fd is None:
+        return None, error
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
@@ -398,19 +405,65 @@ def _safe_read(
                 f"{path}: file size ({st.st_size} bytes) "
                 f"exceeds limit ({max_size} bytes)"
             )
-        data = bytearray()
-        while True:
-            chunk = os.read(fd, max_size + 1 - len(data))
-            if not chunk:
-                break
-            data.extend(chunk)
-            if len(data) > max_size:
-                return None, (
-                    f"{path}: read exceeded limit ({max_size} bytes)"
-                )
-        return bytes(data), None
+        return _read_bounded(fd, path, max_size)
     finally:
         os.close(fd)
+
+
+def _open_regular_candidate(path: str) -> tuple[int | None, str | None]:
+    """Open a path without following a final symlink where possible.
+
+    Returns (descriptor, error_message). The descriptor is None on skip or
+    error, and error_message is None when the path is silently skipped.
+    """
+    flags = os.O_RDONLY
+    nofollow = hasattr(os, "O_NOFOLLOW")
+    if nofollow:
+        flags |= os.O_NOFOLLOW
+    else:
+        refused, error = _refuse_probed_link(path)
+        if refused:
+            return None, error
+
+    try:
+        return os.open(path, flags), None
+    except FileNotFoundError:
+        return None, f"file not found: {path}"
+    except IsADirectoryError:
+        return None, None
+    except OSError as err:
+        if nofollow and err.errno == errno.ELOOP:
+            return None, None  # symlink with O_NOFOLLOW
+        return None, f"could not open {path}: {err}"
+
+
+def _refuse_probed_link(path: str) -> tuple[bool, str | None]:
+    """Return whether a platform without O_NOFOLLOW must skip the path.
+
+    Without O_NOFOLLOW the check and the open are separate calls, so this
+    narrows the window rather than closing it. A probe that fails tells us
+    nothing about the path, so refuse it.
+    """
+    is_link = _probe_is_symlink(path)
+    if is_link is None:
+        return True, f"could not determine whether {_sanitize(path)} is a link"
+    return bool(is_link), None
+
+
+def _read_bounded(
+    fd: int, path: str, max_size: int
+) -> tuple[bytes | None, str | None]:
+    """Read at most max_size bytes and fail when the file grew past it."""
+    data = bytearray()
+    while True:
+        chunk = os.read(fd, max_size + 1 - len(data))
+        if not chunk:
+            return bytes(data), None
+        data.extend(chunk)
+        if len(data) > max_size:
+            return None, (
+                f"{path}: read exceeded limit ({max_size} bytes)"
+            )
 
 
 def _parse_marker_size(
@@ -581,7 +634,7 @@ def _skip_worktree_paths(repo_root: str) -> set:
         # git ls-files -v tags skip-worktree entries "S", then one space,
         # then the path. A lowercase tag is assume-unchanged, which still
         # has a working-tree file and stays in scope.
-        if len(entry) > 2 and entry[0] == "S" and entry[1] == " ":
+        if len(entry) > STATUS_CODE_WIDTH and entry[0] == "S" and entry[1] == " ":
             skipped.add(entry[2:])
     return skipped
 
@@ -608,7 +661,7 @@ def _parse_index_entry(entry: str):
     """Return (path, sha, stage, mode) for one ls-files -s record."""
     meta, file_path = entry.split("\t", 1)
     fields = meta.split()
-    stage = fields[2] if len(fields) > 2 else "0"
+    stage = fields[STAGE_FIELD_INDEX] if len(fields) > STAGE_FIELD_INDEX else "0"
     return (file_path, fields[1], stage, fields[0])
 
 
@@ -1057,8 +1110,7 @@ def _parse_cli(raw_args: list[str]) -> tuple[bool, list[str], str | None,
                                              str | None]:
     """Parse the staged, tree, and worktree CLI modes."""
     staged = False
-    tree_id: str | None = None
-    repo_path: str | None = None
+    options: dict[str, str] = {}
     files: list[str] = []
     index = 0
     while index < len(raw_args):
@@ -1068,19 +1120,15 @@ def _parse_cli(raw_args: list[str]) -> tuple[bool, list[str], str | None,
         elif argument in ("--tree", "--repo"):
             if index + 1 >= len(raw_args):
                 raise RuntimeError(f"{argument} requires a value")
-            value = raw_args[index + 1]
+            if argument in options:
+                raise RuntimeError(f"{argument} may be supplied only once")
+            options[argument] = raw_args[index + 1]
             index += 1
-            if argument == "--tree":
-                if tree_id is not None:
-                    raise RuntimeError("--tree may be supplied only once")
-                tree_id = value
-            else:
-                if repo_path is not None:
-                    raise RuntimeError("--repo may be supplied only once")
-                repo_path = value
         else:
             files.append(argument)
         index += 1
+    tree_id = options.get("--tree")
+    repo_path = options.get("--repo")
     if tree_id is not None or repo_path is not None:
         if tree_id is None or repo_path is None:
             raise RuntimeError("--tree and --repo must be supplied together")

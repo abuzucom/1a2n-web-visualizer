@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for trusted GitHub CLI lookup and account parsing."""
+import importlib
 import os
 import io
 import subprocess
@@ -18,7 +19,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 # temp directory. Keep test fixtures inside the writable checkout instead.
 tempfile.tempdir = str(REPOSITORY_ROOT)
 
-import trusted_gh
+trusted_gh = importlib.import_module("trusted_gh")
 
 
 class AccountParsingTest(unittest.TestCase):

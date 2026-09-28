@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Cover the cross-owner GitHub gate in hooks/_gate_core.py (Rule 17)."""
+import importlib
 import sys
 import unittest
 from pathlib import Path
@@ -12,7 +13,7 @@ try:
 except ImportError:
     from retrying_temp_directory import RetryingTemporaryDirectory
 
-import _gate_core
+_gate_core = importlib.import_module("_gate_core")
 
 OWNER = "abuzucom"
 EXTERNAL = "evanpurkhiser/prolink-go"

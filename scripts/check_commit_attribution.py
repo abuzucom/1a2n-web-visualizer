@@ -30,6 +30,9 @@ OBJECT_ID_PATTERN = re.compile(r"\A[0-9a-fA-F]{40,64}\Z")
 MAX_COMMITS = 200
 MAX_MESSAGE_BYTES = 256 * 1024
 
+# Fields in the NUL-separated SHA and message record.
+SHA_MESSAGE_FIELDS = 2
+
 
 def terminal_trailers(body: str) -> list[tuple[str, str]]:
     """Return structured trailers from the terminal message paragraph."""
@@ -57,55 +60,75 @@ def terminal_trailers(body: str) -> list[tuple[str, str]]:
     return trailers
 
 
+def _terminal_paragraph(body: str) -> list[str]:
+    """Return the raw lines of the message's final paragraph."""
+    lines = body.splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    trailer_lines = []
+    for line in reversed(lines):
+        if not line.strip():
+            break
+        trailer_lines.append(line)
+    trailer_lines.reverse()
+    return trailer_lines
+
+
+def _paragraph_violations(sha: str, body: str) -> list[str]:
+    """Return non-trailer text found inside a trailer paragraph."""
+    trailer_lines = _terminal_paragraph(body)
+    if not any(TRAILER_PATTERN.fullmatch(line) for line in trailer_lines):
+        return []
+    return [
+        f"{sha}: non-trailer text in terminal trailer paragraph '{line}'"
+        for line in trailer_lines
+        if not line.startswith((" ", "\t")) and not TRAILER_PATTERN.fullmatch(line)
+    ]
+
+
+def _coauthor_violation(sha: str, value: str) -> str:
+    """Return a co-author trailer finding, or an empty string when approved."""
+    match = COAUTHOR_PATTERN.fullmatch(value.strip())
+    if not match:
+        return f"{sha}: malformed co-author trailer"
+    name = match.group("name").strip()
+    email = match.group("email")
+    if not email and name:
+        return ""
+    if email and (name, email) in APPROVED_HUMAN_COAUTHORS:
+        return ""
+    return f"{sha}: unapproved co-author trailer for '{name}'"
+
+
+def _assisted_by_violation(sha: str, value: str) -> str:
+    """Return an assisted-by trailer finding, or an empty string when valid."""
+    stripped = value.strip()
+    match = COAUTHOR_PATTERN.fullmatch(stripped) if stripped else None
+    if not match or not match.group("name").strip():
+        return f"{sha}: malformed assisted-by trailer"
+    if match.group("email"):
+        return f"{sha}: assisted-by trailer must not include an email"
+    return ""
+
+
+TRAILER_CHECKS = {
+    "co-authored-by": _coauthor_violation,
+    "assisted-by": _assisted_by_violation,
+}
+
+
 def trailer_violations(commits: list[dict]) -> list[str]:
     """Return violations for unapproved co-author and assisted-by trailers."""
     violations = []
     for commit in commits:
         sha = commit["sha"][:12]
         body = commit.get("body", "")
-        lines = body.splitlines()
-        while lines and not lines[-1].strip():
-            lines.pop()
-        trailer_lines = []
-        for line in reversed(lines):
-            if not line.strip():
-                break
-            trailer_lines.append(line)
-        trailer_lines.reverse()
-        has_trailer = any(TRAILER_PATTERN.fullmatch(line) for line in trailer_lines)
-        if has_trailer:
-            for line in trailer_lines:
-                if not line.startswith((" ", "\t")) and not TRAILER_PATTERN.fullmatch(line):
-                    violations.append(
-                        f"{sha}: non-trailer text in terminal trailer paragraph '{line}'"
-                    )
+        violations.extend(_paragraph_violations(sha, body))
         for key, value in terminal_trailers(body):
-            norm_key = key.lower().replace(" ", "-")
-            if norm_key == "co-authored-by":
-                match = COAUTHOR_PATTERN.fullmatch(value.strip())
-                if not match:
-                    violations.append(f"{sha}: malformed co-author trailer")
-                    continue
-                name = match.group("name").strip()
-                email = match.group("email")
-                if not email and name:
-                    continue
-                if email and (name, email) in APPROVED_HUMAN_COAUTHORS:
-                    continue
-                violations.append(f"{sha}: unapproved co-author trailer for '{name}'")
-            elif norm_key == "assisted-by":
-                stripped = value.strip()
-                if not stripped:
-                    violations.append(f"{sha}: malformed assisted-by trailer")
-                    continue
-                match = COAUTHOR_PATTERN.fullmatch(stripped)
-                if not match or not match.group("name").strip():
-                    violations.append(f"{sha}: malformed assisted-by trailer")
-                    continue
-                if match.group("email"):
-                    violations.append(
-                        f"{sha}: assisted-by trailer must not include an email"
-                    )
+            check = TRAILER_CHECKS.get(key.lower().replace(" ", "-"))
+            finding = check(sha, value) if check else ""
+            if finding:
+                violations.append(finding)
     return violations
 
 
@@ -126,14 +149,14 @@ def _git_log(repository: str, base: str, head: str) -> list[dict]:
     for sha in shas:
         metadata = run_git(
             repository,
-            ["show", "--no-ext-diff", "--no-patch", f"--format=%H%x00%B",
+            ["show", "--no-ext-diff", "--no-patch", "--format=%H%x00%B",
              "--end-of-options", sha],
             check=True,
             runner=subprocess.run,
             timeout=30,
         ).stdout
         fields = metadata.split("\x00", 1)
-        if len(fields) != 2 or fields[0] != sha:
+        if len(fields) != SHA_MESSAGE_FIELDS or fields[0] != sha:
             raise ValueError("git returned malformed commit metadata")
         if len(fields[1].encode("utf-8")) > MAX_MESSAGE_BYTES:
             raise ValueError("commit message exceeds the supported limit")

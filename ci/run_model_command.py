@@ -29,6 +29,9 @@ FORWARDED_ENVIRONMENT = {
     "TMP",
 }
 
+# A model call command is an interpreter and one script path.
+MODEL_COMMAND_TOKENS = 2
+
 
 def parse_command(command: str) -> list[str]:
     """Parse a Python script command and reject shell syntax."""
@@ -38,7 +41,7 @@ def parse_command(command: str) -> list[str]:
         arguments = shlex.split(command, posix=True)
     except ValueError as error:
         raise ValueError("model_call_command has invalid quoting") from error
-    if len(arguments) != 2 or arguments[0] not in {"python", "python3"}:
+    if len(arguments) != MODEL_COMMAND_TOKENS or arguments[0] not in {"python", "python3"}:
         raise ValueError("model_call_command must name one Python script")
     if "\\" in arguments[1]:
         raise ValueError("model_call_command must use a repository-relative path")

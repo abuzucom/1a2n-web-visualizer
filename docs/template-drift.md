@@ -45,6 +45,34 @@ checks run from `.github/workflows/checks.yml` instead. This adoption
 holds back the template tests that assert the template's own workflow files,
 Makefile, and pre-commit wiring. Those tests arrive with that wiring.
 
+### Lint and code-scanning fixes in template files
+
+True drift. The repository lints every Python file under `pyproject.toml`
+(`E`, `F`, `W`, `B`, `C90`, `PLR`, `FIX`, `RET`, `BLE`). The template files at
+`848d069` carry 152 findings under those rules. This repository carries local
+fixes:
+
+- Named constants replace magic values.
+- Complex functions split into named helpers. Decision tables replace long
+  `if` chains in the gates.
+- Blind `except` clauses name the exception types each handler covers.
+- `scripts/trusted_git.py` `run_git` takes its keyword options through one
+  validated mapping. Every existing call keeps working.
+- `scripts/check_hook_coverage.py` `run_test_shard` takes the root and
+  environment as one `location` argument. `tests/test_shard_priority.py`
+  follows that signature.
+- Test files move `sys.path` imports to `importlib.import_module` and wrap two
+  long lines. No assertion changes.
+- `_MarkedMapping` in `check_dockerfile_root.py` and
+  `check_persist_credentials.py` defines `__eq__` over its contents.
+
+Every gate verdict over the 3,900 string literals in `tests/` matches the
+pre-change verdicts. `shared-files.json` and `hook-coverage-baseline.json`
+record the changed files. `scripts/check_pr_review_response.py`, `ci/call_model.py`, and
+`ci/run_model_command.py` also differ from foucault 3.3.14 by named constants.
+`tests/test_foucault_review_wiring.py` pins the current digest of each file.
+Upstreaming these fixes to `abuzucom/agents` needs a separate issue.
+
 ### Checkers and tests this repository holds alone
 
 `scripts/check_protected_files.py` and `scripts/jira_sync.py` have no template

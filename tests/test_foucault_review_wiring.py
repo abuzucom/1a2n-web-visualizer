@@ -27,22 +27,24 @@ CI_ADAPTER_FILES = (
     "scripts/check_pr_review_response.py",
 )
 
-# SHA-256 of each file at the pinned foucault revision, line endings normalized.
+# SHA-256 of each adapter file, line endings normalized. ci/call_model.py,
+# ci/run_model_command.py, and scripts/check_pr_review_response.py carry
+# local lint fixes over foucault 3.3.14 (see docs/template-drift.md).
 ADAPTER_DIGESTS = {
     "ci/build_pr_case.py": (
         "5af5b24708f7d3c5ce0c07b84e6627d3a6b5f7151a57f2b07569553e941e7223"
     ),
     "ci/run_model_command.py": (
-        "494cb0bfd49b6d490c87f009a0b252cb988c2fa74c1a6efe11435e72173899e5"
+        "36b04d0514430cb3b6330c2c69a63a88aa161dc5fb11e01dbe91fbcac8aa73fe"
     ),
     "ci/call_model.py": (
-        "d34955c1428b9c3e7c9ef90ebeadab7995a557101af9e0cd92a34e209696c2b6"
+        "9075cdd498e252967d0cb806848efb2edf800f49dc40a6ddc5f6026cb518dd23"
     ),
     "ci/model_providers.json": (
         "9544f1a5cd6602cb1114b482b200fd286cdfcdb17a918034499534e6e124db06"
     ),
     "scripts/check_pr_review_response.py": (
-        "d96f3f356821e3d123d0cfbf2bff322fee086e6a45f3665c6ca85f803c386a27"
+        "2037854faf4ced5908d2cddfc217fa05dcff12b9422a80ca3eb79325e90160ac"
     ),
 }
 

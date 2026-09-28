@@ -97,6 +97,10 @@ NUMBERED_NOREPLY = re.compile(
     re.IGNORECASE,
 )
 
+# Fields in the NUL-separated git log records this checker reads.
+SHA_AUTHOR_COMMITTER_FIELDS = 3
+IDENTITY_CANDIDATE_FIELDS = 4
+
 
 def _standalone_resolve_git(repo) -> str:
     """Resolve trusted Git when this portable checker was copied alone."""
@@ -105,30 +109,44 @@ def _standalone_resolve_git(repo) -> str:
         os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     names = ("git.exe", "git.com") if os.name == "nt" else ("git",)
     for raw_directory in os.environ.get("PATH", "").split(os.pathsep):
-        if not raw_directory:
-            continue
         directory = Path(raw_directory.strip('"'))
-        if not directory.is_absolute():
+        if not raw_directory or not directory.is_absolute():
             continue
         for name in names:
-            candidate = directory / name
-            try:
-                Path(os.path.abspath(candidate)).relative_to(repository)
-                continue
-            except ValueError:
-                pass
-            try:
-                if candidate.is_symlink() or not candidate.is_file():
-                    continue
-                executable = candidate.resolve(strict=True)
-                executable.relative_to(repository)
-                continue
-            except ValueError:
-                if os.name == "nt" or os.access(executable, os.X_OK):
-                    return str(executable)
-            except OSError:
-                continue
+            executable = _external_executable(directory / name, repository)
+            if executable:
+                return executable
     raise FileNotFoundError("trusted Git executable was not found on PATH")
+
+
+def _is_within(path: Path, directory: Path) -> bool:
+    """Return whether `path` lies inside `directory`."""
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
+
+
+def _external_executable(candidate: Path, repository: Path) -> str:
+    """Return one PATH candidate as a trusted Git path, or an empty string.
+
+    A candidate inside the repository, before or after resolution, is
+    repository-controlled and never trusted.
+    """
+    if _is_within(Path(os.path.abspath(candidate)), repository):
+        return ""
+    try:
+        if candidate.is_symlink() or not candidate.is_file():
+            return ""
+        executable = candidate.resolve(strict=True)
+    except OSError:
+        return ""
+    if _is_within(executable, repository):
+        return ""
+    if os.name == "nt" or os.access(executable, os.X_OK):
+        return str(executable)
+    return ""
 
 
 def _standalone_safe_directory(repository: Path, executable: Path) -> str:
@@ -277,7 +295,7 @@ def log_identities(revisions: list, repo=None) -> list:
         if not line:
             continue
         fields = line.split("\x00")
-        if len(fields) != 3 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+        if len(fields) != SHA_AUTHOR_COMMITTER_FIELDS or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
             raise ValueError("git log returned malformed identity metadata")
         sha, author_email, committer_email = fields
         identities.append(
@@ -354,7 +372,7 @@ def history_identity_candidates(repo=None) -> list:
     seen = set()
     for line in result.stdout.splitlines():
         fields = line.split("\x00")
-        if len(fields) != 4:
+        if len(fields) != IDENTITY_CANDIDATE_FIELDS:
             raise ValueError("git log returned malformed identity candidates")
         for name, email in ((fields[0], fields[1]), (fields[2], fields[3])):
             candidate = (name.strip(), email.strip())
@@ -503,26 +521,40 @@ def _print_advisories(identities: list, repo=None) -> None:
             print(note)
 
 
-def main() -> int:
-    parser = build_parser()
-    args = parser.parse_args()
+def _validate_arguments(parser: argparse.ArgumentParser, args) -> None:
+    """Reject mode combinations the checker cannot validate."""
     if bool(args.base) != bool(args.head):
         parser.error("--base and --head must be given together")
     if args.strict and args.base:
         parser.error("--strict cannot validate a commit range")
     if args.strict and args.allow:
         parser.error("--strict cannot be combined with --allow")
-    pattern = re.compile(args.allow) if args.allow else NOREPLY
 
+
+def _load_identities(args) -> list | None:
+    """Return selected identities, or None after reporting a Git failure."""
     try:
         identities = select_identities(args)
         if args.advise:
             _print_advisories(identities, args.repo)
     except (subprocess.CalledProcessError, UnicodeError, ValueError) as error:
         print(f"error: git log failed: {error}", file=sys.stderr)
-        return 1
+        return None
     except OSError as error:
         print(f"error: git is unavailable: {error}", file=sys.stderr)
+        return None
+    return identities
+
+
+def main() -> int:
+    """Check commit identities and return a process exit code."""
+    parser = build_parser()
+    args = parser.parse_args()
+    _validate_arguments(parser, args)
+    pattern = re.compile(args.allow) if args.allow else NOREPLY
+
+    identities = _load_identities(args)
+    if identities is None:
         return 1
 
     violations = find_violations(identities, pattern)
