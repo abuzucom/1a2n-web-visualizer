@@ -36,3 +36,4 @@ docs/project-orientation.md @itsjustatank
 shared-files.json @itsjustatank
 hook-coverage-baseline.json @itsjustatank
 requirements-checkers.txt @itsjustatank
+ci/** @itsjustatank

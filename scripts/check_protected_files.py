@@ -37,6 +37,8 @@ PROTECTED_PREFIXES = (
     ".agents/",
     "docs/agent-policy/",
     "docs/project-orientation.md",
+    # The security review runs these adapters with the provider secret.
+    "ci/",
 )
 PROTECTED_FILES = {
     "package.json", "package-lock.json", "Dockerfile", "docker-compose.yml",

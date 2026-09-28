@@ -325,6 +325,11 @@ not the other fails the other's suite.
 | `scripts/check_external_pr_refs.py` | No external repository cross-references (Rule 17) | Yes |
 | `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Wired into CI against `README.md`, `CHANGELOG.md`, `SECURITY.md`, and `docs/`. It reads prose, so a table delimiter row, a list marker, and an inline code span spanning two lines are excluded from the dash rule rather than rewritten |
 
+After `Checks` completes, `.github/workflows/security-review-pr.yml` runs the
+`abuzucom/foucault` model security review on each same-repository pull
+request and fails on a `BLOCK` or `NEEDS-HUMAN` verdict. See
+[`docs/pr-security-review.md`](docs/pr-security-review.md).
+
 Protected-file review runs from the trusted default branch through
 `.github/workflows/protected-files.yml`. It covers agent instructions,
 automation, dependencies, deployment files, runtime code, and vendored code.

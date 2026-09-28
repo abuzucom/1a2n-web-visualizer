@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.14.0] (2026-09-28)
+
+### Added
+- Added the `abuzucom/foucault` pull request security review:
+  `.github/workflows/security-review-pr.yml` runs after `Checks` and calls
+  the reusable foucault workflow pinned to release 3.3.14. `BLOCK` and
+  `NEEDS-HUMAN` verdicts fail the `security-review` check. Fork pull
+  requests get no provider secret.
+- Added the verbatim foucault adapters under `ci/` and
+  `tests/test_foucault_review_wiring.py`, which checks the pins, the secret
+  mapping, and each adapter's digest.
+- Added `ci/` to the protected-file review and `CODEOWNERS`. Documented the
+  wiring in `docs/pr-security-review.md`.
+
 ## [1.13.0] (2026-09-28)
 
 ### Changed

@@ -53,6 +53,14 @@ server-side backstop for edits to `hooks/`, `.claude/`, `.codex/`, `.gemini/`,
 `.agents/`, and `docs/agent-policy/` is this repository's own, through
 [`protected-file-review.md`](protected-file-review.md).
 
+### `tests/test_foucault_review_wiring.py`
+
+Expected to differ. The template's `tests/test_security_review_wiring.py`
+pins that repository's foucault revision and trigger workflow. This
+repository adapts it under a new name with its own pin, its `Checks`
+trigger, and digest checks for the copied adapters. The template file is
+not adopted.
+
 ## Changing a template file here
 
 Record the change above. Open an issue in `abuzucom/agents` naming the file,
