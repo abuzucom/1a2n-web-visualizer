@@ -69,9 +69,8 @@ fixes:
 Every gate verdict over the 3,900 string literals in `tests/` matches the
 pre-change verdicts. `shared-files.json` and `hook-coverage-baseline.json`
 record the changed files. `scripts/check_pr_review_response.py` also differs
-from foucault 3.3.14 and carries this repository's digest in
-`tests/test_foucault_review_wiring.py`. An `abuzucom/agents` issue proposes the
-same fixes upstream.
+from foucault 3.3.14 by one named constant. Upstreaming these fixes to
+`abuzucom/agents` needs a separate issue.
 
 ### Checkers and tests this repository holds alone
 
