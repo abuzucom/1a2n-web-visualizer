@@ -652,9 +652,9 @@ class WiringTest(unittest.TestCase):
         )
         self.assertIn(expected, content)
 
-    def test_immutable_workflow_uses_only_the_base_checker(self):
+    def test_immutable_workflow_uses_pinned_external_checker(self):
         content = IMMUTABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
-        self.assertEqual(_workflow_events(content), {"pull_request_target"})
+        self.assertEqual(_workflow_events(content), {"pull_request"})
         self.assertIn("edited", content)
         self.assertRegex(
             content,
@@ -663,9 +663,12 @@ class WiringTest(unittest.TestCase):
         self.assertIn("ref: ${{ env.PR_BASE_SHA }}", content)
         self.assertIn("ref: ${{ env.PR_HEAD_SHA }}", content)
         self.assertIn("path: trusted-base", content)
+        self.assertIn("repository: abuzucom/agents", content)
+        self.assertIn("ref: 868023434592f232f4f1b250cf3855428f5aab1f", content)
+        self.assertIn("path: trusted-checker", content)
         self.assertIn("path: pr-head", content)
         self.assertIn(
-            "TRUSTED_CHECKER: trusted-base/scripts/check_compliance_tree.py",
+            "TRUSTED_CHECKER: trusted-checker/scripts/check_compliance_tree.py",
             content,
         )
         self.assertIn('python "$TRUSTED_CHECKER"', content)
@@ -712,10 +715,13 @@ class WiringTest(unittest.TestCase):
             r"(?m)^\s+[a-z-]+:\s*(?:write|write-all)\s*$",
         )
 
-    def test_security_jobs_use_trusted_base_checkers(self):
+    def test_security_jobs_use_pinned_external_checkers(self):
         content = IMMUTABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
         block = _workflow_jobs(content)["immutable-compliance"]
         self.assertIn("path: trusted-base", block)
+        self.assertIn("repository: abuzucom/agents", block)
+        self.assertIn("ref: 868023434592f232f4f1b250cf3855428f5aab1f", block)
+        self.assertIn("path: trusted-checker", block)
         self.assertIn("path: pr-head", block)
         self.assertIn('python "$TRUSTED_CHECKER"', block)
         self.assertIn('--repo "$PR_REPO" --tree "$PR_HEAD_SHA"', block)

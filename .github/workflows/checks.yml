@@ -212,13 +212,15 @@ jobs:
       - name: Convert JS coverage to Cobertura
         run: python3 -m lcov_cobertura coverage.lcov --output coverage-js.xml
 
-      - name: Run Python unit tests with coverage
+      - name: Run Python unit tests
         # scripts/run_tests.py isolates each test class in its own process, so
         # a module-level global in one suite cannot leak into another.
-        run: python3 -m coverage run scripts/run_tests.py
+        run: python3 scripts/run_tests.py
 
-      - name: Combine Python coverage data
-        run: python3 -m coverage combine
+      - name: Measure Python unit test coverage
+        # One in-process run. Tracing child processes would attach a tracer
+        # that tests/test_check_hook_coverage.py asserts is absent.
+        run: python3 -m coverage run -m unittest discover -s tests
 
       - name: Generate Python Cobertura report
         run: python3 -m coverage xml -o coverage-python.xml

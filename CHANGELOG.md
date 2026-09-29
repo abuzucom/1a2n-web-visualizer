@@ -19,6 +19,46 @@ All notable changes to this project are documented here. Format loosely follows
 - Added `ci/` to the protected-file review and `CODEOWNERS`. Documented the
   wiring in `docs/pr-security-review.md`.
 
+## [1.13.6] (2026-09-28)
+
+### Fixed
+- Gated Python unit tests on `scripts/run_tests.py` and measured coverage in
+  one process. Subprocess coverage tracing conflicted with the hook coverage
+  tracer-scope test.
+- Scoped the `tempfile.tempdir` override in `tests/test_trusted_gh.py` to
+  that module.
+
+## [1.13.5] (2026-09-28)
+
+### Fixed
+- Restored full gate decision reasons in hook prompts and denials.
+
+## [1.13.4] (2026-09-28)
+
+### Fixed
+- Removed the Jira pull request workflow.
+- Moved protected-file review to an unprivileged pull request trigger.
+- Bound immutable scanner bootstrap to the approved pinned source checkout.
+
+## [1.13.3] (2026-09-28)
+
+### Fixed
+- Bootstrapped immutable compliance from the pinned `abuzucom/agents` scanner
+  while the target base lacks the scanner.
+
+## [1.13.2] (2026-09-28)
+
+### Fixed
+- Preserved the fixed protected-value diagnostic for malformed CMD payloads.
+
+## [1.13.1] (2026-09-28)
+
+### Fixed
+- Moved immutable compliance to an unprivileged pull request trigger and kept
+  checker setup pinned without reading a pull request dependency manifest.
+- Replaced untrusted gate diagnostics with fixed safe labels while preserving
+  branch-correction and unsafe Git configuration diagnostics.
+
 ## [1.13.0] (2026-09-28)
 
 ### Changed

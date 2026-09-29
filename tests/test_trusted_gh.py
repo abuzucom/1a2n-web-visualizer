@@ -15,11 +15,23 @@ from unittest.mock import patch
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
-# The managed Windows runner applies unstable inherited ACLs under the system
-# temp directory. Keep test fixtures inside the writable checkout instead.
-tempfile.tempdir = str(REPOSITORY_ROOT)
-
 trusted_gh = importlib.import_module("trusted_gh")
+_ORIGINAL_TEMPDIR = tempfile.tempdir
+
+
+def setUpModule() -> None:
+    """Keep this module's fixtures inside the writable checkout.
+
+    The managed Windows runner applies unstable inherited ACLs under the
+    system temp directory. The override stays scoped to this module so a
+    single-process test run does not move other suites' fixtures.
+    """
+    tempfile.tempdir = str(REPOSITORY_ROOT)
+
+
+def tearDownModule() -> None:
+    """Restore the temp directory other test modules use."""
+    tempfile.tempdir = _ORIGINAL_TEMPDIR
 
 
 class AccountParsingTest(unittest.TestCase):

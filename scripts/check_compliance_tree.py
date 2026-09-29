@@ -25,10 +25,10 @@ CODE_SUFFIXES = {
     ".jsx", ".mjs", ".php", ".py", ".pyw", ".rb", ".rs", ".ts",
     ".tsx",
 }
-TRUSTED_REQUIREMENTS_COMMAND = (
-    "python -m pip install --requirement "
-    "trusted-base/requirements-checkers.txt"
-)
+TRUSTED_YAML_COMMAND = "python -m pip install PyYAML==6.0.3"
+TRUSTED_CHECKER_REPOSITORY = "abuzucom/agents"
+TRUSTED_CHECKER_REF = "868023434592f232f4f1b250cf3855428f5aab1f"
+TRUSTED_CHECKER_PATH = "trusted-checker"
 TRUSTED_SCAN_COMMAND = (
     'python "$TRUSTED_CHECKER" --repo "$PR_REPO" --tree "$PR_HEAD_SHA" '
     '--base "$PR_BASE_SHA" --branch "$PR_HEAD_BRANCH" '
@@ -46,7 +46,7 @@ TRUSTED_ENVIRONMENT = {
     "PR_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
     "PR_AUTHOR": "${{ github.event.pull_request.user.login }}",
     "PR_REPO": "pr-head",
-    "TRUSTED_CHECKER": "trusted-base/scripts/check_compliance_tree.py",
+    "TRUSTED_CHECKER": f"{TRUSTED_CHECKER_PATH}/scripts/check_compliance_tree.py",
     "GIT_ALTERNATE_OBJECT_DIRECTORIES": (
         "${{ github.workspace }}/trusted-base/.git/objects"
     ),
@@ -80,8 +80,9 @@ UTF32_UNIT_BYTES = 4
 UTF32_HIGH_NUL_RATIO = 0.6
 UTF16_HIGH_NUL_RATIO = 0.4
 LOW_NUL_RATIO = 0.2
-# The trusted immutable-compliance job has exactly five steps.
-IMMUTABLE_JOB_STEP_COUNT = 5
+# The trusted immutable-compliance job has exactly six steps.
+IMMUTABLE_JOB_STEP_COUNT = 6
+PYTHON_STEP_INDEX = 3
 
 
 def _sanitize(value: object) -> str:
@@ -463,14 +464,14 @@ def _action_violations(document: object, path: str) -> list[str]:
     return violations
 
 
-def _pull_target_trigger(document: dict) -> bool:
-    """Return whether a workflow declares pull_request_target."""
+def _has_workflow_trigger(document: dict, event: str) -> bool:
+    """Return whether a workflow declares one exact trigger event."""
     trigger = document.get("on", document.get(True))
     if isinstance(trigger, str):
-        return trigger == "pull_request_target"
+        return trigger == event
     if isinstance(trigger, list):
-        return "pull_request_target" in trigger
-    return isinstance(trigger, dict) and "pull_request_target" in trigger
+        return event in trigger
+    return isinstance(trigger, dict) and event in trigger
 
 
 def _checkout_step(base: bool) -> dict:
@@ -490,10 +491,26 @@ def _checkout_step(base: bool) -> dict:
     }
 
 
+def _trusted_checker_step() -> dict:
+    """Return the exact immutable scanner checkout step."""
+    return {
+        "name": "Check out the pinned immutable scanner",
+        "uses": CHECKOUT_ACTION,
+        "with": {
+            "repository": TRUSTED_CHECKER_REPOSITORY,
+            "ref": TRUSTED_CHECKER_REF,
+            "path": TRUSTED_CHECKER_PATH,
+            "persist-credentials": False,
+            "fetch-depth": 1,
+        },
+    }
+
+
 def _trusted_steps() -> list[dict]:
     """Return the exact privileged step sequence allowed for promotion."""
     return [
         _checkout_step(True),
+        _trusted_checker_step(),
         _checkout_step(False),
         {
             "name": "Set up Python",
@@ -501,8 +518,8 @@ def _trusted_steps() -> list[dict]:
             "with": {"python-version": "3.x"},
         },
         {
-            "name": "Install trusted checker dependencies",
-            "run": TRUSTED_REQUIREMENTS_COMMAND,
+            "name": "Install pinned YAML dependency",
+            "run": TRUSTED_YAML_COMMAND,
         },
         {
             "name": "Scan immutable pull request objects with the trusted checker",
@@ -513,8 +530,14 @@ def _trusted_steps() -> list[dict]:
 
 
 def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
-    """Require the exact closed privileged workflow execution surface."""
-    if not _pull_target_trigger(document):
+    """Require the exact trusted immutable workflow execution surface."""
+    is_target_workflow = _has_workflow_trigger(document, "pull_request_target")
+    jobs = document.get("jobs")
+    is_immutable_workflow = (
+        isinstance(jobs, dict) and "immutable-compliance" in jobs
+    )
+    is_pull_request_workflow = _has_workflow_trigger(document, "pull_request")
+    if not is_target_workflow and not (is_immutable_workflow and is_pull_request_workflow):
         return []
     expected_job = {
         "runs-on": "ubuntu-latest",
@@ -528,7 +551,7 @@ def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
         candidate_job = dict(candidate_job)
         candidate_steps = candidate_job.get("steps")
         if isinstance(candidate_steps, list) and len(candidate_steps) == IMMUTABLE_JOB_STEP_COUNT:
-            python_step = candidate_steps[2]
+            python_step = candidate_steps[PYTHON_STEP_INDEX]
             version = (python_step.get("with", {}).get("python-version")
                        if isinstance(python_step, dict)
                        else None)
@@ -537,11 +560,13 @@ def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
                 candidate_steps = list(candidate_steps)
                 python_step = dict(python_step)
                 python_step["with"] = {"python-version": version_text}
-                candidate_steps[2] = python_step
+                candidate_steps[PYTHON_STEP_INDEX] = python_step
                 candidate_job["steps"] = candidate_steps
                 trusted_steps = _trusted_steps()
-                trusted_steps[2] = dict(trusted_steps[2])
-                trusted_steps[2]["with"] = {"python-version": version_text}
+                trusted_steps[PYTHON_STEP_INDEX] = dict(
+                    trusted_steps[PYTHON_STEP_INDEX])
+                trusted_steps[PYTHON_STEP_INDEX]["with"] = {
+                    "python-version": version_text}
                 trusted_job["steps"] = trusted_steps
     candidate_jobs = dict(raw_jobs) if isinstance(raw_jobs, dict) else {}
     if isinstance(candidate_job, dict):
