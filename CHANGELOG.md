@@ -17,6 +17,9 @@ All notable changes to this project are documented here. Format loosely follows
 - Bumped `actions/setup-java` from 6.0.0 to 6.0.1 in
   `.github/workflows/checks.yml` and `actions/deploy-pages` from 5.0.0 to
   5.0.1 in `.github/workflows/deploy.yml`, both pinned to full commit SHAs.
+- Added `tests/test_workflow_action_pins.py`. It runs the action pin checker
+  over every real workflow and requires the Pages deploy retry to use the
+  same `actions/deploy-pages` revision as the first attempt.
 
 ## [1.14.0] (2026-09-28)
 
