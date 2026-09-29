@@ -6,10 +6,10 @@ from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import check_action_pins
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 DEPLOY_WORKFLOW = WORKFLOW_DIR / "deploy.yml"
 DEPLOY_PAGES_ACTION = "actions/deploy-pages@"
