@@ -19,6 +19,12 @@ All notable changes to this project are documented here. Format loosely follows
 - Added `ci/` to the protected-file review and `CODEOWNERS`. Documented the
   wiring in `docs/pr-security-review.md`.
 
+## [1.13.8] (2026-09-29)
+
+### Changed
+- Replaced a `--` dash substitute in a `.github/workflows/checks.yml`
+  comment with a sentence break.
+
 ## [1.13.7] (2026-09-29)
 
 ### Security
