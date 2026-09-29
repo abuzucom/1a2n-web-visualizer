@@ -19,6 +19,16 @@ All notable changes to this project are documented here. Format loosely follows
 - Added `ci/` to the protected-file review and `CODEOWNERS`. Documented the
   wiring in `docs/pr-security-review.md`.
 
+## [1.13.7] (2026-09-29)
+
+### Security
+- Stopped expanding `github.head_ref` into the `branch-name` job's shell
+  script in `.github/workflows/checks.yml`. A branch name with shell syntax
+  could run commands on the runner. `scripts/check_branch_name.py` reads
+  `GITHUB_HEAD_REF` from the environment instead.
+- Added `tests/test_workflow_script_injection.py`, which rejects pull
+  request controlled expressions inside any workflow `run:` script.
+
 ## [1.13.6] (2026-09-28)
 
 ### Fixed
