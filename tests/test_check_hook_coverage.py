@@ -11,6 +11,8 @@ this check exists to prevent, so the failing directions are pinned first.
 import ast
 import io
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -104,6 +106,49 @@ class TracedLineFileTest(unittest.TestCase):
 
             self.assertEqual(
                 gate.traced_lines(out_dir), {(path, 7), (path, 11)})
+
+
+class TracerScopeTest(unittest.TestCase):
+    """The subprocess tracer limits instrumentation to hook source."""
+
+    def test_target_lines_do_not_require_global_line_tracing(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            target = root_path / "hooks"
+            output = root_path / "trace-output"
+            target.mkdir()
+            output.mkdir()
+            module = target / "sample_hook.py"
+            module.write_text(
+                "import sys\n\ndef traced():\n"
+                "    return sys._getframe().f_trace is None\n",
+                encoding="utf-8",
+            )
+            probe = root_path / "probe.py"
+            probe.write_text(
+                "import sys\nimport sample_hook\n"
+                "print(sys._getframe().f_trace is None)\n"
+                "print(sample_hook.traced())\n",
+                encoding="utf-8",
+            )
+            environment = dict(os.environ)
+            tracer = REPO_ROOT / "tools" / "hook-trace"
+            environment["PYTHONPATH"] = os.pathsep.join((str(tracer), str(target)))
+            environment["HOOK_COVERAGE_TARGET"] = str(target)
+            environment["HOOK_COVERAGE_OUT"] = str(output)
+            result = subprocess.run(
+                [sys.executable, str(probe)],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            target_has_no_trace = str(hasattr(sys, "monitoring"))
+            self.assertEqual(result.stdout.splitlines(), ["True", target_has_no_trace])
+            self.assertTrue(any(path == str(module) for path, _line in gate.traced_lines(output)))
 
 
 class BaselineFileTest(unittest.TestCase):

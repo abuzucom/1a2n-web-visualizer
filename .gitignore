@@ -44,3 +44,6 @@ coverage.lcov
 coverage-js.xml
 coverage-python.xml
 .coverage
+
+# Gate adoption staging (scripts/complete_gate_adoption.py)
+.gate-staging/

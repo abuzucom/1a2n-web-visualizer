@@ -4,13 +4,108 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.13.8] (2026-09-29)
+
+### Changed
+- Replaced a `--` dash substitute in a `.github/workflows/checks.yml`
+  comment with a sentence break.
+
+## [1.13.7] (2026-09-29)
+
+### Security
+- Stopped expanding `github.head_ref` into the `branch-name` job's shell
+  script in `.github/workflows/checks.yml`. A branch name with shell syntax
+  could run commands on the runner. `scripts/check_branch_name.py` reads
+  `GITHUB_HEAD_REF` from the environment instead.
+- Added `tests/test_workflow_script_injection.py`, which rejects pull
+  request controlled expressions inside any workflow `run:` script.
+
+## [1.13.6] (2026-09-28)
+
+### Fixed
+- Gated Python unit tests on `scripts/run_tests.py` and measured coverage in
+  one process. Subprocess coverage tracing conflicted with the hook coverage
+  tracer-scope test.
+- Scoped the `tempfile.tempdir` override in `tests/test_trusted_gh.py` to
+  that module.
+
+## [1.13.5] (2026-09-28)
+
+### Fixed
+- Restored full gate decision reasons in hook prompts and denials.
+
+## [1.13.4] (2026-09-28)
+
+### Fixed
+- Removed the Jira pull request workflow.
+- Moved protected-file review to an unprivileged pull request trigger.
+- Bound immutable scanner bootstrap to the approved pinned source checkout.
+
+## [1.13.3] (2026-09-28)
+
+### Fixed
+- Bootstrapped immutable compliance from the pinned `abuzucom/agents` scanner
+  while the target base lacks the scanner.
+
+## [1.13.2] (2026-09-28)
+
+### Fixed
+- Preserved the fixed protected-value diagnostic for malformed CMD payloads.
+
+## [1.13.1] (2026-09-28)
+
+### Fixed
+- Moved immutable compliance to an unprivileged pull request trigger and kept
+  checker setup pinned without reading a pull request dependency manifest.
+- Replaced untrusted gate diagnostics with fixed safe labels while preserving
+  branch-correction and unsafe Git configuration diagnostics.
+
+## [1.13.0] (2026-09-28)
+
+### Changed
+- Re-adopted the `abuzucom/agents` template whole at commit `848d069`:
+  `AGENTS.md`, `docs/agent-policy/*.md`, every file under `scripts/` and
+  `hooks/`, the matching tests, `shared-files.json`, and the hook-coverage
+  baseline. `scripts/sync.py` now assembles the eight policy copies from
+  `AGENTS.md`, `docs/agent-policy/*.md`, and `docs/project-orientation.md`.
+- Moved the repository orientation (commands, protected paths, architecture,
+  gotchas) from `AGENTS.md` to `docs/repo-guide.md`. The assembled policy has
+  a 64 KiB limit that the template alone nearly fills.
+  `docs/project-orientation.md` points agents at the guide and names the
+  generated paths that must never be hand-edited.
+- Replaced `scripts/check_action_pins.py` and its tests with the template
+  versions.
+- Dated the version headings from 1.8.0 through 1.12.1 and versioned the
+  orphaned unreleased block as 1.7.2, as `scripts/check_changelog.py`
+  requires.
+
+### Added
+- Registered the branch, identity, gate-adoption, infrastructure, CMD, and
+  policy-reinjection hooks for Claude Code, Codex, Gemini, and Antigravity
+  (`.claude/settings.json`, `.codex/`, `.gemini/settings.json`,
+  `.agents/hooks.json`), installed as one transaction by
+  `scripts/complete_gate_adoption.py`.
+- Added `requirements-checkers.txt` pinning `PyYAML==6.0.3` for the YAML-based
+  checkers, and CI steps for gate adoption, hook launchers, policy size,
+  changelog versioning, commit identity, commit attribution, and external
+  repository references.
+- Added `plan/HANDOFF.md.example` and `docs/gate-threat-model.md` from the
+  template.
+- Added the template workflows (`sync-check.yml`, `agents-compliance.yml`,
+  `agents-md-compliance.yml`, `immutable-conflict-check.yml`,
+  `gate-integrity.yml`, `dependabot-changelog.yml`) retargeted to `develop`,
+  the Makefile and pre-commit wiring they check, and the 13 wiring tests.
+- Ran the Python suite through `scripts/run_tests.py`, which isolates each test
+  class, and measured coverage across its subprocesses.
+- Fixed the 152 ruff findings and the code-scanning findings in the template
+  files as recorded drift. Every gate verdict over the test corpus is
+  unchanged.
 
 ### Fixed
 - Prevented keyboard shortcut keys from wrapping onto multiple lines in the
   fullscreen and demo help dialogs.
 
-## [1.12.1]
+## [1.12.1] (2026-09-01)
 
 ### Removed
 - 2,134 more presets curated out via `tools/remove_presets.js`: 1,991
@@ -21,7 +116,7 @@ All notable changes to this project are documented here. Format loosely follows
   *Curation* section in the README. Ships 18,224 deduplicated presets now
   (373 vendored + 17,851 from `src/presets-extra/`).
 
-## [1.12.0]
+## [1.12.0] (2026-08-30)
 
 ### Added
 - Imported 421 presets from
@@ -63,7 +158,7 @@ All notable changes to this project are documented here. Format loosely follows
   `src/vendor/butterchurnExtraImagesExp-part-N.js` and
   `experimental-textures.json`.
 
-## [1.11.0]
+## [1.11.0] (2026-08-29)
 
 ### Added
 - Imported 2,173 presets from the "Flexis Mildrop preset collection" folder
@@ -87,7 +182,7 @@ All notable changes to this project are documented here. Format loosely follows
   batch that should stay visually distinct from earlier imports while
   curating can now pass `--exp-prefix "[EXP2] "` instead.
 
-## [1.10.0]
+## [1.10.0] (2026-08-28)
 
 ### Added
 - Remembered the selected audio input across reloads
@@ -135,7 +230,7 @@ All notable changes to this project are documented here. Format loosely follows
   separate deferred scripts, and a missing one turned every device-error path
   into a `TypeError`, in the code whose job is reporting failures.
 
-## [1.9.0]
+## [1.9.0] (2026-08-25)
 
 ### Changed
 - Replaced pickle hook-coverage trace files with validated JSON. Test processes
@@ -368,7 +463,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Documented the new protected paths in `docs/protected-file-review.md` and both
   hooks in the README Security Model section.
 
-## [1.8.1]
+## [1.8.1] (2026-08-03)
 
 ### Fixed
 - Fixed switching the audio input device throwing `NotReadableError: Could not
@@ -382,7 +477,7 @@ All notable changes to this project are documented here. Format loosely follows
   See the new "Exclusive-mode devices (Windows)" section in
   `docs/unattended-operation.md`.
 
-## [1.8.0]
+## [1.8.0] (2026-08-03)
 
 ### Added
 - Kept the visualizer rendering while its window is covered, minimized, or in a
@@ -412,7 +507,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Stopped hyperspeed switching itself off when the page is hidden. The old
   behavior is still available through the new `pauseWhenHidden` option.
 
-## [Unreleased]
+## [1.7.2] (2026-08-03)
 ### Added
 - Added `hooks/_gate_core.py`, which both shell gates and the consent gate import, so a decision has one definition rather than one per gate.
 - Added `hooks/block_destructive_powershell.py` under a `PowerShell` matcher. The Bash matcher covered only Bash, so `Remove-Item -Recurse -Force` on a Windows session met no gate at all.

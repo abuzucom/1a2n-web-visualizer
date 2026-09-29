@@ -95,6 +95,10 @@ class MergeCommitTest(unittest.TestCase):
     def test_conforming_commits_stay_clean(self):
         self.assertEqual(self._violations(self.base), [])
 
+    def test_ci_commit_type_is_allowed(self):
+        self._commit("ci: validate workflow pins", "six.txt")
+        self.assertEqual(self._violations(self.base), [])
+
 
 if __name__ == "__main__":
     unittest.main()

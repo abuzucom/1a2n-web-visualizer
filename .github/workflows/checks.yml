@@ -31,6 +31,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm ci --ignore-scripts
+      - name: Install checker dependencies
+        run: python -m pip install --requirement requirements-checkers.txt
       - name: Run Python tests
         run: npm run test:py
       - name: Run interpreter shim tests
@@ -43,6 +45,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
+      - name: Install checker dependencies
+        run: python3 -m pip install --requirement requirements-checkers.txt
 
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
@@ -93,7 +98,9 @@ jobs:
           persist-credentials: false
 
       - name: Check branch name
-        run: python3 scripts/check_branch_name.py "${{ github.head_ref }}"
+        # check_branch_name.py reads GITHUB_HEAD_REF itself. Expanding
+        # github.head_ref here would let a branch name inject shell syntax.
+        run: python3 scripts/check_branch_name.py
 
   commit-message:
     if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
@@ -118,6 +125,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
+      - name: Install checker dependencies
+        run: python3 -m pip install --requirement requirements-checkers.txt
 
       - name: Check persist-credentials on checkout steps
         run: python3 scripts/check_persist_credentials.py .github/workflows/*.yml
@@ -148,7 +158,7 @@ jobs:
       - name: Install JS dependencies
         # --ignore-scripts: milkdrop-shader-converter's own "install" script
         # (a native C++ compile) would otherwise run before our postinstall
-        # patches it, and fail against Node 22 -- lint doesn't need that
+        # patches it, and fail against Node 22. Lint doesn't need that
         # addon built, only the JS/Python source to exist. See
         # tools/convert-milk-presets.js's header for the real build steps.
         run: npm ci --ignore-scripts
@@ -189,6 +199,9 @@ jobs:
       - name: Install coverage tools
         run: pip install lcov_cobertura coverage
 
+      - name: Install checker dependencies
+        run: python3 -m pip install --requirement requirements-checkers.txt
+
       - name: Run Node unit tests with coverage
         run: |
           node --test --experimental-test-coverage \
@@ -201,7 +214,14 @@ jobs:
       - name: Convert JS coverage to Cobertura
         run: python3 -m lcov_cobertura coverage.lcov --output coverage-js.xml
 
-      - name: Run Python unit tests with coverage
+      - name: Run Python unit tests
+        # scripts/run_tests.py isolates each test class in its own process, so
+        # a module-level global in one suite cannot leak into another.
+        run: python3 scripts/run_tests.py
+
+      - name: Measure Python unit test coverage
+        # One in-process run. Tracing child processes would attach a tracer
+        # that tests/test_check_hook_coverage.py asserts is absent.
         run: python3 -m coverage run -m unittest discover -s tests
 
       - name: Generate Python Cobertura report
