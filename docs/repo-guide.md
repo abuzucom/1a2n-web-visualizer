@@ -105,7 +105,9 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   `develop`; alternatively self-hosted via the included Docker/Caddy config.
   Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff,
   HTML/CSS validation via the Nu Html Checker), `protected-files.yml`
-  (code-owner approval gate, see `docs/protected-file-review.md`), and
+  (code-owner approval gate, see `docs/protected-file-review.md`),
+  `security-review-pr.yml` (foucault model review of each pull request, see
+  `docs/pr-security-review.md`), and
   `jira.yml` (creates and references issues in the Jira `VID` project, see
   `docs/jira-integration.md`).
 

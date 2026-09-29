@@ -68,9 +68,10 @@ fixes:
 
 Every gate verdict over the 3,900 string literals in `tests/` matches the
 pre-change verdicts. `shared-files.json` and `hook-coverage-baseline.json`
-record the changed files. `scripts/check_pr_review_response.py` also differs
-from foucault 3.3.14 by one named constant. Upstreaming these fixes to
-`abuzucom/agents` needs a separate issue.
+record the changed files. `scripts/check_pr_review_response.py`, `ci/call_model.py`, and
+`ci/run_model_command.py` also differ from foucault 3.3.14 by named constants.
+`tests/test_foucault_review_wiring.py` pins the current digest of each file.
+Upstreaming these fixes to `abuzucom/agents` needs a separate issue.
 
 ### Checkers and tests this repository holds alone
 
@@ -79,6 +80,14 @@ counterpart. The template declined `check_protected_files.py`. The
 server-side backstop for edits to `hooks/`, `.claude/`, `.codex/`, `.gemini/`,
 `.agents/`, and `docs/agent-policy/` is this repository's own, through
 [`protected-file-review.md`](protected-file-review.md).
+
+### `tests/test_foucault_review_wiring.py`
+
+Expected to differ. The template's `tests/test_security_review_wiring.py`
+pins that repository's foucault revision and trigger workflow. This
+repository adapts it under a new name with its own pin, its `Checks`
+trigger, and digest checks for the copied adapters. The template file is
+not adopted.
 
 ## Changing a template file here
 
