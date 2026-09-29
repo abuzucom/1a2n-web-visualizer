@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.14.1] (2026-09-29)
+
+### Security
+- Bumped `fast-uri` from 3.1.5 to 3.1.8. The releases fix several host
+  confusion, authority injection, and server-side request forgery
+  advisories. `fast-uri` reaches this repository only as a development
+  dependency of `serve`.
+
+### Changed
+- Bumped `eslint` from 10.9.1 to 10.11.0. `npx eslint .` stays clean.
+- Bumped `actions/setup-java` from 6.0.0 to 6.0.1 in
+  `.github/workflows/checks.yml` and `actions/deploy-pages` from 5.0.0 to
+  5.0.1 in `.github/workflows/deploy.yml`, both pinned to full commit SHAs.
+- Added `tests/test_workflow_action_pins.py`. It runs the action pin checker
+  over every real workflow and requires the Pages deploy retry to use the
+  same `actions/deploy-pages` revision as the first attempt.
+
 ## [1.14.0] (2026-09-28)
 
 ### Added
