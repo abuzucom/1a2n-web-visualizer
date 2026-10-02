@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.14.2] (2026-10-02)
+
+### Changed
+- Added a `push` trigger scoped to `develop` in `.github/workflows/checks.yml`
+  so the default branch produces a Cobertura coverage baseline for
+  comparison. Gated the jobs unrelated to coverage
+  (`tests-windows`, `agents-md-sync`, `static-checks`, `lint`,
+  `validate-presets`, `html-css-validation`) to `pull_request` only so the
+  push trigger runs only the coverage-producing `unit-tests` and
+  `upload-coverage-*` jobs.
+- Untracked the stale committed coverage artifacts (`.coverage`,
+  `coverage.lcov`, `coverage-js.xml`, `coverage-js-new.lcov`,
+  `coverage-python.xml`) that predated this change; `.gitignore` already
+  listed most of them. Added the missing `coverage-js-new.lcov` entry.
+
 ## [1.14.1] (2026-09-29)
 
 ### Security
