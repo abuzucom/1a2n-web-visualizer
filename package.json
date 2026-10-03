@@ -1,6 +1,6 @@
 {
   "name": "butterchurn-visualizer",
-  "version": "1.14.2",
+  "version": "1.15.0",
   "description": "Milkdrop (butterchurn) audio visualizer pages for OBS and standalone browser use.",
   "private": true,
   "scripts": {
@@ -12,6 +12,7 @@
     "test": "npm run test:js && npm run test:py",
     "validate:presets": "node tools/validate-preset-chunks.js",
     "validate:exp": "node tools/validate-experimental-presets.js",
+    "validate:equations": "node tools/run-python.js tools/check_preset_equations.py",
     "postinstall": "patch-package"
   },
   "keywords": [

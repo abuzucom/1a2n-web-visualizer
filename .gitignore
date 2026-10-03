@@ -46,5 +46,8 @@ coverage-js.xml
 coverage-python.xml
 .coverage
 
+# Local GitHub API dumps
+comments.json
+
 # Gate adoption staging (scripts/complete_gate_adoption.py)
 .gate-staging/

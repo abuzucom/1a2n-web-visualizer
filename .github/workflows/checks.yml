@@ -207,7 +207,7 @@ jobs:
           key: pip-${{ runner.os }}-lcov_cobertura-coverage
 
       - name: Install coverage tools
-        run: pip install lcov_cobertura coverage
+        run: pip install lcov_cobertura==2.1.1 coverage==7.16.2
 
       - name: Install checker dependencies
         run: python3 -m pip install --requirement requirements-checkers.txt

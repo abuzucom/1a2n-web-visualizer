@@ -24,6 +24,8 @@ PROTECTED_PREFIXES = (
     "patches/",
     "src/js/",
     "src/vendor/",
+    # The pages load these chunks as scripts and compile their equations.
+    "src/presets-extra/",
     # A test is a recorded decision about what the code must do, and the
     # hooks and settings below are what stop that decision being edited
     # unilaterally. Both need the owner's eyes on the pull request.

@@ -4,6 +4,35 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.15.0] (2026-10-03)
+
+### Security
+- Added `src/presets-extra/` to the protected paths in
+  `scripts/check_protected_files.py` and `.github/CODEOWNERS`. The pages load
+  every chunk as a script. A chunk change now needs owner approval like
+  `src/js/` and `src/vendor/`.
+- Added `tools/check_preset_equations.py`. It tokenizes every compiled preset
+  equation and rejects anything outside the converter vocabulary. It also
+  rejects code outside the JSON payload of each chunk and `index.js`.
+  `npm run validate:equations` runs it. All shipped presets pass.
+- Pinned `lcov_cobertura` 2.1.1 and `coverage` 7.16.2 in
+  `.github/workflows/checks.yml`.
+
+### Added
+- Added `tests/test_protected_preset_chunks.py` and
+  `tests/test_preset_equation_allowlist.py`.
+
+### Removed
+- Removed the committed `comments.json` GitHub API dump. `.gitignore` now
+  lists it.
+
+### Changed
+- `docs/repo-guide.md` records known vendored provenance and the accepted
+  risks from the security review. It drops the missing `jira.yml` workflow.
+- `docs/jira-integration.md` states that only the deployment sync runs.
+- `docs/protected-file-review.md` names the `pull_request` trigger that
+  `protected-files.yml` uses.
+
 ## [1.14.2] (2026-10-02)
 
 ### Changed
