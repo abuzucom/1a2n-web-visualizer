@@ -1,7 +1,10 @@
 # Jira Integration
 
-GitHub Actions links pull requests and successful GitHub Pages deployments to
-Jira Cloud at `https://abuzucom.atlassian.net`, using project `VID`.
+`scripts/jira_sync.py` links pull requests and successful GitHub Pages
+deployments to Jira Cloud at `https://abuzucom.atlassian.net`. It uses
+project `VID`. Only the deployment half runs today. `deploy.yml` calls it
+after each Pages deployment. No workflow in `.github/workflows/` runs the
+pull request half.
 
 ## Secrets
 
@@ -15,6 +18,10 @@ The workflows skip cleanly when either secret is absent, which keeps pull
 requests from forks from failing.
 
 ## Issue Linking
+
+No workflow currently triggers this section. `pr_sync` in
+`scripts/jira_sync.py` and `tests/test_jira_sync.py` keep the behavior below.
+A future pull request workflow must restore the label gate described here.
 
 The pull request workflow runs only after a maintainer applies the `needs-jira`
 label. It searches the branch name, title, body, and commit messages for keys
@@ -39,4 +46,5 @@ default branch. It never executes code from the PR branch with Jira secrets.
 
 The Pages deployment workflow publishes a successful deployment record to
 Jira's deployment API. It associates the deployment with any `VID-*` keys in
-the deployment commit message or ref.
+the deployment commit message, the ref, and the title, body, and branch of
+each pull request associated with the deployed commit.

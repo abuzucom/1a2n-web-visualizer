@@ -17,6 +17,8 @@ guide stays outside the injected policy. Read it before any change.
   before presenting work as finished; fix everything it flags.
 - Tests: `npm test` runs both Node (`npm run test:js`) and Python (`npm run test:py`) unit test suites.
 - Preset validation: `npm run validate:presets` (`node tools/validate-preset-chunks.js`) and `npm run validate:exp` (`node tools/validate-experimental-presets.js`).
+- Equation allowlist: `npm run validate:equations` (`tools/check_preset_equations.py`).
+  Run it after every preset fetch or import.
 - `python3 scripts/sync.py`: assemble AGENTS.md, `docs/agent-policy/*.md`, and
   `docs/project-orientation.md` into the tool-specific copies; `--check` (run
   in CI) verifies without writing, and `--check-shared` verifies the gate files
@@ -61,6 +63,12 @@ guide stays outside the injected policy. Read it before any change.
   rows. Fetch scripts consult it to avoid resurrecting removed presets.
 - Presets already curated out are an intentional editorial choice (see
   README "Curation" section); never restore one as a "fix."
+- Vendored provenance: `CHANGELOG.md` records `butterchurnPresetsExtra`,
+  `butterchurnPresetsExtra2`, and `butterchurnPresetsMD1` from
+  `butterchurn-presets@2.4.7`. It records `butterchurnExtraImages.min.js`
+  from `butterchurn@2.6.7`. No record states the upstream version or SHA-256
+  of `butterchurn.min.js` or `butterchurnPresets.min.js`. Record them before
+  the next vendored update. No check enforces this record.
 
 ## Architecture
 
@@ -107,9 +115,9 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   HTML/CSS validation via the Nu Html Checker), `protected-files.yml`
   (code-owner approval gate, see `docs/protected-file-review.md`),
   `security-review-pr.yml` (foucault model review of each pull request, see
-  `docs/pr-security-review.md`), and
-  `jira.yml` (creates and references issues in the Jira `VID` project, see
-  `docs/jira-integration.md`).
+  `docs/pr-security-review.md`). `deploy.yml` also publishes each Pages
+  deployment to the Jira `VID` project. No workflow runs the pull request
+  half of `jira_sync.py` (see `docs/jira-integration.md`).
 
 ## Gotchas
 
@@ -169,6 +177,15 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   that item's merged `baseVals.enabled` is non-zero (butterchurn's shape and
   wave defaults both carry `enabled: 0`). `tests/test_experimental_equation_fields.py`
   enforces this over the generated experimental chunks.
+- Preset equations are executable code. `tools/check_preset_equations.py`
+  tokenizes every compiled equation field and rejects anything outside the
+  converter vocabulary. The vocabulary covers `a['name']` access, the
+  butterchurn helpers, `Math` members, and the loop forms
+  `milkdrop-eel-parser` emits. The checker also requires each chunk and
+  `index.js` to hold exactly one JSON payload inside its wrapper call.
+  `tests/test_preset_equation_allowlist.py` runs it over the whole corpus.
+  Never widen the allowlist to admit an imported preset. Exclude the preset
+  instead.
 - `validate-experimental-presets.js` and `validate-preset-chunks.js` only
   check JSON shape. Neither one catches a WebGL shader link failure or a
   JS `SyntaxError` in a converted equation, since both only surface when
@@ -235,3 +252,18 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
 - `scripts/check_protected_files.py` is the server-side backstop for edits to
   `hooks/`, `.claude/`, and the other client hook configurations, since a local
   hook cannot vouch for itself.
+
+## Accepted risks
+
+The 1.15.0 security review recorded these findings without a code change.
+
+- `.github/workflows/gate-integrity.yml` falls back to the pull request
+  copy of `scripts/check_gate_pr_integrity.py` when the base revision lacks
+  it. The base branch carries the checker. The fallback therefore never runs.
+  The job holds a read-only token. `docs/agent-policy/enforcement.md`
+  documents the fallback as template behavior. Any change belongs upstream
+  in `abuzucom/agents`.
+- GitHub Pages sends no `X-Frame-Options` header. A `<meta>` CSP cannot set
+  `frame-ancestors`. Another site can therefore frame the hosted pages.
+  Microphone audio never leaves the browser. The Caddy deployment sends
+  `X-Frame-Options: DENY`.

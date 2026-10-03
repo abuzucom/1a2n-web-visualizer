@@ -15,6 +15,9 @@ instruction files, deployment config, and runtime pages, it covers:
   edit or unregister is not a gate. The local hook is the fast guard; this
   check is the authoritative one, because a Bash call can still reach a file
   no `Edit` matcher sees.
+- `src/presets-extra/`: every page loads each chunk as a script. Butterchurn
+  compiles each preset equation with `new Function`. A chunk change is a
+  runtime code change.
 
 ## Owner PRs
 
@@ -28,8 +31,8 @@ Agents should open pull requests using a separate bot or GitHub App identity,
 not `@itsjustatank`'s personal token. Protected-file changes from another
 identity require an approval from `@itsjustatank` on the current commit.
 
-The workflow runs from `pull_request_target`, checks out only the trusted
-default branch, and never executes code from the pull request branch.
+The workflow runs on `pull_request`, checks out only the trusted default
+branch, and never executes code from the pull request branch.
 
 ## Branch Settings
 
