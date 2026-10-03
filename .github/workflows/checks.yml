@@ -5,6 +5,12 @@ name: Checks
 # triggers/permissions and isn't relevant here).
 on:
   pull_request:
+  push:
+    # Pull requests cover PR-branch coverage; this push trigger produces the
+    # default-branch baseline report that coverage comparison needs. Job-level
+    # `if: github.event_name == 'pull_request'` gates keep unrelated jobs from
+    # running here.
+    branches: [develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,6 +21,7 @@ permissions:
 
 jobs:
   tests-windows:
+    if: github.event_name == 'pull_request'
     # The gates run as the launcher named in .claude/settings.json, and only
     # this job can show it resolves on Windows. A hook that fails to start
     # exits non-zero but not 2, which Claude Code treats as a non-blocking
@@ -39,6 +46,7 @@ jobs:
         run: node --test tests/test_run_python.js
 
   agents-md-sync:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -119,6 +127,7 @@ jobs:
             --head "${{ github.event.pull_request.head.sha }}"
 
   static-checks:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -142,6 +151,7 @@ jobs:
         run: python3 scripts/check_secrets_heuristic.py scripts/*.py tools/*.py .github/workflows/*.yml .pre-commit-config.yaml
 
   lint:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -242,6 +252,7 @@ jobs:
           path: coverage-python.xml
 
   validate-presets:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -289,6 +300,7 @@ jobs:
         run: npm run validate:exp
 
   html-css-validation:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -23,9 +23,8 @@ All notable changes to this project are documented here. Format loosely follows
   `tests/test_preset_equation_allowlist.py`.
 
 ### Removed
-- Removed the committed `comments.json`, `.coverage`, `coverage.lcov`,
-  `coverage-js-new.lcov`, `coverage-js.xml`, and `coverage-python.xml`
-  artifacts. `.gitignore` now lists all six.
+- Removed the committed `comments.json` GitHub API dump. `.gitignore` now
+  lists it.
 
 ### Changed
 - `docs/repo-guide.md` records known vendored provenance and the accepted
@@ -33,6 +32,21 @@ All notable changes to this project are documented here. Format loosely follows
 - `docs/jira-integration.md` states that only the deployment sync runs.
 - `docs/protected-file-review.md` names the `pull_request` trigger that
   `protected-files.yml` uses.
+
+## [1.14.2] (2026-10-02)
+
+### Changed
+- Added a `push` trigger scoped to `develop` in `.github/workflows/checks.yml`
+  so the default branch produces a Cobertura coverage baseline for
+  comparison. Gated the jobs unrelated to coverage
+  (`tests-windows`, `agents-md-sync`, `static-checks`, `lint`,
+  `validate-presets`, `html-css-validation`) to `pull_request` only so the
+  push trigger runs only the coverage-producing `unit-tests` and
+  `upload-coverage-*` jobs.
+- Untracked the stale committed coverage artifacts (`.coverage`,
+  `coverage.lcov`, `coverage-js.xml`, `coverage-js-new.lcov`,
+  `coverage-python.xml`) that predated this change; `.gitignore` already
+  listed most of them. Added the missing `coverage-js-new.lcov` entry.
 
 ## [1.14.1] (2026-09-29)
 
