@@ -27,6 +27,7 @@ Caddyfile @itsjustatank
 src/*.html @itsjustatank
 src/js/** @itsjustatank
 src/vendor/** @itsjustatank
+src/presets-extra/** @itsjustatank
 .claude/** @itsjustatank
 .codex/** @itsjustatank
 .gemini/** @itsjustatank
