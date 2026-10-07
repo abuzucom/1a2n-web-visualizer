@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.15.1] (2026-10-07)
+
+### Dependencies
+- Combined Dependabot bumps:
+  - `actions/checkout` 4.2.2 → 7.0.1
+  - `actions/setup-python` 5.6.0 → 7.0.0
+  - `actions/github-script` 7.1.0 → 9.0.0
+  - `actions/upload-code-coverage` 1.4.2 → 1.4.4
+  - `brace-expansion` 1.1.16 → 1.1.21 and 5.0.7 → 5.0.12 (dev dependency)
+
 ## [1.15.0] (2026-10-03)
 
 ### Security
