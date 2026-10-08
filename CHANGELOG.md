@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.3] (2026-10-08)
+
+### Fixed
+- Require Git 2.35.2 or newer before treating `core.fsmonitor` boolean
+  spellings as non-executable.
+- Separate appended removal records when the existing ledger lacks a final
+  line ending.
+- Avoid resolving external UNC write targets against a local repository path.
+- Inspect UNC infrastructure paths lexically without opening remote manifests.
+- Run slow remediation, branch-review, and branch-context coverage in
+  isolation with the resource timeout.
+
 ## [1.16.2] (2026-10-08)
 
 ### Changed

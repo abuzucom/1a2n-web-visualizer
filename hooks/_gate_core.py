@@ -841,8 +841,17 @@ def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = ""
     candidate = path.strip().strip('"').strip("'")
     if not candidate or candidate.startswith("-"):
         return False
-    absolute = candidate if os.path.isabs(candidate) else os.path.join(cwd or os.getcwd(), candidate)
-    resolved = os.path.realpath(os.path.abspath(absolute))
+    network_path = _is_unc_path(candidate)
+    if network_path:
+        resolved = ntpath.normpath(candidate)
+    else:
+        absolute = candidate if os.path.isabs(candidate) else os.path.join(
+            cwd or os.getcwd(), candidate)
+        network_path = _is_unc_path(absolute)
+        if network_path:
+            resolved = ntpath.normpath(absolute)
+        else:
+            resolved = os.path.realpath(os.path.abspath(absolute))
     normalized = "/" + resolved.replace("\\", "/").casefold().strip("/")
     padded = normalized + ("/" if not normalized.endswith("/") else "")
     basename = normalized.rsplit("/", 1)[-1]
@@ -852,6 +861,8 @@ def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = ""
     if _is_infrastructure_filename(basename):
         return True
     if basename.endswith((".yaml", ".yml", ".json")):
+        if network_path:
+            return True
         manifest = content or _infrastructure_manifest_text(resolved)
         lowered = manifest.casefold()
         return (("apiversion:" in lowered and "kind:" in lowered)
@@ -1556,12 +1567,24 @@ def _known_write_targets(program: str, args: list, redirects: list) -> list:
     return targets
 
 
+def _is_unc_path(path: str) -> bool:
+    """Return True when `path` names a UNC share rather than a device path."""
+    drive = ntpath.splitdrive(path)[0].replace("/", "\\").lower()
+    if drive.startswith("\\\\?\\unc\\"):
+        return True
+    return (drive.startswith("\\\\")
+            and not drive.startswith(("\\\\?\\", "\\\\.\\")))
+
+
 def _protected_path(path: str, cwd: str) -> bool:
     """Return True when a literal path is under a protected gate directory."""
     cleaned = path.strip().strip('"').strip("'")
     if not cleaned or is_ambiguous(cleaned):
         return False
     root = os.path.realpath(cwd or ".")
+    # A network target cannot be inside a local repository, so do not resolve it.
+    if _is_unc_path(cleaned) and not _is_unc_path(root):
+        return False
     candidate = cleaned if os.path.isabs(cleaned) else os.path.join(root, cleaned)
     candidate = os.path.realpath(candidate)
     try:
@@ -1586,6 +1609,8 @@ def protected_write_verdict(program: str, args: list,
 
 MAX_CONFIG_BYTES = 256 * 1024
 MAX_REPO_DISCOVERY_DEPTH = 100
+MIN_BOOLEAN_FSMONITOR_GIT_VERSION = (2, 35, 2)
+GIT_VERSION_PREFIX = "git version "
 # Keys whose value names a program git runs during an ordinary read.
 EXEC_CAPABLE_KEYS = frozenset({
     "core.fsmonitor", "core.pager", "core.editor", "core.sshcommand",
@@ -1663,11 +1688,39 @@ def parse_git_config(cwd: str):
     return _parse_git_config_path(path)
 
 
-def _exec_capable_key(entries: dict) -> str:
+def _read_git_version(cwd: str) -> tuple | None:
+    """Return Git's numeric version, or None when it cannot be confirmed."""
+    try:
+        result = subprocess.run(
+            ["git", "--version"],
+            cwd=cwd or ".",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=CONFIG_READ_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0 or len(result.stdout) > 128:
+        return None
+    version_text = result.stdout.strip()
+    if not version_text.startswith(GIT_VERSION_PREFIX):
+        return None
+    parts = version_text[len(GIT_VERSION_PREFIX):].split(".", 3)
+    if len(parts) < 3 or not all(part.isdecimal() for part in parts[:3]):
+        return None
+    return tuple(int(part) for part in parts[:3])
+
+
+def _exec_capable_key(entries: dict, git_version: tuple | None = None) -> str:
     """Return the first exec-capable key present, or an empty string."""
     for name, value in entries.items():
         if (name == "core.fsmonitor"
-                and value.lower() in SAFE_BUILTIN_FS_MONITOR_VALUES):
+                and value.lower() in SAFE_BUILTIN_FS_MONITOR_VALUES
+                and git_version is not None
+                and git_version >= MIN_BOOLEAN_FSMONITOR_GIT_VERSION):
             continue
         if name in EXEC_CAPABLE_KEYS and value.lower() not in ("", "false", "0"):
             return name
@@ -2018,7 +2071,14 @@ def git_read_verdict(args: list, cwd: str, assignments: list) -> tuple:
         state, environment, assigned_names)
     if entries is None:
         return "ask", reason
-    found = _environment_exec_key(environment) or _exec_capable_key(entries)
+    fsmonitor_value = entries.get("core.fsmonitor", "").lower()
+    git_version = (
+        _read_git_version(state["cwd"])
+        if fsmonitor_value in SAFE_BUILTIN_FS_MONITOR_VALUES
+        else None
+    )
+    found = _environment_exec_key(environment) or _exec_capable_key(
+        entries, git_version)
     if not found:
         return "", ""
     return "ask", (f"a git read sets {found}, which names a program git runs")
