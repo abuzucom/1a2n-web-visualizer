@@ -27,7 +27,7 @@
     "_gate_core.py::_pages_options_verdict": 1,
     "_gate_core.py::_parent_repository_dir": 2,
     "_gate_core.py::_parse_config_setting": 1,
-    "_gate_core.py::_parse_git_config_path": 2,
+    "_gate_core.py::_parse_git_config_path": 1,
     "_gate_core.py::_read_config_path": 1,
     "_gate_core.py::_read_gitdir_pointer": 1,
     "_gate_core.py::_read_invocation_configs": 2,
