@@ -160,6 +160,8 @@ def main() -> int:
         else "name,pack,chunk,commit,date,subject\n"
     )
     ledger_newline = "\r\n" if b"\r\n" in ledger_bytes else "\n"
+    if ledger_bytes and not ledger_bytes.endswith((b"\r", b"\n")):
+        ledger += ledger_newline
     ledger += "".join(
         f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
         f"{args.reason}{ledger_newline}"
