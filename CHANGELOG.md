@@ -8,11 +8,13 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Dependencies
 - Combined Dependabot bumps:
-  - `actions/checkout` 4.2.2 → 7.0.1
-  - `actions/setup-python` 5.6.0 → 7.0.0
-  - `actions/github-script` 7.1.0 → 9.0.0
-  - `actions/upload-code-coverage` 1.4.2 → 1.4.4
-  - `brace-expansion` 1.1.16 → 1.1.21 and 5.0.7 → 5.0.12 (dev dependency)
+  - `actions/checkout` 4.2.2 to 7.0.1
+  - `actions/setup-python` 5.6.0 to 7.0.0
+  - `actions/github-script` 7.1.0 to 9.0.0
+  - `actions/upload-code-coverage` 1.4.2 to 1.4.4
+  - `brace-expansion` 1.1.16 to 1.1.21 and 5.0.7 to 5.0.12 (dev dependency)
+- Updated the immutable workflow validator's trusted action pins to match the
+  upgraded `actions/checkout` and `actions/setup-python` versions.
 
 ## [1.15.0] (2026-10-03)
 
