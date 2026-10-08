@@ -33,6 +33,18 @@ class ActionPinTest(unittest.TestCase):
         found = check_action_pins.find_violations(text, "x.yml")
         self.assertEqual(len(found), 1)
 
+    def test_repository_workflows_use_full_sha_pins(self):
+        """All external actions in this repository's workflows use full SHAs."""
+        root = Path(__file__).resolve().parent.parent
+        workflow_root = root / ".github" / "workflows"
+        violations = []
+        for path in sorted(
+            (*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml"))
+        ):
+            violations.extend(check_action_pins.find_violations(
+                path.read_text(encoding="utf-8"), str(path)))
+        self.assertEqual(violations, [])
+
 
 if __name__ == "__main__":
     unittest.main()
