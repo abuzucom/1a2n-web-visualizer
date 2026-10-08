@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.2] (2026-10-08)
+
+### Changed
+- Tightened the hook coverage baseline after fsmonitor regression coverage
+  reached another Git config parser statement.
+
 ## [1.16.1] (2026-10-08)
 
 ### Changed
