@@ -1,7 +1,7 @@
 # 1a2n Web Visualizer
 
 
-MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 18,013 deduplicated presets: 373 from four butterchurn preset packs, 14,408 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, and 3,232 experimental NestDrop presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
+MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 17,984 presets: 373 from four butterchurn preset packs, 14,249 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, 3,024 `[EXP]` presets, 57 `[EXP2]` presets, and 281 `[EXP3]` presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
 `/fullscreen.html`, `/demo.html`, and `/mobile.html`). GitHub Actions deploys
@@ -91,8 +91,9 @@ butterchurn-visualizer/
 
 The experimental import pipeline accepts supplied NestDrop ZIP archives and
 converts their raw `.milk` files into the same Butterchurn preset shape used
-by the mainline lazy-loaded collection. Experimental runtime names receive a
-reserved `[EXP] ` prefix so they are visually distinct.
+by the mainline lazy-loaded collection. Each import batch receives its own
+runtime prefix, starting with `[EXP] ` and continuing with `[EXP2] `,
+`[EXP3] `, and later numbers.
 
 Experimental textures ship as generated
 `src/vendor/butterchurnExtraImagesExp-part-N.js` files (losslessly
@@ -111,10 +112,11 @@ logical IDs into that range.
 baseline mainline chunks using canonical content hashes. It reports exact
 duplicates, name conflicts, and EXP-only presets. Confirmed mainline matches
 can be supplied to `tools/remove-experimental-duplicates.py` for duplicate
-removal; parser-invalid EXP presets may also be supplied with the explicit
-invalid-equation option and are recorded separately.
-The `[EXP] ` prefix is removed for analysis only and remains part of runtime
-and exact curation names.
+removal. The removal tool accepts every numbered batch prefix. Use
+`--allow-unmatched` for an explicitly approved curation target without a
+mainline match. Parser-invalid presets can use `--allow-invalid` and are
+recorded separately. The batch prefix is removed for analysis only. It remains
+part of runtime and exact curation names.
 
 #### Experimental import methodology
 
@@ -443,13 +445,13 @@ The `.milk` to JSON pipeline (`tools/convert-milk-presets.js`) prioritizes stabi
 - **Correctness Over Minification:** The pipeline ships the generated JavaScript exactly as emitted. It avoids JS minifiers, which can rename dynamic global state variables like `time` or `bass`. Browser JIT compilers optimize these loops automatically.
 - **Robust Batching:** The pipeline recursively walks source directories, detects duplicate basenames, and outputs a unified JSON dictionary to `stdout`. It routes warnings and errors to `stderr`.
 
-## Extra Presets (~19k total)
+## Extra Presets (~18k total)
 
-`src/presets-extra/` holds 14,411 mainline index names from [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn). These pack into 184 logical chunks that load lazily through injected `<script>` tags when selected. This works from `file://` under the strict CSP. An in-memory LRU keeps at most 16 chunks resident. The mainline index contains 14,408 unique presets. If the folder is missing, the app falls back to the 373 vendored presets.
+`src/presets-extra/` holds 14,249 mainline presets from [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn). These pack into 184 logical chunks that load lazily through injected `<script>` tags when selected. This works from `file://` under the strict CSP. An in-memory LRU keeps at most 16 chunks resident. If the folder is missing, the app falls back to the 373 vendored presets.
 
-The experimental NestDrop import adds 3,232 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 561 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 18,013 presets.
+The experimental NestDrop import contains 3,024 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 582 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 17,984 presets.
 
-A second experimental batch adds 2,173 more presets, tagged `[EXP2] ` so it
+A second experimental batch contains 57 presets, tagged `[EXP2] ` so it
 stays visually distinct from the `[EXP]` NestDrop import while curating.
 Sourced from the "Flexis Mildrop preset collection" folder of
 [LeetCodes/milkdrop-preset-collection](https://github.com/LeetCodes/milkdrop-preset-collection)
@@ -461,7 +463,7 @@ those came from
 (pinned commit `b6e4610`), the same upstream `fetch-cream-of-the-crop-presets.py`
 already trusts.
 
-A third experimental batch adds 421 more presets, tagged `[EXP3] ` per the
+A third experimental batch contains 281 presets, tagged `[EXP3] ` per the
 repo's per-batch prefix convention (see AGENTS.md). Sourced from
 [projectM-visualizer/presets-milkdrop-original](https://github.com/projectM-visualizer/presets-milkdrop-original)
 (pinned commit `e03b83e`), the official "Original Milkdrop Preset Pack". Of
@@ -470,7 +472,7 @@ equations and were recorded, not silently dropped. 123 were skipped as
 already curated out, already imported, or duplicate content. One retained
 preset needed the `clouds` texture, sourced from the same
 presets-milkdrop-texture-pack pin already vendored for the `[EXP2] ` batch.
-The combined preset inventory now totals 20,358 rows across 582 logical
+The combined preset inventory now totals 17,984 rows across 582 logical
 chunks.
 
 The folder contains generated, committed output. After an upstream update,
@@ -502,7 +504,7 @@ choices, not upstream or library changes. Do not restore them as fixes.
 including their pack, chunk, and known removal commit, date, and subject. Like
 `preset-inventory.csv`, it is bookkeeping, not runtime source. Use
 `tools/remove_presets.js` for vendored/mainline curation; experimental tools
-also update it for EXP decisions.
+also update it for `[EXP]` and numbered experimental batches.
 
 Follow these rules when regenerating presets:
 
