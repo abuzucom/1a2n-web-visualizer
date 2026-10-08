@@ -44,6 +44,9 @@ PROCESS_SHUTDOWN_TIMEOUT_SECONDS = 5
 PRIORITY_TEST_SHARDS = (
     "test_enforce_git_identity.py::PreToolUseTest",
     "test_immutable_compliance.py::ImmutableComplianceScannerTest",
+    "test_remediation.py::RemediationTests",
+    "test_branch_review_regressions.py::BranchReviewTest",
+    "test_branch_validation_contexts.py::BranchContextTest",
     "test_check_conflict_markers.py::CliExecutionTest",
     "test_check_conflict_markers.py::GitOptionSupportTest",
     "test_enforce_git_identity.py::CheckerContractTest",
