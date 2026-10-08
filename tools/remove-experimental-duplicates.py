@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Remove explicitly approved EXP presets that have mainline counterparts."""
+"""Remove explicitly approved experimental presets."""
 
 import argparse
 import csv
 import json
 import os
+import re
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -18,7 +19,7 @@ REMOVED_CSV_PATH = ROOT / "removed-presets.csv"
 MANIFEST_PATH = ROOT / "experimental-presets.json"
 EXCLUSIONS_PATH = ROOT / "experimental-exclusions.json"
 INDEX_PREFIX = "window.BCExtraPresetIndex="
-EXP_PREFIX = "[EXP] "
+EXPERIMENTAL_NAME_PATTERN = re.compile(r"^\[EXP(?:[2-9]|[1-9][0-9]+)?\] .+$")
 BASELINE_PHYSICAL_LIMIT = 9000
 
 
@@ -49,7 +50,7 @@ def csv_escape(string_val: str) -> str:
 def atomic_write_text(path, text):
     """Write one generated file without exposing a partial file."""
     temporary = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, delete=False,
+        mode="w", encoding="utf-8", dir=path.parent, delete=False, newline="",
     )
     try:
         with temporary:
@@ -70,6 +71,10 @@ def main() -> int:
         help="allow removal records without mainline matches when explicitly marked invalid",
     )
     parser.add_argument(
+        "--allow-unmatched", action="store_true",
+        help="allow approved curation targets without mainline matches",
+    )
+    parser.add_argument(
         "--reason", default="experimental duplicate approved",
         help="ledger and exclusion reason for the removal",
     )
@@ -82,8 +87,8 @@ def main() -> int:
         for item in decisions
     }
     approved = set(decision_by_name)
-    if not approved or any(not name.startswith(EXP_PREFIX) for name in approved):
-        raise SystemExit("every approved target must be a non-empty [EXP] runtime name")
+    if not approved or any(not EXPERIMENTAL_NAME_PATTERN.fullmatch(name) for name in approved):
+        raise SystemExit("every target must use an [EXP], [EXP2], or later runtime prefix")
 
     data, files = read_index(INDEX_PATH)
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -108,8 +113,10 @@ def main() -> int:
         item["displayName"] for item in targets
         if not (item.get("mainlineMatches") or item.get("normalizedNameMatches"))
     ]
-    if invalid and not args.allow_invalid:
-        raise SystemExit(f"refusing EXP-only targets without mainline matches: {invalid}")
+    if invalid and not (args.allow_invalid or args.allow_unmatched):
+        raise SystemExit(
+            f"refusing experimental-only targets without mainline matches: {invalid}"
+        )
 
     if args.dry_run:
         for item in targets:
@@ -146,10 +153,16 @@ def main() -> int:
     atomic_write_text(CSV_PATH, "\n".join(kept_lines).rstrip("\n") + "\n")
 
     ledger_exists = REMOVED_CSV_PATH.exists()
-    ledger = REMOVED_CSV_PATH.read_text(encoding="utf-8") if ledger_exists else "name,pack,chunk,commit,date,subject\n"
+    ledger_bytes = REMOVED_CSV_PATH.read_bytes() if ledger_exists else b""
+    ledger = (
+        ledger_bytes.decode("utf-8")
+        if ledger_exists
+        else "name,pack,chunk,commit,date,subject\n"
+    )
+    ledger_newline = "\r\n" if b"\r\n" in ledger_bytes else "\n"
     ledger += "".join(
         f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
-        f"{args.reason}\n"
+        f"{args.reason}{ledger_newline}"
         for item in targets
     )
     atomic_write_text(REMOVED_CSV_PATH, ledger)

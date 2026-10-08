@@ -1601,6 +1601,7 @@ EXEC_CAPABLE_SUBSECTIONS = {
     "merge": ("driver",),
 }
 SAFE_PAGER_VALUES = frozenset({"cat"})
+SAFE_BUILTIN_FS_MONITOR_VALUES = frozenset({"true", "yes", "on", "1"})
 
 
 def _read_config_path(path: str):
@@ -1665,6 +1666,9 @@ def parse_git_config(cwd: str):
 def _exec_capable_key(entries: dict) -> str:
     """Return the first exec-capable key present, or an empty string."""
     for name, value in entries.items():
+        if (name == "core.fsmonitor"
+                and value.lower() in SAFE_BUILTIN_FS_MONITOR_VALUES):
+            continue
         if name in EXEC_CAPABLE_KEYS and value.lower() not in ("", "false", "0"):
             return name
         if name.startswith("pager.") and value.lower() not in ("", "false", "0"):
