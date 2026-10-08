@@ -4,11 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.1] (2026-10-08)
+
+### Changed
+- Updated the shared gate manifest after the fsmonitor correction.
+
 ## [1.16.0] (2026-10-07)
 
 ### Changed
 - Extended experimental curation to numbered prefixes and approved unmatched
   targets. Preserved existing removal-ledger bytes when appending records.
+- Classified built-in `core.fsmonitor` boolean values as non-executable.
 
 ## [1.15.1] (2026-10-07)
 
