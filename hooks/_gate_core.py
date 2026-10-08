@@ -1611,6 +1611,8 @@ MAX_CONFIG_BYTES = 256 * 1024
 MAX_REPO_DISCOVERY_DEPTH = 100
 MIN_BOOLEAN_FSMONITOR_GIT_VERSION = (2, 35, 2)
 GIT_VERSION_PREFIX = "git version "
+GIT_VERSION_COMPONENT_COUNT = 3
+MAX_GIT_VERSION_OUTPUT_BYTES = 128
 # Keys whose value names a program git runs during an ordinary read.
 EXEC_CAPABLE_KEYS = frozenset({
     "core.fsmonitor", "core.pager", "core.editor", "core.sshcommand",
@@ -1703,15 +1705,22 @@ def _read_git_version(cwd: str) -> tuple | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    if result.returncode != 0 or len(result.stdout) > 128:
+    if (result.returncode != 0
+            or len(result.stdout) > MAX_GIT_VERSION_OUTPUT_BYTES):
         return None
     version_text = result.stdout.strip()
     if not version_text.startswith(GIT_VERSION_PREFIX):
         return None
     parts = version_text[len(GIT_VERSION_PREFIX):].split(".", 3)
-    if len(parts) < 3 or not all(part.isdecimal() for part in parts[:3]):
+    if (len(parts) < GIT_VERSION_COMPONENT_COUNT
+            or not all(
+                part.isdecimal()
+                for part in parts[:GIT_VERSION_COMPONENT_COUNT]
+            )):
         return None
-    return tuple(int(part) for part in parts[:3])
+    return tuple(
+        int(part) for part in parts[:GIT_VERSION_COMPONENT_COUNT]
+    )
 
 
 def _exec_capable_key(entries: dict, git_version: tuple | None = None) -> str:
