@@ -13,6 +13,7 @@ All notable changes to this project are documented here. Format loosely follows
   consistent height.
 - Loosen the landing page heading letter spacing so adjacent glyphs no
   longer touch, and enable font kerning.
+- Tighten the "1a" and "li" pairs in the landing page heading.
 
 ## [1.16.3] (2026-10-08)
 
