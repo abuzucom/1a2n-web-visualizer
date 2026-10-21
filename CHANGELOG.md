@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.16.4] (2026-10-21)
+## [1.16.5] (2026-10-21)
 
 ### Fixed
 - Keep each landing page card title on one line by sizing the title for
@@ -14,6 +14,18 @@ All notable changes to this project are documented here. Format loosely follows
 - Loosen the landing page heading letter spacing so adjacent glyphs no
   longer touch, and enable font kerning.
 - Tighten the "1a" and "li" pairs in the landing page heading.
+
+### Dependencies
+- Combined Dependabot bumps:
+  - `acorn` 8.18.0 to 8.19.0 (dev dependency)
+  - `eslint` 10.11.0 to 10.12.0 (dev dependency)
+  - `actions/setup-node` 7.0.0 to 7.1.0
+  - `actions/upload-artifact` 7.0.1 to 7.0.2
+  - `actions/setup-java` 6.0.1 to 6.1.0
+  - `actions/download-artifact` 8.0.1 to 8.0.2
+- Recorded the full release version in the `checks.yml` pin comments for
+  `actions/setup-node` and `actions/upload-artifact`.
+- Added a test that holds each reused action in `checks.yml` to one revision.
 
 ## [1.16.3] (2026-10-08)
 
