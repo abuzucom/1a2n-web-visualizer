@@ -85,15 +85,11 @@ a.card:hover {
   transform: translateY(-5px);
 }
 
-a.card {
-  container-type: inline-size;
-}
-
 a.card h2 {
   margin: 0;
   font-family: var(--type-display);
-  /* Scales with card width so "Fullscreen build" stays on one line. */
-  font-size: min(2.1rem, 10cqi);
+  /* Sized per layout so "Fullscreen build" stays on one line. */
+  font-size: clamp(0.95rem, 1.6vw, 1.15rem);
   white-space: nowrap;
   font-weight: 800;
   letter-spacing: -0.05em;
@@ -133,6 +129,7 @@ footer a {
 
 @media (max-width: 1000px) {
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  a.card h2 { font-size: clamp(1.1rem, 3.4vw, 1.6rem); }
 }
 
 @media (max-width: 620px) {
@@ -140,6 +137,7 @@ footer a {
   p.sub { margin: 24px 0 36px; }
   .cards { grid-template-columns: 1fr; }
   a.card { min-height: 150px; }
+  a.card h2 { font-size: clamp(1.1rem, 6vw, 2.1rem); }
 }
 
 @media (prefers-reduced-motion: reduce) {
