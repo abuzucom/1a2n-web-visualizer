@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.4] (2026-10-21)
+
+### Fixed
+- Keep each landing page card title on one line by scaling the title size
+  with the card width.
+
 ## [1.16.3] (2026-10-08)
 
 ### Fixed
