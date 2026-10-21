@@ -11,6 +11,8 @@ All notable changes to this project are documented here. Format loosely follows
   each card layout.
 - Place each landing page card description directly under its title at a
   consistent height.
+- Loosen the landing page heading letter spacing so adjacent glyphs no
+  longer touch, and enable font kerning.
 
 ## [1.16.3] (2026-10-08)
 

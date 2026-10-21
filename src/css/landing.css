@@ -31,8 +31,10 @@ h1 {
   font-family: var(--type-display);
   font-size: clamp(3.5rem, 10vw, 8.5rem);
   font-weight: var(--weight-display);
-  letter-spacing: -0.085em;
+  font-kerning: normal;
+  letter-spacing: -0.04em;
   line-height: 0.84;
+  text-rendering: optimizeLegibility;
 }
 
 p.sub {
