@@ -85,10 +85,16 @@ a.card:hover {
   transform: translateY(-5px);
 }
 
+a.card {
+  container-type: inline-size;
+}
+
 a.card h2 {
   margin: 0;
   font-family: var(--type-display);
-  font-size: clamp(1.4rem, 3vw, 2.1rem);
+  /* Scales with card width so "Fullscreen build" stays on one line. */
+  font-size: min(2.1rem, 10cqi);
+  white-space: nowrap;
   font-weight: 800;
   letter-spacing: -0.05em;
   line-height: 1;
