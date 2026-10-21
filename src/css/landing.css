@@ -37,6 +37,11 @@ h1 {
   text-rendering: optimizeLegibility;
 }
 
+/* Pair kerning for "1a" and "li", which the font leaves too open. */
+h1 .kern-1 { letter-spacing: -0.09em; }
+
+h1 .kern-l { letter-spacing: -0.07em; }
+
 p.sub {
   margin: 30px 0 54px;
   color: var(--brand-silver);
