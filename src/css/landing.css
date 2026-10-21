@@ -54,10 +54,9 @@ p.sub {
 
 a.card {
   display: flex;
-  min-height: 190px;
   box-sizing: border-box;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 18px;
   padding: 24px;
   background: var(--brand-pitch);
   color: var(--brand-paper);
@@ -136,7 +135,6 @@ footer a {
   body { align-items: flex-start; padding-top: 18vh; }
   p.sub { margin: 24px 0 36px; }
   .cards { grid-template-columns: 1fr; }
-  a.card { min-height: 150px; }
   a.card h2 { font-size: clamp(1.1rem, 6vw, 2.1rem); }
 }
 

@@ -9,6 +9,8 @@ All notable changes to this project are documented here. Format loosely follows
 ### Fixed
 - Keep each landing page card title on one line by sizing the title for
   each card layout.
+- Place each landing page card description directly under its title at a
+  consistent height.
 
 ## [1.16.3] (2026-10-08)
 
