@@ -4,7 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.16.5] (2026-10-21)
+## [1.16.6] (2026-10-21)
+
+### Tests
+- Added `tests/test_render_tick_processor.js` to cover the AudioWorklet frame
+  clock: registration, tick-rate derivation and fallback, quantum floor, tick
+  cadence, and silent output.
 
 ### Fixed
 - Keep each landing page card title on one line by sizing the title for
