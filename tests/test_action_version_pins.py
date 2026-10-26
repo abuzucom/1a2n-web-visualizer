@@ -12,9 +12,9 @@ REVIEWED_ACTION_PINS = {
         {"v7", "v7.0.1"},
     ),
     "actions/setup-python": (
-        "5fda3b95a4ea91299a34e894583c3862153e4b97",
-        "v7.0.0",
-        {"v7.0.0"},
+        "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+        "v7.1.0",
+        {"v7.1.0"},
     ),
     "actions/github-script": (
         "3a2844b7e9c422d3c10d287c895573f7108da1b3",

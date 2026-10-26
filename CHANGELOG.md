@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.6] (2026-10-26)
+
+### Dependencies
+- Combined Dependabot bumps:
+  - `eslint` 10.12.0 to 10.13.0 (dev dependency)
+  - `actions/setup-python` 7.0.0 to 7.1.0
+- Moved the reviewed `actions/setup-python` pin to the 7.1.0 commit in the
+  immutable compliance scanner and the action pin test.
+
 ## [1.16.5] (2026-10-21)
 
 ### Fixed
