@@ -23,6 +23,24 @@ Run:
 Copy the complete gate set. Include hooks, registrations, shared modules,
 tests, cited checkers, synchronization metadata, and policy copies.
 
+## Adopt the local-path gate whole
+`scripts/check_local_paths.py`, its test, the human-approved
+`.local-path-allowlist`, and their hook and CI registrations form one gate.
+Adopt them in one transaction and one pull request. A checker without its
+allowlist is partial adoption under Rule 18.
+
+Never land the allowlist after the checker. The trusted CI scan reads both
+from the base branch. A checker merged first fails every later pull request.
+
+An empty allowlist records a disclosure with no approved entries. A missing
+allowlist means incomplete adoption. `check_gate_adoption.py` and
+`complete_gate_adoption.py` enforce the pair.
+
+### Local-path disclosure
+Run `--report` locally. Show every finding to the active human. Get a separate
+decision on each proposed `<file><TAB><name>` entry. Never allowlist a runtime
+identity match. Keep findings out of committed text and CI logs.
+
 ## Atomic multi-client adoption
 Adopt gates as one transaction across every adopted client. Activate complete
 coverage for all clients or change nothing. Do not install one client's hooks
@@ -96,10 +114,6 @@ adopted tooling provides it. The reader emits bounded structured output.
 Branch examples include `fix/branch-name-validation`,
 `chore/synchronize-policy-copies`, and `docs/clarify-agent-branch-rules`.
 Avoid random or opaque names such as `chore/kind-thompson`.
-For an invalid branch, use `git branch -m <type>/<kebab-description>`.
-For a primary or detached state, use `git switch -c <type>/<kebab-description>`.
-During a rebase, allow only `git rebase --abort`, `git rebase --continue`, or
-`git rebase --skip`. Run strict preflight after recovery.
 
 Code-quality examples include caching compiled regular expressions, joining
 strings instead of concatenating in loops, using hash lookups, and batching
@@ -110,33 +124,26 @@ unexplained `NotImplementedError`.
 Install `scripts/check_branch_name.py`. Register it in pre-push and supported
 client hooks. Run its tests in CI and pre-commit. Dependabot receives its
 documented branch and commit-message exemption through trusted metadata.
-
-Source commands include `python -m pip install --requirement
-requirements-checkers.txt`, `python scripts/run_tests.py`, `make lint
-PYTHON=python`, `python scripts/sync.py --check`, and `python scripts/sync.py`.
-Obtain consent before tests, scripts, or Makefile targets.
+Copy `scripts/trusted_bot_identities.py` with it. That registry lists every
+branch-exempt bot. A third-party bot also needs its account ID in the event.
 
 Retry variations include changed flags, working directories, and argument
-order. Stop after the second failure. Analyze the error and change strategy.
+order.
 
 Code-quality examples:
 
 - Name a tax constant `TAX_RATE`, not `X1` or `CONST_1`.
-- Do not leave stubbed bodies, bare `pass`, `...`, or unexplained
-  `NotImplementedError`.
 
 Branch adoption copies `scripts/check_branch_name.py`,
 `scripts/read_git_state.py`, `scripts/trusted_git.py`,
-`hooks/enforce_branch_name.py`, `hooks/_gate_core.py`, and
-`hooks/_bash_parser.py`. Register pre-push and every observable supported
+`hooks/enforce_branch_name.py`, `hooks/_command_execution_gate.py`,
+`hooks/_gate_core.py`, and `hooks/_bash_parser.py`. Register pre-push and every observable supported
 client event. Claude also registers `SessionStart`, `UserPromptSubmit`, `Stop`,
 and `SubagentStop`. Run `tests/test_enforce_branch_name.py` in CI and
 pre-commit. Agent hooks use `--strict-agent-preflight`.
 
 Preserve license-required attribution and source metadata. Do not require
 uncontrolled mirrors to report usage or divergence to this repository.
-
-`AGENTS.md` controls when linked documents conflict with it.
 
 ## Source repository orientation
 This detail applies only to `abuzucom/agents`. Adoption omits it.
@@ -166,10 +173,6 @@ Existing tests, hooks, and client settings require act-specific consent.
 Preserve checker flags, hook payloads, reusable workflows, and copied policy
 files.
 
-Dependabot receives a branch-name and commit-message exemption because it does
-not support those format settings. CI identifies it through trusted pull
-request author metadata. A branch prefix cannot claim the exemption.
-
 Never rewrite pushed history on a shared branch. Never force-push, rebase,
 amend, or reset published commits without explicit human consent. Add new
 commits instead. `--force-with-lease` receives no exception. The lease in
@@ -177,25 +180,35 @@ commits instead. `--force-with-lease` receives no exception. The lease in
 but does not remove the consent requirement. Branch age does not create an
 exception.
 
-Verify the current branch, remote URLs, and relevant file contents before
-inferring workflow scope. Use the bounded reader for repository state.
-
 ## Branch recovery
+Rebase metadata takes precedence over detached-HEAD recovery. Permit only the
+approved rebase recovery commands. Block ordinary tools until strict preflight
+passes. Block `claude/` targets, aliases, and metadata writes.
 Detect rebase metadata before detached-HEAD recovery. Permit only `git rebase
 --abort`, `git rebase --continue`, or `git rebase --skip`. Rerun strict
 preflight after recovery. For an invalid branch, use the exact approved
-`git branch -m <type>/<kebab-description>` command. For a primary or detached
-state, use `git switch -c <type>/<kebab-description>`. Run no chained command.
+`git branch -m <type>/<kebab-description>` command. On the primary branch or a
+detached state, use `git switch -c <type>/<kebab-description>`. On `master`,
+use `git switch main` when `main` exists. Otherwise tell the active human that
+`master` is not allowed and the repository needs conversion to `main`. Run no
+chained command.
 `git -C <current-repository> branch -m <type>/<kebab-description>` receives the
 same native authorization request. Reject wrappers and foreign paths. A client
 mode restriction never authorizes delegation of the recovery command.
 
 ## Git identity recovery
+If either value remains unset, Git builds an identity from the machine account
+name and hostname. Git prints this warning and commits anyway:
+
+`Your name and email address were configured automatically based on your
+username and hostname`
+
 Verify `git config user.name` and `git config user.email` before the first
 commit. If either is absent, resolve the authenticated account through the
-trusted wrapper. Derive `<id>+<login>@users.noreply.github.com`. Show the
+trusted wrapper. A GitHub connector account request qualifies. Derive
+`<id>+<login>@users.noreply.github.com`. Show the
 values and obtain approval before setting them in the current repository.
-Never set them globally. If trusted GitHub access fails, show at most five
+Never set them globally. If no authenticated account source exists, show at most five
 untrusted candidates from at most 50 commits. Never select one automatically.
 
 Copy `scripts/check_git_identity.py` and `scripts/trusted_gh.py`. Register the

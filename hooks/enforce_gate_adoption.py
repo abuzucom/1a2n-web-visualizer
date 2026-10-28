@@ -91,7 +91,7 @@ def _staging_write(tool_name: object, tool_input: object) -> bool:
     candidate = core.resolved_under(root, value)
     if staging is None or candidate is None:
         return False
-    return candidate != staging and candidate.startswith(staging + os.sep)
+    return candidate.startswith(staging + os.sep)
 
 
 def _check_complete_set() -> str:

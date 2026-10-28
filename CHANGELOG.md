@@ -4,6 +4,45 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] (2026-10-28)
+
+### Changed
+- Re-adopted the `abuzucom/agents` gate set at template commit `b452348`,
+  up from `848d069`. One `scripts/complete_gate_adoption.py` transaction
+  installed the gate files.
+- The command gate moved into `hooks/_command_execution_gate.py`. It routes
+  `npm ci`, `npm test`, and `npm run lint`, `typecheck`, or `build` to
+  per-run consent. It routes `scripts/trusted_git.py` clone and fetch to
+  consent.
+- `hooks/primary-branch.txt` names `develop` as the primary branch.
+- Took upstream `AGENTS.md` and `docs/agent-policy/*.md`. Rule 8 now covers
+  real local identifiers. Rule 23 bans label changes. Regenerated every
+  synced policy copy.
+- `.github/workflows/gate-integrity.yml` reads the approval timeline through
+  the reviewed `actions/github-script` 9.0.0 pin. The gate label must now
+  postdate the latest push.
+- `CHANGELOG.md` keeps one entry per UTC date. Same-day releases now sit
+  under the newest version as `Former release` subsections. The 2026-09-29
+  releases 1.13.8 and 1.13.7 moved under 1.14.1.
+
+### Added
+- Added `scripts/check_local_paths.py` with an empty approved
+  `.local-path-allowlist` and its pre-commit registrations. The local
+  disclosure scan found no real account, home, or computer name.
+- Added `scripts/trusted_bot_identities.py`, 35 upstream test modules, and
+  the `tests/read_only_branch_support.py` helper.
+- With active-human approval, took upstream changes into
+  `tests/test_enforce_branch_name.py` and `tests/test_trusted_gh.py`, and
+  pointed `tests/test_gate_pr_integrity_timeline.py` at the reviewed
+  `actions/github-script` 9.0.0 SHA.
+
+### Kept
+- Merged upstream `hooks/_gate_core.py` three ways onto the local file. The
+  local UNC path rule and the local fsmonitor rule remain. Built-in boolean
+  `core.fsmonitor` values on Git 2.35.2 or later do not prompt.
+- Kept the Dependabot changelog workflow, script, and test that upstream
+  removed.
+
 ## [1.16.6] (2026-10-21)
 
 ### Tests
@@ -44,13 +83,13 @@ All notable changes to this project are documented here. Format loosely follows
 - Run slow remediation, branch-review, and branch-context coverage in
   isolation with the resource timeout.
 
-## [1.16.2] (2026-10-08)
+#### Former release 1.16.2
 
 ### Changed
 - Tightened the hook coverage baseline after fsmonitor regression coverage
   reached another Git config parser statement.
 
-## [1.16.1] (2026-10-08)
+#### Former release 1.16.1
 
 ### Changed
 - Updated the shared gate manifest after the fsmonitor correction.
@@ -62,7 +101,7 @@ All notable changes to this project are documented here. Format loosely follows
   targets. Preserved existing removal-ledger bytes when appending records.
 - Classified built-in `core.fsmonitor` boolean values as non-executable.
 
-## [1.15.1] (2026-10-07)
+#### Former release 1.15.1
 
 ### Dependencies
 - Combined Dependabot bumps:
@@ -135,6 +174,22 @@ All notable changes to this project are documented here. Format loosely follows
   over every real workflow and requires the Pages deploy retry to use the
   same `actions/deploy-pages` revision as the first attempt.
 
+#### Former release 1.13.8
+
+### Changed
+- Replaced a `--` dash substitute in a `.github/workflows/checks.yml`
+  comment with a sentence break.
+
+#### Former release 1.13.7
+
+### Security
+- Stopped expanding `github.head_ref` into the `branch-name` job's shell
+  script in `.github/workflows/checks.yml`. A branch name with shell syntax
+  could run commands on the runner. `scripts/check_branch_name.py` reads
+  `GITHUB_HEAD_REF` from the environment instead.
+- Added `tests/test_workflow_script_injection.py`, which rejects pull
+  request controlled expressions inside any workflow `run:` script.
+
 ## [1.14.0] (2026-09-28)
 
 ### Added
@@ -150,23 +205,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Added `ci/` to the protected-file review and `CODEOWNERS`. Documented the
   wiring in `docs/pr-security-review.md`.
 
-## [1.13.8] (2026-09-29)
-
-### Changed
-- Replaced a `--` dash substitute in a `.github/workflows/checks.yml`
-  comment with a sentence break.
-
-## [1.13.7] (2026-09-29)
-
-### Security
-- Stopped expanding `github.head_ref` into the `branch-name` job's shell
-  script in `.github/workflows/checks.yml`. A branch name with shell syntax
-  could run commands on the runner. `scripts/check_branch_name.py` reads
-  `GITHUB_HEAD_REF` from the environment instead.
-- Added `tests/test_workflow_script_injection.py`, which rejects pull
-  request controlled expressions inside any workflow `run:` script.
-
-## [1.13.6] (2026-09-28)
+#### Former release 1.13.6
 
 ### Fixed
 - Gated Python unit tests on `scripts/run_tests.py` and measured coverage in
@@ -175,30 +214,30 @@ All notable changes to this project are documented here. Format loosely follows
 - Scoped the `tempfile.tempdir` override in `tests/test_trusted_gh.py` to
   that module.
 
-## [1.13.5] (2026-09-28)
+#### Former release 1.13.5
 
 ### Fixed
 - Restored full gate decision reasons in hook prompts and denials.
 
-## [1.13.4] (2026-09-28)
+#### Former release 1.13.4
 
 ### Fixed
 - Removed the Jira pull request workflow.
 - Moved protected-file review to an unprivileged pull request trigger.
 - Bound immutable scanner bootstrap to the approved pinned source checkout.
 
-## [1.13.3] (2026-09-28)
+#### Former release 1.13.3
 
 ### Fixed
 - Bootstrapped immutable compliance from the pinned `abuzucom/agents` scanner
   while the target base lacks the scanner.
 
-## [1.13.2] (2026-09-28)
+#### Former release 1.13.2
 
 ### Fixed
 - Preserved the fixed protected-value diagnostic for malformed CMD payloads.
 
-## [1.13.1] (2026-09-28)
+#### Former release 1.13.1
 
 ### Fixed
 - Moved immutable compliance to an unprivileged pull request trigger and kept
@@ -206,7 +245,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Replaced untrusted gate diagnostics with fixed safe labels while preserving
   branch-correction and unsafe Git configuration diagnostics.
 
-## [1.13.0] (2026-09-28)
+#### Former release 1.13.0
 
 ### Changed
 - Re-adopted the `abuzucom/agents` template whole at commit `848d069`:
@@ -623,7 +662,7 @@ All notable changes to this project are documented here. Format loosely follows
   See the new "Exclusive-mode devices (Windows)" section in
   `docs/unattended-operation.md`.
 
-## [1.8.0] (2026-08-03)
+#### Former release 1.8.0
 
 ### Added
 - Kept the visualizer rendering while its window is covered, minimized, or in a
@@ -653,7 +692,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Stopped hyperspeed switching itself off when the page is hidden. The old
   behavior is still available through the new `pauseWhenHidden` option.
 
-## [1.7.2] (2026-08-03)
+#### Former release 1.7.2
 ### Added
 - Added `hooks/_gate_core.py`, which both shell gates and the consent gate import, so a decision has one definition rather than one per gate.
 - Added `hooks/block_destructive_powershell.py` under a `PowerShell` matcher. The Bash matcher covered only Bash, so `Remove-Item -Recurse -Force` on a Windows session met no gate at all.
@@ -862,13 +901,13 @@ All notable changes to this project are documented here. Format loosely follows
 - Documented the single-maintainer branch protection model without requiring
   global GitHub Code Owner approval.
 
-## [1.6.6] (2026-07-15)
+#### Former release 1.6.6
 
 ### Changed
 - Audited and simplified the README and local-hosting guide. Corrected current
   preset counts, commands, controls, tooling, security notes, and provenance.
 
-## [1.6.5] (2026-07-15)
+#### Former release 1.6.5
 
 ### Fixed
 - Prevented Butterchurn equation compilation failures caused by missing empty
@@ -879,7 +918,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Added runtime diagnostics for broken preset loads, including the preset name,
   logical chunk ID, physical chunk file, and caught exception.
 
-## [1.6.4] (2026-07-15)
+#### Former release 1.6.4
 
 ### Security
 - Added a lodash version override of `>=4.17.12` to prevent the known
@@ -923,7 +962,7 @@ All notable changes to this project are documented here. Format loosely follows
   lazy-loaded from 14,458 index names minus 66 that duplicate a vendored
   name).
 
-## [1.6.2] (2026-07-11)
+#### Former release 1.6.2
 
 ### Removed
 - 32 more presets curated out of `src/presets-extra/` (removed from
@@ -1026,7 +1065,7 @@ All notable changes to this project are documented here. Format loosely follows
 - `docs/local-hosting.md` covering all three local modes: `file://`, dev
   server, and the Docker container (including its security hardening).
 
-## [1.3.1] (2026-07-04)
+#### Former release 1.3.1
 
 ### Changed
 - The GitHub Pages deploy workflow now retries the deployment step once
@@ -1036,7 +1075,7 @@ All notable changes to this project are documented here. Format loosely follows
   `https://visualizer.1a2n.net/`, the vendored (CDN-free) libraries, and the
   `src/vendor/` layout.
 
-## [1.3.0] (2026-07-04)
+#### Former release 1.3.0
 
 ### Added
 - Shuffle mode for the auto-cycle: picks a random preset (never the current
@@ -1049,7 +1088,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Fullscreen <kbd>[</kbd> / <kbd>]</kbd> adjust the cycle interval in 1s steps
   at/below 10s and 5s steps above, instead of a fixed 5s step.
 
-## [1.2.0] (2026-07-04)
+#### Former release 1.2.0
 
 ### Added
 - Vendored three additional preset packs from `butterchurn-presets@2.4.7`
@@ -1061,7 +1100,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Custom textures are passed to butterchurn via `loadExtraImages` so the
   handful of texture-using presets render fully.
 
-## [1.1.0] (2026-07-04)
+#### Former release 1.1.0
 
 ### Changed
 - Vendored `butterchurn` and `butterchurn-presets` into `src/vendor/` instead of

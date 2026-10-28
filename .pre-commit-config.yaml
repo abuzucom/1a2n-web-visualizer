@@ -53,6 +53,16 @@ repos:
         entry: python scripts/check_secrets_heuristic.py
         language: python
         files: ^(scripts/.*\.py|tools/.*\.py|\.github/workflows/.*\.ya?ml|\.pre-commit-config\.yaml|Makefile)$
+      - id: check-local-paths
+        name: Check for real local identifiers (Rule 8)
+        entry: python -I scripts/check_local_paths.py
+        language: python
+        types: [file]
+      - id: check-local-paths-message
+        name: Check commit message for real local identifiers (Rule 8)
+        entry: python -I scripts/check_local_paths.py
+        language: python
+        stages: [commit-msg]
       - id: check-conflict-markers
         name: Check for unresolved conflict markers
         entry: python scripts/check_conflict_markers.py --staged
@@ -64,7 +74,7 @@ repos:
         entry: python scripts/run_tests.py
         language: python
         additional_dependencies: [PyYAML==6.0.3]
-        files: ^(hooks/.*\.py|tests/.*\.py|\.(claude/settings|codex/hooks|gemini/settings|agents/hooks)\.json|\.codex/config\.toml|\.github/workflows/.*\.ya?ml|scripts/(sync|trusted_gh|trusted_git|read_git_state|run_tests|prose_policy|check_changelog|check_gate_adoption|check_hook_coverage|check_(banned_agents|branch_name|commit_attribution|commit_message|compliance_tree|dockerfile_root|external_pr_refs|git_identity|hedging|persist_credentials|pull_request_message|secrets_heuristic|weak_hashing))\.py|scripts/(prose_bans|banned_models)\.txt)$
+        files: ^(hooks/.*\.py|tests/.*\.py|\.(claude/settings|codex/hooks|gemini/settings|agents/hooks)\.json|\.codex/config\.toml|\.github/workflows/.*\.ya?ml|scripts/(sync|trusted_gh|trusted_git|read_git_state|run_tests|prose_policy|check_changelog|check_gate_adoption|check_hook_coverage|check_(banned_agents|branch_name|commit_attribution|commit_message|compliance_tree|dockerfile_root|external_pr_refs|git_identity|hedging|local_paths|persist_credentials|pull_request_message|secrets_heuristic|weak_hashing)|complete_gate_adoption)\.py|\.local-path-allowlist|scripts/(prose_bans|banned_models)\.txt)$
         pass_filenames: false
       - id: check-git-identity
         name: Check git identity (Rule 14)
@@ -86,6 +96,13 @@ repos:
       - id: check-unpushed-identity
         name: Check unpushed commit identities (Rule 14)
         entry: python scripts/check_git_identity.py --strict --unpushed
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: check-unpushed-local-paths
+        name: Check unpushed commits for real local identifiers (Rule 8)
+        entry: python -I scripts/check_local_paths.py --unpushed
         language: python
         pass_filenames: false
         always_run: true

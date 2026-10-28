@@ -271,7 +271,7 @@ class PreToolUseTest(unittest.TestCase):
         result = run_hook(payload, VIOLATING_BRANCH)
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_primary_branch_allows_only_new_topic_branch(self):
+    def test_primary_branch_denies_rename_and_asks_for_topic_branch(self):
         blocked = run_hook(bash_payload("git branch -m feat/x"), "main")
         allowed = run_hook(bash_payload("git switch -c feat/x"), "main")
         self.assertEqual(blocked.returncode, BLOCKING_EXIT_CODE)

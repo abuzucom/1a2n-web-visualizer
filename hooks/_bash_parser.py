@@ -13,6 +13,7 @@ GROUPING = frozenset({"(", ")", "{", "}", "`", "\n"})
 PUNCTUATION_CHARS = "();<>|&`"
 MAX_COMMAND_CHARACTERS = 65536
 REDIRECTION_CHARS = frozenset("<>&0123456789")
+PROCESS_SUBSTITUTION_CHARS = frozenset("<>")
 WRAPPERS = frozenset({
     "sudo", "doas", "env", "time", "nohup", "nice", "command", "xargs",
     "timeout", "exec", "builtin",
@@ -90,6 +91,7 @@ def strip_prefixes(tokens: list) -> tuple:
     """Return executable tokens, assignments, and complete prefix parsing."""
     index = 0
     wrapper = ""
+    wrapper_index = -1
     assignments = []
     while index < len(tokens):
         token = tokens[index]
@@ -103,6 +105,7 @@ def strip_prefixes(tokens: list) -> tuple:
         name = os.path.basename(token).lower()
         if name in WRAPPERS:
             wrapper = name
+            wrapper_index = index
             index += 1
             continue
         expanded, complete = _expand_env_split(tokens, index) if wrapper == "env" else (None, True)
@@ -112,6 +115,7 @@ def strip_prefixes(tokens: list) -> tuple:
             tokens = expanded
             index = 0
             wrapper = ""
+            wrapper_index = -1
             continue
         if wrapper and token.startswith("-"):
             takes_value = ("=" not in token
@@ -119,12 +123,29 @@ def strip_prefixes(tokens: list) -> tuple:
             index += 2 if takes_value else 1
             continue
         break
+    if index >= len(tokens) and wrapper_index >= 0:
+        # A wrapper with no program runs itself: a bare `env` prints the
+        # whole environment.
+        return [tokens[wrapper_index]], assignments, True
     return tokens[index:], assignments, True
+
+
+def is_process_substitution(token: str) -> bool:
+    """Return True for a fused `<(` or `>(` token that opens a command.
+
+    shlex fuses the redirection character with the parenthesis. Read as a
+    word, the token hides the substituted command inside its neighbor's
+    arguments.
+    """
+    head = token[:-1]
+    return token.endswith("(") and bool(head) and set(head) <= PROCESS_SUBSTITUTION_CHARS
 
 
 def _is_separator(token: str) -> bool:
     """Return True if `token` separates commands."""
-    return token in GROUPING or (bool(token) and set(token) <= OPERATOR_CHARS)
+    return (token in GROUPING
+            or (bool(token) and set(token) <= OPERATOR_CHARS)
+            or is_process_substitution(token))
 
 
 def _split_plain_segments(tokens: list) -> list:
@@ -184,16 +205,29 @@ def _tokenize_line(line: str) -> tuple:
     return tokens, True
 
 
-def command_segments(command: str) -> tuple:
-    """Return parsed segments and whether every line parsed completely."""
+def command_segments_and_tokens(command: str) -> tuple:
+    """Return segments, the token stream, and whether every line parsed.
+
+    The stream joins lines with a newline token, so a caller can walk the
+    whole command without tokenizing it a second time.
+    """
     if not isinstance(command, str) or len(command) > MAX_COMMAND_CHARACTERS:
-        return [], False
+        return [], [], False
     segments = []
+    stream = []
     complete = True
     for line in command.splitlines():
         tokens, parsed = _tokenize_line(line)
         segments.extend(_split_segments(tokens))
+        stream.extend(tokens)
+        stream.append("\n")
         complete = complete and parsed
+    return segments, stream, complete
+
+
+def command_segments(command: str) -> tuple:
+    """Return parsed segments and whether every line parsed completely."""
+    segments, _stream, complete = command_segments_and_tokens(command)
     return segments, complete
 
 

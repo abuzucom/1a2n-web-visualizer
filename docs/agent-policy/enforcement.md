@@ -76,10 +76,11 @@ Antigravity recovery accepts `view_file`, `list_dir`, `find_by_name`, and
 configured launcher. `scripts/check_hook_coverage.py` requires test reachability.
 
 `gate-integrity.yml` uses read-only `pull_request` execution and checks out the
-exact base and head revisions. The bootstrap path uses the exact head checker
-until the base revision contains the checker. Later runs use the base checker.
+exact base and head revisions. Pull-request code never runs. Without a base
+checker, the job requires the label.
 It runs base-branch `scripts/check_gate_pr_integrity.py` against the pull-request
-diff. Protected gate changes require the exact `gate-change-approved` label.
+diff. Protected gate changes require the `gate-change-approved` label from a
+person after the latest push. Case variants of protected paths also count.
 Configure GitHub branch protection to require this job. Repository files cannot
 enforce the branch rule.
 
@@ -109,15 +110,10 @@ Run:
 The checks cover only observed files, commands, clients, and event surfaces.
 External controls must enforce controls beyond repository coverage.
 
-## Windows test environment
-Use the normal user temporary directory for Windows tests. Do not redirect
-`TEMP` or `TMP` into the repository or a worktree. `WinError 5` while a fixture
-creates or removes a temporary tree indicates an ACL problem in the temporary
-directory. Run the focused test once in an elevated PowerShell session to
-confirm the diagnosis. Repair or remove inaccessible stale fixture directories
-only with active-human authorization. Do not weaken, skip, or edit tests. Do
-not make elevation a routine CI requirement.
+Policy files must use LF line endings in the working tree. The policy-size
+checker validates the checked-out bytes and rejects CRLF line endings.
 
+## Windows test environment
 Hooks must not label execution as elevated without a client runtime approval
 result. Missing or contradictory approval metadata fails closed. Repository
 hooks cannot inspect client prose when the client API hides it. An external
@@ -128,9 +124,6 @@ registration, shared module, test, checker, manifest, policy file, and
 synchronized copy. A designed-denial defect report includes the exact input,
 contradictory policy text, and a reproduction. Report a blocked file, command,
 and message. A blocking gate does not authorize another act.
-
-Use a CI job, pre-commit hook, or script for mechanically checkable rules.
-State the limitation for rules that require human semantic review.
 
 The destructive gate set includes the Bash, PowerShell, CMD, shared parser,
 platform policy, shared gate, and parity-test files. Register Bash, PowerShell,
@@ -153,7 +146,8 @@ trailer (`check_commit_attribution.py::has_agent_label`) or a matching
 pull request description line. Undisclosed agent authorship stays
 invisible to this signal, the same documented gap
 `check_banned_agents.py` already states. Never remove or edit that
-trailer to evade this gate. Fix the flagged prose instead.
+trailer to evade this gate. Fix the flagged prose instead. No CI job or
+repository hook runs this gate. Run it locally or from an external harness.
 
 ## Protected files and hook inventory
 Modifying hook files or `scripts/banned_models.txt` can never be inferred,
@@ -171,20 +165,20 @@ it. Work remains stopped until consent is provided affirmatively.
 The protected inventory covers:
 
 - Hook implementations:
-  `hooks/_bash_parser.py`, `hooks/_cmd_parser.py`, `hooks/_gate_core.py`,
+  `hooks/_bash_parser.py`, `hooks/_cmd_parser.py`,
+  `hooks/_command_execution_gate.py`, `hooks/_gate_core.py`,
   `hooks/_platform_policy.py`, `hooks/block_destructive_bash.py`,
   `hooks/block_destructive_cmd.py`, `hooks/block_destructive_powershell.py`,
   `hooks/block_infrastructure_access.py`, `hooks/enforce_branch_name.py`,
-  `hooks/enforce_git_identity.py`, `hooks/reinject_agents_policy.py`,
-  `hooks/require_consent.py`, `hooks/github-command-denylist.txt`, and
+  `hooks/enforce_gate_adoption.py`, `hooks/enforce_git_identity.py`,
+  `hooks/reinject_agents_policy.py`, `hooks/require_consent.py`,
+  `hooks/github-command-denylist.txt`, `hooks/primary-branch.txt`, and
   `hooks/claude-code-settings.example.json`.
 - Hook configurations:
-  `.claude/settings.json`, `.agents/`, `.codex/hooks/`, `.gemini/settings/`, and
-  `.git/hooks/`.
+  `.claude/settings.json`, `.agents/`, `.codex/hooks.json`,
+  `.gemini/settings.json`, and `.git/hooks/`.
 - Denylist configuration:
   `scripts/banned_models.txt`.
-
-`AGENTS.md` controls when linked documents conflict with it.
 
 Claude Code's consent hook reads paths. New test files do not prompt. Existing
 test edits prompt. A final `ExistingTest = None` assignment can disable a

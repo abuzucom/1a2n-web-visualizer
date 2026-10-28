@@ -45,6 +45,7 @@ variable holding the program name is invisible. Repository writers can alter
 this hook or its settings. Tamper resistance requires controls outside the
 writable repository.
 """
+import functools
 import json
 import os
 import sys
@@ -123,10 +124,10 @@ def _powershell_interpreter_verdict(program: str, args: list,
     return None
 
 
-def _interpreter_argument_verdict(token: str, rest: list, depth: int):
+def _interpreter_argument_verdict(token: str, has_payload: bool):
     """Return a command-payload verdict for one interpreter argument."""
     if core.is_shell_payload_flag(token):
-        if not rest:
+        if not has_payload:
             return "deny", "a shell command-string flag has no payload"
         return "deny", "a shell interpreter executes a command-string payload"
     return None
@@ -138,19 +139,27 @@ def _interpreter_verdict(program: str, args: list, depth: int) -> tuple:
     Only the payload after -c, /c, or /k is another command. A shell
     invoked without one runs a script or a REPL, which this gate cannot
     read either way, so it is not gated on the interpreter's own name.
+    A shell name among the arguments (busybox sh -c) hands the rest to that
+    shell. The scan follows it in place rather than recursing, so a long
+    run of names cannot exhaust the stack and crash the gate open.
     """
     verdict = _powershell_interpreter_verdict(program, args, depth)
     if verdict is not None:
         return verdict
+    start = 0
     for index, token in enumerate(args):
-        rest = args[index + 1:]
-        verdict = _interpreter_argument_verdict(token, rest, depth)
+        verdict = _interpreter_argument_verdict(token, index + 1 < len(args))
         if verdict is not None:
             return verdict
-        # busybox sh -c: the applet name precedes the flag
         lowered = token.lower()
-        if not token.startswith(("-", "/")) and lowered in INTERPRETERS:
-            return _interpreter_verdict(lowered, rest, depth)
+        if token.startswith(("-", "/")) or lowered not in INTERPRETERS:
+            continue
+        start = index + 1
+        if lowered in core.POWERSHELL_PROGRAMS:
+            verdict = _powershell_interpreter_verdict(lowered, args[start:], depth)
+            if verdict is not None:
+                return verdict
+    args = args[start:]
     if any(argument.casefold() == "--version" for argument in args):
         return "", ""
     fixed_script = next(
@@ -171,6 +180,19 @@ def _eval_verdict(args: list, depth: int) -> tuple:
     return _nested_command_verdict(" ".join(args), depth, "eval")
 
 
+def _xargs_verdict(original: list, executable: list) -> tuple:
+    """Return the xargs verdict for a segment whose prefix runs xargs.
+
+    The parser strips xargs as a wrapper, so `xargs rm` reaches the delete
+    check as a bare `rm` with no operands. The operands arrive on standard
+    input at run time, which only the xargs view of the segment shows.
+    """
+    prefix = original[:len(original) - len(executable)]
+    if not any(os.path.basename(token).lower() == "xargs" for token in prefix):
+        return "", ""
+    return core.mass_operation_verdict("xargs", executable)
+
+
 def _segment_verdict(tokens: list, depth: int) -> tuple:
     """Return (decision, reason) for one command segment.
 
@@ -179,10 +201,12 @@ def _segment_verdict(tokens: list, depth: int) -> tuple:
     """
     privileged = core.privilege_verdict(tokens)
     redirects = _redirect_targets(tokens)
+    original = tokens
     tokens, environment, complete = bash_parser.strip_prefixes(tokens)
     if not complete:
         return "ask", "env -S command text could not be inspected"
     privileged = core.strongest(privileged, core.privilege_verdict(tokens))
+    privileged = core.strongest(privileged, _xargs_verdict(original, tokens))
     return core.strongest(
         privileged, _program_verdict(tokens, redirects, environment, depth))
 
@@ -195,17 +219,19 @@ def _named_program_verdict(program: str, args: list,
     so the caller runs it past every other check instead.
     """
     lowered = program.lower()
-    for policy in (core.prohibited_command_verdict, core.curl_transfer_verdict):
-        verdict = policy(program, args)
-        if verdict[0]:
-            return verdict
+    prohibited = core.prohibited_command_verdict(program, args)
+    if prohibited[0]:
+        return prohibited
+    curl_verdict = core.curl_transfer_verdict(program, args)
+    if curl_verdict[0]:
+        return curl_verdict
     if lowered == "eval":
         return _eval_verdict(args, depth)
     if lowered in INTERPRETERS:
         return _interpreter_verdict(program, args, depth)
     if lowered in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(lowered, args)
-    if program == "git":
+    if core.normalize_windows_command_name(program) == "git":
         return core.git_verdict(args, _CWD[0], environment)
     return None
 
@@ -272,10 +298,11 @@ def classify(command: str, depth: int = 0) -> tuple:
     """Return the strongest (decision, reason) across the command's segments."""
     if not isinstance(command, str):
         return "ask", "the command is not a string, so the gate cannot read it"
-    segments, complete = bash_parser.command_segments(command)
+    segments, tokens, complete = bash_parser.command_segments_and_tokens(command)
     if not complete:
         return core.unparseable_verdict(command, GATED_KEYWORDS)
-    verdict = core.remote_execution_verdict(segments)
+    verdict = core.pipeline_execution_verdict(
+        segments, tokens, bash_parser._is_separator, core.BASH_LIST_OPERATORS)
     for segment in segments:
         verdict = core.strongest(verdict, _segment_verdict(segment, depth))
     return verdict
@@ -287,6 +314,11 @@ def emit(decision: str, reason: str) -> int:
 
 
 def main() -> int:
+    """Classify one Bash tool call, denying on any unexpected error."""
+    return core.run_fail_closed(_run, functools.partial(emit, "deny"))
+
+
+def _run() -> int:
     payload = core.read_payload()
     if payload is None:
         return emit("deny", "the hook payload could not be parsed, so the gate cannot clear this command")

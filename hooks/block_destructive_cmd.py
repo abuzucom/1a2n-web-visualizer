@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Gate CMD commands through behavior-based operation policies."""
+import json
 import ntpath
 import os
 import sys
@@ -18,7 +19,6 @@ except ImportError as error:  # pragma: no cover
 
 GATE = "block_destructive_cmd.py"
 CMD_TOOL_NAMES = frozenset({"Cmd", "CMD", "CommandPrompt"})
-STORAGE_DESTRUCTION_PROGRAMS = frozenset({"diskpart", "format"})
 SENSITIVE_DISCOVERY_PROGRAMS = frozenset({
     "arp",
     "driverquery",
@@ -97,30 +97,12 @@ def classify_named_program(
     prohibited = core.prohibited_command_verdict(program_name, list(arguments))
     if prohibited[0]:
         return prohibited
-    for classify in (_classify_destructive_program, _classify_execution_program):
-        verdict = classify(program_name, arguments)
-        if verdict is not None:
-            return verdict
-    if program_token.casefold().endswith(SCRIPT_SUFFIXES):
-        return "ask", "a fixed local batch script executes code"
-    return "", ""
-
-
-def _classify_destructive_program(program_name: str, arguments: tuple[str, ...]):
-    """Return a verdict for storage, delete, service, or remote tools, else None."""
-    if program_name in STORAGE_DESTRUCTION_PROGRAMS:
-        return "deny", f"{program_name} partitions or formats storage"
     if program_name in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(program_name, list(arguments))
     if program_name in ("sc", "schtasks"):
         return classify_service_or_task(program_name, arguments)
     if program_name in REMOTE_EXECUTION_PROGRAMS:
         return "deny", f"{program_name} enables remote command execution"
-    return None
-
-
-def _classify_execution_program(program_name: str, arguments: tuple[str, ...]):
-    """Return a verdict for discovery, transfer, or nested execution, else None."""
     if program_name in SENSITIVE_DISCOVERY_PROGRAMS:
         return "ask", f"{program_name} enumerates sensitive host state"
     if program_name == "curl":
@@ -129,7 +111,9 @@ def _classify_execution_program(program_name: str, arguments: tuple[str, ...]):
         return classify_interpreter(program_name, arguments)
     if program_name in ("call", "for"):
         return "deny", f"{program_name} can hide nested command execution"
-    return None
+    if program_token.casefold().endswith(SCRIPT_SUFFIXES):
+        return "ask", "a fixed local batch script executes code"
+    return "", ""
 
 
 def classify_cmd_segment(command_tokens: tuple[str, ...]) -> tuple[str, str]:

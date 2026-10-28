@@ -28,6 +28,7 @@ function, a module, or a variable holding a cmdlet name is invisible.
 Repository writers can alter this hook or its settings. Tamper resistance
 requires controls outside the writable repository.
 """
+import functools
 import json
 import os
 import shlex
@@ -60,6 +61,7 @@ GATED_KEYWORDS = core.gated_keywords() + tuple(core.DELETE_PROGRAMS)
 # the Bash gate's brace group. Reading Write-Output as the program sees
 # no delete at all, so the parentheses end a statement.
 SEPARATORS = frozenset({";", "|", "&&", "||", "(", ")", "\n"})
+OPERATOR_CHARACTERS = frozenset("&|;")
 # The call operator and the cmdlets that run a command given to them.
 WRAPPERS = frozenset({"&", "start-process", "invoke-expression", "iex",
                       "invoke-command", "sudo"})
@@ -92,11 +94,16 @@ def _tokenize(command: str):
         return None
 
 
+def _is_separator(token: str) -> bool:
+    """Return True if `token` ends a PowerShell statement or pipeline stage."""
+    return token in SEPARATORS or (bool(token) and set(token) <= OPERATOR_CHARACTERS)
+
+
 def _segments(tokens: list) -> list:
     """Split tokens into the statements PowerShell would run separately."""
     segments = [[]]
     for token in tokens:
-        if token in SEPARATORS or (token and set(token) <= set("&|;")):
+        if _is_separator(token):
             segments.append([])
         else:
             segments[-1].append(token)
@@ -236,7 +243,7 @@ def _named_program_verdict(program: str, args: list, depth: int) -> tuple:
         return _interpreter_verdict(program, args, depth)
     if program in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(program, args)
-    if program == "git":
+    if core.normalize_windows_command_name(program) == "git":
         return core.git_verdict(args, _CWD[0])
     return None
 
@@ -297,8 +304,8 @@ def classify(command, depth: int = 0) -> tuple:
         if tokens is None:
             return core.unparseable_verdict(command.lower(), GATED_KEYWORDS)
         segments = _segments(tokens)
-        verdict = core.strongest(
-            verdict, core.remote_execution_verdict(segments))
+        verdict = core.strongest(verdict, core.pipeline_execution_verdict(
+            segments, tokens, _is_separator, core.POWERSHELL_LIST_OPERATORS))
         for segment in segments:
             verdict = core.strongest(
                 verdict, _statement_verdict(segment, depth))
@@ -306,6 +313,11 @@ def classify(command, depth: int = 0) -> tuple:
 
 
 def main() -> int:
+    """Classify one PowerShell tool call, denying on any unexpected error."""
+    return core.run_fail_closed(_run, functools.partial(core.emit, GATE, "deny"))
+
+
+def _run() -> int:
     payload = core.read_payload()
     if payload is None:
         return core.emit(GATE, "deny", "the hook payload could not be parsed, "

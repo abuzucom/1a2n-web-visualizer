@@ -75,6 +75,9 @@ except ImportError as error:  # pragma: no cover (exercised by the adoption test
 GATED_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 PATH_KEYS = ("file_path", "notebook_path")
 PROTECTED_PARTS = ("hooks", ".claude", ".git", ".agents", ".codex", ".gemini")
+POLICY_REASON = "rewrites agent policy text that later sessions load as instructions"
+OUTSIDE_ROOT_REASON = ("creates a file outside the project root, which the "
+                       "gate cannot vouch for")
 SKIP_WALK_DIRS = frozenset({".git", "node_modules", ".venv", "__pycache__"})
 MAX_INODE_WALK = 20000
 
@@ -113,18 +116,31 @@ def is_test_path(path: str) -> bool:
     return core.is_test_path(path)
 
 
-def is_protected_path(target: str, project_dir: str) -> bool:
-    """Return True if `target` is a file that decides whether gates run."""
+def _relative_name(target: str, project_dir: str):
+    """Return the lowercased root-relative name of `target`, or None outside it."""
     root = os.path.realpath(project_dir)
     target_real = os.path.realpath(target)
     if not (target_real == root or target_real.startswith(root + os.sep)):
-        return False
+        return None
     relative = os.path.relpath(target_real, root).replace(os.sep, "/")
-    stripped = core.strip_windows_decorations(relative).lower()
+    return core.strip_windows_decorations(relative).lower()
+
+
+def is_protected_path(target: str, project_dir: str) -> bool:
+    """Return True if `target` is a file that decides whether gates run."""
+    stripped = _relative_name(target, project_dir)
+    if stripped is None:
+        return False
     head = stripped.split("/", 1)[0]
     if head in PROTECTED_PARTS:
         return True
     return stripped == "scripts/banned_models.txt"
+
+
+def is_policy_path(target: str, project_dir: str) -> bool:
+    """Return True if `target` is agent policy text loaded as instructions."""
+    stripped = _relative_name(target, project_dir)
+    return stripped is not None and core.is_policy_relative(stripped)
 
 
 def _same_file(first: os.stat_result, second: os.stat_result) -> bool:
@@ -229,6 +245,11 @@ def escape_reason(raw: str, target: str, project_dir: str) -> str:
     """Return why an out-of-tree path cannot be cleared, or an empty string."""
     if not escapes_root(target, project_dir):
         return ""
+    # A missing target reaches no test inode, but the inode check cannot
+    # tell that apart from an incomplete scan. Name what is known instead.
+    if not os.path.lexists(target) and not (is_test_path(raw)
+                                            or is_test_path(target)):
+        return OUTSIDE_ROOT_REASON
     if is_redirected(raw, project_dir, target):
         return ("follows a link to a test file outside the project root, "
                 "which the gate cannot vouch for")
@@ -259,7 +280,19 @@ def find_gate_reason(tool_name: str, target: str) -> str:
 
 def build_reason(target: str, reason: str) -> str:
     """Return the text the user reads on the permission prompt."""
-    if "Rule 22" in reason or "decides whether these gates run" in reason:
+    if reason == POLICY_REASON:
+        return (
+            f"{core.sanitize(os.path.basename(target))}: this edit {reason}. "
+            "AGENTS.md requires active-human approval for every policy change. "
+            "Approving a plan is not authorization for this edit; consent is per act."
+        )
+    if reason == OUTSIDE_ROOT_REASON:
+        return (
+            f"{core.sanitize(os.path.basename(target))}: this edit {reason}. "
+            "Approving a plan is not authorization for this edit; consent is per act. "
+            "Allow it only if this write belongs to the requested work."
+        )
+    if "decides whether these gates run" in reason:
         return (
             f"{core.sanitize(os.path.basename(target))}: this edit {reason}. "
             "AGENTS.md Non-negotiable Rule 22 says stop work, enter plan mode, and "
@@ -315,6 +348,9 @@ def _write_reason(payload: dict, raw: str, target: str,
     if (is_protected_path(target, project_dir)
             or is_protected_path(target, policy_root)):
         return "writes to a file that decides whether these gates run at all"
+    if (is_policy_path(target, project_dir)
+            or is_policy_path(target, policy_root)):
+        return POLICY_REASON
     if names_a_test(raw, target, project_dir):
         return (escape_reason(raw, target, project_dir)
                 or find_gate_reason(payload.get("tool_name", ""), target))

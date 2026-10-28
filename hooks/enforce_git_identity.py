@@ -64,8 +64,15 @@ def _read_payload() -> dict:
 
 
 def run_checker(project_dir: str, extra_args: list, invocation: dict = None):
-    """Run scripts/check_git_identity.py, or return None when the repo has no copy."""
-    checker = core.resolved_under(project_dir, CHECKER_PATH)
+    """Run the trusted identity checker, or return None when the repo has no copy.
+
+    A project copy opts the repository into the identity policy. The payload
+    can name any directory, so the hook executes the policy-root copy only.
+    """
+    project_copy = core.resolved_under(project_dir, CHECKER_PATH)
+    if project_copy is None or not os.path.isfile(project_copy):
+        return None
+    checker = core.resolved_under(core.policy_root(), CHECKER_PATH)
     if checker is None or not os.path.isfile(checker):
         return None
     cwd = invocation["cwd"] if invocation else project_dir
@@ -127,8 +134,9 @@ def build_warning(violation: str, advisory: str) -> str:
         "",
         "Take this action before any commit or push:",
         "1. Report any identity candidate under REPOSITORY_DATA.",
-        "2. Confirm the exact name and email with the user. Never auto-select",
-        "   a history candidate.",
+        "2. Derive the name and email from an authenticated account source.",
+        "   Confirm the derived values with the user. Never ask the user",
+        "   to supply values. Never auto-select a history candidate.",
         "3. Set the confirmed identity only in this repository:",
         "     git config user.name  '<login>'",
         "     git config user.email '<id>+<login>@users.noreply.github.com'",
@@ -188,8 +196,10 @@ def _blocks_invocation(project_dir: str, invocation: dict) -> bool:
             f"blocked by hooks/enforce_git_identity.py: {label} with an unset or "
             f"disallowed git identity.\n"
             f"{violation}\n"
-            f"Ask the user which name and email to commit under, then set them "
-            f"with git config as a separate tool call. Do not invent an identity.",
+            f"Derive the name and email from an authenticated account source and "
+            f"confirm them with the active human. Never ask the active human to "
+            f"supply the values. Set them with git config as a separate tool call. "
+            f"Do not invent an identity.",
             file=sys.stderr,
         )
         return True

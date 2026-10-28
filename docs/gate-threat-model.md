@@ -17,7 +17,8 @@ include the following actions:
 - The gates detect truncating redirects without a delete in the line. Examples
   include `> file` and `cat /dev/null > file`.
 - The gates detect pipes into interpreters. Sources include downloads and shell
-  history.
+  history. List operators end a pipeline. A group opened after a pipe stays in
+  that pipeline. Group nesting past 32 levels denies at the inspection limit.
 - The gates classify history rewrites and published-ref deletion. Covered forms
   include `--force`, `--force-with-lease`, `--mirror`, `--delete`, `--prune`, a
   forced or empty refspec, `--amend`, `rebase`, `filter-branch`, `reset --hard`,
@@ -92,8 +93,10 @@ include the following actions:
   destinations from Git configuration.
   The inspection never executes an alias. Reads stop at 256 KiB or five seconds.
   Alias expansion stops after ten steps. Unknown and shell aliases deny.
-- The branch gate denies opaque interpreters, unlisted scripts, and unresolved
-  branch arguments. Commands require an explicit inspectable program name.
+- The command execution gate in `hooks/_command_execution_gate.py` denies
+  opaque interpreters and unlisted scripts. The branch gate loads it for every
+  shell command. The branch gate denies unresolved branch arguments. Commands
+  require an explicit inspectable program name.
   Incomplete parsing receives a syntax denial. Only recovered Git commands
   create ambiguous Git-write contexts. Parsing stops at 65,536 characters.
   Bounded repository workflows request native consent. The route rejects
@@ -268,10 +271,10 @@ reason.
   alias-depth variants and shell-alias variants. Absent config sources and
   error-reporting arms also remain.
 - `_is_system_root`, `_mentions_device`,
-  `_segment_program`, `device_write_verdict`, `forge_verdict`,
+  `device_write_verdict`, `forge_verdict`,
   `logging_verdict`, `mass_operation_verdict`, `posix_delete_verdict`,
-  `remote_execution_verdict`, `schedule_verdict`, `unparseable_verdict`, and
-  `volume_verdict` retain platform, device, mount, and uncommon-program arms.
+  `remote_execution_verdict`, `schedule_verdict`, and `unparseable_verdict`
+  retain platform, device, mount, and uncommon-program arms.
   Corpus rows exercise representative outcomes. The corpus avoids building
   real devices or mounts.
 - `_protected_path` uses an explicit `ntpath` cross-drive case. Linux and
@@ -302,7 +305,7 @@ reason.
   payloads, dynamic targets, and plain shell transitions.
 - Branch enforcement retains malformed lifecycle payloads and uncommon Git target positions in
   `alias_names_prohibited_branch`, `command_names_prohibited_branch`,
-  `command_names_prohibited_metadata`, `handle_context_event`, and `main`.
+  `command_names_prohibited_metadata`, `handle_context_event`, and `_run`.
   Hook tests cover every lifecycle event and client consent response.
   Tests also cover exact recovery, aliases, metadata, and branch publication.
 - `read_payload`, `resolved_under`, and `sanitize` retain defensive exceptions

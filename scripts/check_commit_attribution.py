@@ -27,6 +27,11 @@ TRAILER_PATTERN = re.compile(
 )
 COAUTHOR_PATTERN = re.compile(r"\A(?P<name>[^<>]+?)\s*(?:<(?P<email>[^<>]+)>)?\Z")
 OBJECT_ID_PATTERN = re.compile(r"\A[0-9a-fA-F]{40,64}\Z")
+# A bare vendor or tool name ("Claude", "Codex") names no model. Every
+# released model name carries a version digit.
+VERSION_DIGIT_PATTERN = re.compile(r"[0-9]")
+NON_PRINTABLE_PATTERN = re.compile(r"[^\x20-\x7e]")
+MAX_REPORTED_MODEL = 80
 MAX_COMMITS = 200
 MAX_MESSAGE_BYTES = 256 * 1024
 
@@ -217,6 +222,50 @@ def has_agent_label(body: str) -> bool:
     return False
 
 
+def _reported_value(value: str) -> str:
+    """Return a bounded printable copy of untrusted trailer text."""
+    return NON_PRINTABLE_PATTERN.sub("", value)[:MAX_REPORTED_MODEL]
+
+
+def _disclosure_labels(body: str) -> tuple[list[str], bool]:
+    """Return name-only Assisted-by models and whether an agent co-author exists."""
+    models = []
+    agent_label = False
+    for key, value in terminal_trailers(body):
+        norm_key = key.lower().replace(" ", "-")
+        match = COAUTHOR_PATTERN.fullmatch(value.strip())
+        if not match or match.group("email") or not match.group("name").strip():
+            continue
+        if norm_key == "assisted-by":
+            models.append(match.group("name").strip())
+        elif norm_key == "co-authored-by":
+            agent_label = True
+    return models, agent_label
+
+
+def model_disclosure_violations(commits: list[dict]) -> list[str]:
+    """Require agent-labeled commits to disclose a versioned model.
+
+    A commit with no name-only agent label is outside Rule 14 disclosure,
+    so human commits without trailers pass.
+    """
+    violations = []
+    for commit in commits:
+        sha = commit["sha"][:12]
+        models, agent_label = _disclosure_labels(commit.get("body", ""))
+        for model in models:
+            if not VERSION_DIGIT_PATTERN.search(model):
+                violations.append(
+                    f"{sha}: assisted-by trailer must name a versioned model, "
+                    f"not '{_reported_value(model)}'"
+                )
+        if agent_label and not models:
+            violations.append(
+                f"{sha}: agent co-author label requires an Assisted-by model disclosure"
+            )
+    return violations
+
+
 def github_identity_violations(commits: list[dict], repository: str,
                                repo_root: str) -> list[str]:
     """Validate each commit author and committer through GitHub metadata."""
@@ -257,6 +306,7 @@ def main() -> int:
                 parser.error("--base and --head require no positional path")
             commits = _git_log(args.repo, args.base, args.head)
         violations = trailer_violations(commits)
+        violations.extend(model_disclosure_violations(commits))
         if not args.message_file:
             violations.extend(
                 github_identity_violations(

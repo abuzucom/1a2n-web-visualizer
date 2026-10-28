@@ -11,12 +11,18 @@ from pathlib import Path
 
 try:
     import check_gate_adoption as adoption
+    import trusted_git
 except ImportError:
     from scripts import check_gate_adoption as adoption
+    from scripts import trusted_git
 
 STAGING_DIRECTORY = ".gate-staging"
 EXTRA_CLIENT_CONFIGS = (".codex/config.toml",)
 CHECK_TIMEOUT_SECONDS = 30
+LOCAL_PATH_CHECKER = "scripts/check_local_paths.py"
+LOCAL_PATH_SCAN_TIMEOUT_SECONDS = 600
+# Paths per checker process, so argument lists stay far below OS limits.
+LOCAL_PATH_BATCH_SIZE = 500
 
 
 def _is_under(path: Path, parent: Path) -> bool:
@@ -69,6 +75,46 @@ def _validate_candidate(root: Path, candidate: Path) -> None:
     )
     if result.returncode:
         raise ValueError("candidate fails check_gate_adoption.py")
+
+
+def _tracked_files(root: Path) -> list[str]:
+    """Return tracked paths from one bounded `git ls-files -z` call."""
+    result = trusted_git.run_git(
+        root, ["ls-files", "-z"], timeout=CHECK_TIMEOUT_SECONDS)
+    if result.returncode:
+        raise ValueError("cannot list tracked files for the local-path scan")
+    return [name for name in result.stdout.split("\0") if name]
+
+
+def _validate_local_paths(root: Path) -> None:
+    """Refuse the transaction while any local-path finding is unresolved.
+
+    The installed checker reads the installed allowlist, so this runs after
+    the candidate files land and before the transaction returns. A failure
+    restores every prior target.
+    """
+    files = _tracked_files(root)
+    checker = root / LOCAL_PATH_CHECKER
+    for start in range(0, len(files), LOCAL_PATH_BATCH_SIZE):
+        batch = files[start:start + LOCAL_PATH_BATCH_SIZE]
+        result = subprocess.run(
+            [sys.executable, "-I", str(checker), "--", *batch],
+            cwd=root, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=LOCAL_PATH_SCAN_TIMEOUT_SECONDS,
+            check=False,
+        )
+        if result.returncode:
+            raise ValueError(
+                "unresolved local-path findings or a missing allowlist. "
+                "Recovery: run 'python -I scripts/check_local_paths.py "
+                "--report' over the tracked files, approve each proposed "
+                "allowlist entry or replace the name, then retry.")
+
+
+def _validate_installed(root: Path) -> None:
+    """Verify the installed gate set, then the local-path gate."""
+    _validate_candidate(root, root)
+    _validate_local_paths(root)
 
 
 def _target_path(root: Path, relative: str) -> Path:
@@ -180,7 +226,7 @@ def main(argv: list[str]) -> int:
         candidate = _candidate(root, options.candidate)
         _validate_candidate(root, candidate)
         paths = _ordered_paths(_candidate_paths(candidate))
-        _install_paths(root, candidate, paths, lambda: _validate_candidate(root, root))
+        _install_paths(root, candidate, paths, lambda: _validate_installed(root))
     except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         print(f"gate adoption transaction failed: {error}", file=sys.stderr)
         return 1

@@ -67,7 +67,9 @@ CHECKER_NAMES = (
     "check_commit_message",
     "check_git_identity",
     "check_branch_name",
+    "check_local_paths",
 )
+BOT_REGISTRY_NAME = "trusted_bot_identities"
 
 # Highest code point rendered as a two-digit hex escape.
 MAX_LATIN1_CODEPOINT = 0xFF
@@ -111,16 +113,17 @@ def _load_module(path: Path, name: str) -> ModuleType:
     return module
 
 
+def _load_trusted(name: str) -> ModuleType:
+    """Load one module from the orchestrator's own directory."""
+    path = Path(__file__).resolve().parent / f"{name}.py"
+    if not path.is_file():
+        raise RuntimeError(f"trusted checker is missing: {name}.py")
+    return _load_module(path, name)
+
+
 def _load_checkers() -> dict[str, ModuleType]:
     """Load every checker from the orchestrator's own directory."""
-    scripts_dir = Path(__file__).resolve().parent
-    checkers = {}
-    for name in CHECKER_NAMES:
-        path = scripts_dir / f"{name}.py"
-        if not path.is_file():
-            raise RuntimeError(f"trusted checker is missing: {name}.py")
-        checkers[name] = _load_module(path, name)
-    return checkers
+    return {name: _load_trusted(name) for name in CHECKER_NAMES}
 
 
 def _is_within(path: Path, parent: Path) -> bool:
@@ -671,8 +674,27 @@ def _scan_conflicts(
         return list(immutable_scan(str(repo), object_id))
 
 
+def _local_path_scanner(checkers: dict[str, ModuleType]) -> object:
+    """Build one local-path scanner from the trusted base allowlist.
+
+    The allowlist beside this trusted checker belongs to the base revision,
+    so a pull request cannot approve its own entries (H2). No runtime
+    identity is read in CI.
+    """
+    local_paths = checkers["check_local_paths"]
+    trusted_root = Path(__file__).resolve().parent.parent
+    return local_paths.build_scanner(
+        local_paths.load_allowlist(trusted_root), local_paths.Identity())
+
+
+def _local_path_violations(findings: list) -> list[str]:
+    """Render local-path findings without revealing matched names."""
+    return [finding.message(reveal=False) for finding in findings]
+
+
 def _scan_tree(
     repo: Path, object_id: str, checkers: dict[str, ModuleType],
+    local_scanner: object | None = None,
 ) -> list[str]:
     """Scan all supported blobs and conflict markers in one exact object."""
     executable, safe_path = _resolve_git(repo)
@@ -699,8 +721,12 @@ def _scan_tree(
         if total_bytes > MAX_TOTAL_BLOB_BYTES:
             raise RuntimeError(
                 f"tree content exceeds limit ({MAX_TOTAL_BLOB_BYTES} bytes)")
-        violations.extend(
-            _scan_blob(path, _decode_blob(content), mode, checkers))
+        text = _decode_blob(content)
+        violations.extend(_scan_blob(path, text, mode, checkers))
+        if local_scanner is not None:
+            violations.extend(_local_path_violations(
+                local_scanner.scan_text(text, path)
+                + local_scanner.scan_path(path)))
         if len(violations) >= MAX_VIOLATIONS:
             violations = violations[:MAX_VIOLATIONS]
             violations.append(
@@ -714,20 +740,81 @@ def _scan_tree(
 
 def _scan_metadata(
     values: dict[str, str], repo: Path, checkers: dict[str, ModuleType],
+    local_scanner: object | None = None,
 ) -> list[str]:
     """Run trusted commit and branch checks for workflow metadata."""
-    banned = checkers["check_banned_agents"]
-    violations = banned.find_violations(
-        [], values.get("--pr-author", ""))
-    branch = values.get("--branch", "")
     author = values.get("--pr-author", "")
-    if branch and author != "dependabot[bot]":
-        violations.extend(
-            checkers["check_branch_name"].find_violations(branch))
-    base = values.get("--base", "")
-    if not base:
-        return violations
-    base = _validate_object_id(base)
+    violations = checkers["check_banned_agents"].find_violations([], author)
+    bots = _load_trusted(BOT_REGISTRY_NAME)
+    events = bots.LazyEventAuthor(os.environ.get("GITHUB_EVENT_PATH", ""))
+    violations.extend(_branch_violations(
+        values.get("--branch", ""), author, bots, events, checkers))
+    if values.get("--base", ""):
+        violations.extend(_scan_commit_range(values, repo, checkers, bots, events))
+    if local_scanner is not None:
+        violations.extend(_local_path_metadata(values, repo, checkers, local_scanner))
+    if events.error is not None:
+        violations.append(
+            f"pull request event unreadable ({_sanitize(events.error)}); bot "
+            "exemptions denied. Re-run the workflow; if it persists, report "
+            "the runner event file.")
+    return violations
+
+
+def _local_path_metadata(
+    values: dict[str, str], repo: Path, checkers: dict[str, ModuleType],
+    local_scanner: object,
+) -> list[str]:
+    """Scan the branch, range messages and patches, and PR text (H7)."""
+    local_paths = checkers["check_local_paths"]
+    findings = local_scanner.scan_path(values.get("--branch", ""))
+    if values.get("--base", ""):
+        base = _validate_object_id(values["--base"])
+        log = local_paths._git_log(
+            repo, ["--end-of-options", f"{base}..{values['--tree']}"])
+        findings += local_paths.scan_log(local_scanner, log)
+    event_path = os.environ.get("GITHUB_EVENT_PATH", "")
+    if event_path:
+        findings += local_paths.scan_event(local_scanner, event_path)
+    return _local_path_violations(findings)
+
+
+def _branch_violations(
+    branch: str, author: str, bots: ModuleType, events: object,
+    checkers: dict[str, ModuleType],
+) -> list[str]:
+    """Apply branch naming unless a verified trusted bot owns the branch."""
+    if not branch:
+        return []
+    branch_checker = checkers["check_branch_name"]
+    bot = bots.match_exempt_bot(author, branch)
+    if bot is None:
+        return branch_checker.find_violations(branch)
+    if bot.account_id is None:
+        return []
+    event = events.get()
+    if event is not None and bots.event_verifies(bot, branch, event):
+        return []
+    violations = branch_checker.find_violations(branch)
+    if event is not None:
+        violations.append(
+            f"{bot.login} account ID or head ref does not match the pull "
+            "request event")
+    elif events.error is None:
+        violations.append(
+            f"{bot.login} branch exemption needs the GitHub pull request "
+            "event (ID verification); local runs cannot grant it")
+    return violations
+
+
+def _scan_commit_range(
+    values: dict[str, str], repo: Path, checkers: dict[str, ModuleType],
+    bots: ModuleType, events: object,
+) -> list[str]:
+    """Run trusted identity, attribution, and message checks on the range."""
+    banned = checkers["check_banned_agents"]
+    violations = []
+    base = _validate_object_id(values["--base"])
     head = values["--tree"]
     commits = banned.load_commits(base, head, repo)
     violations.extend(banned.find_violations(commits))
@@ -750,6 +837,8 @@ def _scan_metadata(
     identities = identity.log_identities(
         ["--end-of-options", f"{base}..{head}"], repo)
     violations.extend(identity.find_violations(identities))
+    violations.extend(bots.bot_commit_violations(
+        identities, values.get("--pr-author", ""), events))
     messages = checkers["check_commit_message"]
     commit_messages = messages.load_commit_messages(base, head, repo)
     warnings = messages.find_message_violations(commit_messages)
@@ -820,8 +909,9 @@ def main() -> int:
         object_id = _validate_object_id(values["--tree"])
         values["--tree"] = object_id
         checkers = _load_checkers()
-        violations = _scan_tree(repo, object_id, checkers)
-        violations.extend(_scan_metadata(values, repo, checkers))
+        local_scanner = _local_path_scanner(checkers)
+        violations = _scan_tree(repo, object_id, checkers, local_scanner)
+        violations.extend(_scan_metadata(values, repo, checkers, local_scanner))
         return _report(violations)
     except (
         OSError, ValueError, RuntimeError, LookupError, TypeError,

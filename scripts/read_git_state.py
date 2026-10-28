@@ -2,6 +2,7 @@
 """Print bounded sanitized Git state through the trusted Git runner."""
 import json
 import string
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,6 +19,12 @@ PRINTABLE_MAXIMUM = 126
 BYTE_MAXIMUM = 255
 UNICODE_SHORT_MAXIMUM = 65535
 SUCCESS = 0
+# `git config --get-regexp` exits 1 when no key matches.
+NO_MATCHING_CONFIG = 1
+FILTER_SECTION = "filter."
+FILTER_KEYS = frozenset(("clean", "smudge", "process", "required"))
+# Each driver adds three config pairs to the child environment.
+MAX_FILTER_DRIVERS = 64
 DETACHED_HEAD = 1
 REVISION_LENGTHS = frozenset((40, 64))
 OPERATIONS = frozenset(("all", "branch", "remote", "revision", "status"))
@@ -112,9 +119,10 @@ def parse_status(stdout: str) -> dict:
     }
 
 
-def _run(repository: Path, arguments: list[str]):
+def _run(repository: Path, arguments: list[str], config_overrides=()):
     """Run one fixed Git query and reject oversized output."""
-    result = run_git(repository, arguments, timeout=GIT_TIMEOUT_SECONDS)
+    result = run_git(repository, arguments, timeout=GIT_TIMEOUT_SECONDS,
+                     config_overrides=config_overrides)
     if len(result.stdout) > MAX_RAW_OUTPUT_CHARS:
         raise ValueError("Git output exceeded the safety bound")
     return result
@@ -143,10 +151,44 @@ def _read_remote(repository: Path) -> dict:
     return {"origin": sanitize_text(remote)}
 
 
+def parse_filter_drivers(stdout: str) -> list[str]:
+    """Return filter driver names from NUL-separated config key names."""
+    drivers = {}
+    for name in stdout.split("\0"):
+        driver, separator, key = name.removeprefix(FILTER_SECTION).rpartition(".")
+        if name.startswith(FILTER_SECTION) and separator and driver and key in FILTER_KEYS:
+            drivers[driver] = None
+    if len(drivers) > MAX_FILTER_DRIVERS:
+        raise ValueError("repository defines too many filter drivers")
+    return list(drivers)
+
+
+def _filter_driver_overrides(repository: Path) -> tuple:
+    """Return config pairs that stop every configured filter driver."""
+    # Reading config runs no program. Status would run each clean or process
+    # command that .gitattributes or .git/info/attributes maps to a file.
+    arguments = ["config", "--null", "--name-only", "--get-regexp", r"^filter\."]
+    result = _run(repository, arguments)
+    if result.returncode == NO_MATCHING_CONFIG:
+        return ()
+    if result.returncode != SUCCESS:
+        raise ValueError("Git could not read filter configuration")
+    overrides = []
+    for driver in parse_filter_drivers(result.stdout):
+        prefix = f"{FILTER_SECTION}{driver}."
+        overrides.extend(((prefix + "clean", ""), (prefix + "process", ""),
+                          (prefix + "required", "false")))
+    return tuple(overrides)
+
+
 def _read_status(repository: Path) -> dict:
     """Read dirty state without returning changed paths."""
-    arguments = ["status", "--porcelain=v2", "--branch"]
-    result = _run(repository, arguments)
+    # A submodule's dirty check runs a child status that reads the
+    # submodule's own filter config. "dirty" keeps commit changes visible
+    # without starting that child.
+    arguments = ["status", "--porcelain=v2", "--branch",
+                 "--ignore-submodules=dirty"]
+    result = _run(repository, arguments, _filter_driver_overrides(repository))
     if result.returncode != SUCCESS:
         raise ValueError("Git could not read repository status")
     return parse_status(result.stdout)
@@ -177,7 +219,7 @@ def main(argv: list[str]) -> int:
         return 2
     try:
         state = read_state(argv[0], Path.cwd())
-    except (FileNotFoundError, OSError, ValueError):
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         print("error: Git state read failed; verify the repository and retry", file=sys.stderr)
         return 1
     print(json.dumps(state, ensure_ascii=True, sort_keys=True))

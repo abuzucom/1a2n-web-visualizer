@@ -16,22 +16,25 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
 trusted_gh = importlib.import_module("trusted_gh")
-_ORIGINAL_TEMPDIR = tempfile.tempdir
+
+_PRIOR_TEMP_ROOT = None
 
 
-def setUpModule() -> None:
-    """Keep this module's fixtures inside the writable checkout.
+def setUpModule():
+    """Root fixtures in the checkout for this module only.
 
     The managed Windows runner applies unstable inherited ACLs under the
-    system temp directory. The override stays scoped to this module so a
-    single-process test run does not move other suites' fixtures.
+    system temp directory. A module-level assignment would also move the
+    temp root of every later module in the same process.
     """
+    global _PRIOR_TEMP_ROOT
+    _PRIOR_TEMP_ROOT = tempfile.tempdir
     tempfile.tempdir = str(REPOSITORY_ROOT)
 
 
-def tearDownModule() -> None:
-    """Restore the temp directory other test modules use."""
-    tempfile.tempdir = _ORIGINAL_TEMPDIR
+def tearDownModule():
+    """Restore the temp root that was active before this module ran."""
+    tempfile.tempdir = _PRIOR_TEMP_ROOT
 
 
 class AccountParsingTest(unittest.TestCase):

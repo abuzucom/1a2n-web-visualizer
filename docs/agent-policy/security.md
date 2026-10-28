@@ -6,20 +6,14 @@ The loader rejects missing, malformed, non-ASCII, oversized, symlinked, and
 special files. It rejects absolute paths and paths that escape the policy root.
 It assembles deterministic output and fails closed.
 
-Repo hooks can be modified by repo writers. Use an external
-harness, filesystem isolation, or server-side controls for tamper resistance.
-
 Do not place secrets, credentials, tokens, private keys, or sensitive
 vulnerability details in policy documents, examples, logs, handoffs, or
 generated copies.
 
 Secret categories include keys, tokens, passwords, private keys, and `.env`
-files. If a secret enters version control, stop committing and recommend
-rotation. The secret checker uses heuristics. It does not perform entropy
+files. The secret checker uses heuristics. It does not perform entropy
 analysis or prove that a repository contains no secret.
 
-Use bcrypt, scrypt, or Argon2 with salt and work factor for passwords. Use
-SHA-256 or SHA-3 for general hashing. Never use MD5 or SHA-1 for security.
 Example cache use: `hashlib.md5(payload).hexdigest()` with a comment stating
 that the digest is non-cryptographic.
 
@@ -43,8 +37,6 @@ practices.
 Report vulnerabilities through the process in `SECURITY.md.example`. Do not
 use public issues or pull requests for private vulnerability details.
 
-`AGENTS.md` controls when linked documents conflict with it.
-
 Avoid nested quantifiers such as `(x+)+` and overlapping patterns. Use atomic
 groups, possessive quantifiers, or simpler expressions.
 
@@ -61,15 +53,16 @@ Injection examples:
 - Bad: `subprocess.run(f"convert {filename} out.png", shell=True)`
 - Good: `subprocess.run(["convert", filename, "out.png"])`
 
+## Local identifier limits
+Only the trusted CI scan blocks. CI sees only profile paths. Placeholder-named
+accounts, double encoding, and homoglyphs pass.
+
 ## Denied command families
 The denial covers AWS CLI, SAM, CDK, Azure CLI and PowerShell, Google Cloud
 CLI, `gsutil`, `bq`, Terraform, OpenTofu, Terragrunt, Pulumi, Packer,
 Kubernetes, Helm, Kustomize, OpenShift, Minikube, Kind, SSH clients, PuTTY,
 FTP, TFTP, Telnet, iptables, nftables, UFW, firewalld, and Windows firewall
 commands.
-
-Git transport over SSH remains allowed through Git. Direct SSH clients remain
-denied.
 
 Cloudflare Pages deployment is a limited exception to the cloud-tool denial.
 Permit a local build and `wrangler pages deploy <workspace-path>
@@ -87,13 +80,3 @@ Protected content includes AWS, Azure, Google Cloud, SSH, Kubernetes,
 Terraform, FTP, and Netrc credentials, Terraform source, variables, state,
 locks and CLI configuration, plus Kubernetes, Helm, and Kustomize manifests
 and project directories.
-
-`actions/checkout` writes an ephemeral `GITHUB_TOKEN` to Git configuration when
-`persist-credentials` remains true. Later steps and third-party actions can
-read it. Set `persist-credentials: false` unless a listed exception applies.
-Use the exact exception comment required by `AGENTS.md`.
-
-Build-time package installation may run as root. Runtime containers must not.
-Prefer ports at or above 1024 behind a proxy. Prefer `COPY --chown` or
-build-time ownership changes. Compose services set `user:`. Kubernetes pods
-set `securityContext.runAsNonRoot: true` and `runAsUser`.

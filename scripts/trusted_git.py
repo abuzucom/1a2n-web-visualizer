@@ -23,10 +23,67 @@ SAFE_CONFIG = (
 )
 GITHUB_HOSTS = frozenset(("github.com", "www.github.com"))
 AMBIGUOUS_MARKERS = ("$", "`", "%")
+PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                   "http_proxy", "https_proxy", "all_proxy")
+# The managed Codex sandbox points proxies at this closed loopback port.
+MANAGED_PROXY_HOST = "127.0.0.1"
+MANAGED_PROXY_PORT = 9
+# Variables like GIT_SSH_COMMAND, GIT_ASKPASS, or LD_PRELOAD make Git run
+# another program, so the child environment starts from this allowlist.
+CHILD_ENVIRONMENT = frozenset((
+    "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
+    "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "SYSTEMROOT", "WINDIR",
+    "COMSPEC", "PATHEXT",
+    "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TZ",
+    "XDG_CONFIG_HOME",
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "GIT_SSL_CAINFO",
+    "SSH_AUTH_SOCK",
+    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+    "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+))
+# A caller such as the identity checker may forward the Git location and
+# identity settings of the command it inspects. Config pairs are limited to
+# identity keys, so a forwarded pair cannot override SAFE_CONFIG.
+GIT_CONTEXT_NAMES = frozenset((
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+    "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM",
+))
+GIT_CONTEXT_IDENTITY_KEYS = frozenset((
+    "user.name", "user.email", "user.useconfigonly",
+    "author.name", "author.email", "committer.name", "committer.email",
+))
+MAX_GIT_CONTEXT_PAIRS = 64
+USAGE_FAILURE = 2
+RUNNER_FAILURE = 1
+# run_git config overrides may only neutralize filter drivers. A wider key
+# such as core.pager or credential.helper would let a caller run a program.
+CONFIG_OVERRIDE_SECTION = "filter"
+CONFIG_OVERRIDE_VARIABLES = frozenset(("clean", "smudge", "process", "required"))
+CONFIG_OVERRIDE_FORBIDDEN = frozenset(("\0", "\n", "\r"))
+# Three pairs for each of read_git_state.MAX_FILTER_DRIVERS (64) drivers.
+MAX_CONFIG_OVERRIDES = 192
+REMOTE_NAME_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
 
-# Argument counts for the fixed transport commands.
-CLONE_ARGUMENT_COUNT = 3
-FETCH_MIN_ARGUMENT_COUNT = 2
+
+def is_managed_proxy_placeholder(value: str) -> bool:
+    """Return whether a proxy value is the managed Codex placeholder."""
+    candidate = value.strip()
+    try:
+        parsed = urllib.parse.urlsplit(candidate if "://" in candidate
+                                       else "//" + candidate)
+        port = parsed.port
+    except ValueError:
+        return False
+    return parsed.hostname == MANAGED_PROXY_HOST and port == MANAGED_PROXY_PORT
+
+
+def sanitize_managed_proxy(environment: dict) -> None:
+    """Remove only managed proxy placeholders from an environment."""
+    for variable in PROXY_VARIABLES:
+        value = environment.get(variable)
+        if value and is_managed_proxy_placeholder(value):
+            environment.pop(variable, None)
 
 
 def _is_inside(path: Path, directory: Path) -> bool:
@@ -118,22 +175,110 @@ def _workspace_root(start: Path) -> Path | None:
         current = parent
 
 
-# Keyword options run_git accepts, with their defaults.
-RUN_GIT_DEFAULTS = {"input_text": None, "check": False, "runner": None, "timeout": None}
+def _child_environment(source) -> dict:
+    """Return the allowlisted subset of an environment for a Git child."""
+    if os.name == "nt":
+        # Windows names are case-insensitive. Uppercase keys keep one entry per name.
+        allowed = {name.upper() for name in CHILD_ENVIRONMENT}
+        return {name.upper(): value for name, value in source.items()
+                if name.upper() in allowed}
+    return {name: value for name, value in source.items() if name in CHILD_ENVIRONMENT}
 
 
-def _trusted_git_environment(repository: Path) -> dict:
-    """Return the inherited environment with repository-steering Git state removed."""
-    environment = dict(os.environ)
-    for name in (
-        "GIT_COMMON_DIR", "GIT_CONFIG", "GIT_CONFIG_COUNT",
-        "GIT_CONFIG_PARAMETERS", "GIT_DIR", "GIT_INDEX_FILE",
-        "GIT_OBJECT_DIRECTORY", "GIT_WORK_TREE",
-    ):
-        environment.pop(name, None)
-    for name in list(environment):
-        if name.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")):
-            environment.pop(name)
+def _context_pairs(context: dict) -> list:
+    """Return the identity config pairs from a GIT_CONFIG_* triple set."""
+    try:
+        count = int(context.get("GIT_CONFIG_COUNT", "0"))
+    except (TypeError, ValueError):
+        return []
+    pairs = []
+    for index in range(min(max(count, 0), MAX_GIT_CONTEXT_PAIRS)):
+        key = context.get(f"GIT_CONFIG_KEY_{index}")
+        value = context.get(f"GIT_CONFIG_VALUE_{index}")
+        if (isinstance(key, str) and isinstance(value, str) and "\0" not in value
+                and key.casefold() in GIT_CONTEXT_IDENTITY_KEYS):
+            pairs.append((key, value))
+    return pairs
+
+
+def _context_environment(context: dict) -> dict:
+    """Return the accepted subset of a caller-supplied Git context."""
+    environment = {
+        name: value for name, value in context.items()
+        if name in GIT_CONTEXT_NAMES and isinstance(value, str) and value
+        and "\0" not in value
+    }
+    pairs = _context_pairs(context)
+    if pairs:
+        environment["GIT_CONFIG_COUNT"] = str(len(pairs))
+        for index, (key, value) in enumerate(pairs):
+            environment[f"GIT_CONFIG_KEY_{index}"] = key
+            environment[f"GIT_CONFIG_VALUE_{index}"] = value
+    return environment
+
+
+def _has_forbidden_character(text: str) -> bool:
+    """Return whether text holds a character Git config cannot carry."""
+    return any(character in text for character in CONFIG_OVERRIDE_FORBIDDEN)
+
+
+def _validate_config_override(key, value) -> None:
+    """Reject an override outside filter.<driver>.<variable>."""
+    if not isinstance(key, str) or not isinstance(value, str):
+        raise ValueError("config override key and value must be strings")
+    if _has_forbidden_character(key) or _has_forbidden_character(value):
+        raise ValueError("config override holds a NUL or line break")
+    section, _, remainder = key.partition(".")
+    driver, _, variable = remainder.rpartition(".")
+    if (section != CONFIG_OVERRIDE_SECTION or not driver
+            or variable not in CONFIG_OVERRIDE_VARIABLES):
+        raise ValueError("config override must be filter.<driver>.<variable>")
+
+
+def _existing_config_count(environment: dict) -> int:
+    """Return GIT_CONFIG_COUNT after checking that every slot exists."""
+    text = environment.get("GIT_CONFIG_COUNT", "0")
+    if not text.isdigit():
+        raise ValueError("GIT_CONFIG_COUNT must be a non-negative integer")
+    count = int(text)
+    # _context_environment writes at most MAX_GIT_CONTEXT_PAIRS slots. A
+    # larger count is foreign and would make the slot scan unbounded.
+    if count > MAX_GIT_CONTEXT_PAIRS:
+        raise ValueError("GIT_CONFIG_COUNT exceeds the forwarded pair limit")
+    for index in range(count):
+        if (f"GIT_CONFIG_KEY_{index}" not in environment
+                or f"GIT_CONFIG_VALUE_{index}" not in environment):
+            raise ValueError("GIT_CONFIG_COUNT names a missing config slot")
+    return count
+
+
+def _append_config_overrides(environment: dict, overrides) -> None:
+    """Append fixed config pairs after any forwarded GIT_CONFIG_* pairs."""
+    # GIT_CONFIG_KEY_n carries a key verbatim. `-c key=value` splits at the
+    # first "=", so it cannot express a subsection that contains one.
+    if len(overrides) > MAX_CONFIG_OVERRIDES:
+        raise ValueError("too many config overrides")
+    for key, value in overrides:
+        _validate_config_override(key, value)
+    start = _existing_config_count(environment)
+    for offset, (key, value) in enumerate(overrides):
+        environment[f"GIT_CONFIG_KEY_{start + offset}"] = key
+        environment[f"GIT_CONFIG_VALUE_{start + offset}"] = value
+    environment["GIT_CONFIG_COUNT"] = str(start + len(overrides))
+
+
+def run_git(
+    repo_root, arguments: list[str], *, input_text=None, check=False,
+    runner=None, timeout=None, git_context=None, config_overrides=(),
+):
+    """Run trusted Git against `repo_root` from an external directory."""
+    repository = Path(repo_root).resolve()
+    executable = Path(resolve_git(repository))
+    environment = _child_environment(os.environ)
+    if git_context:
+        environment.update(_context_environment(git_context))
+    if config_overrides:
+        _append_config_overrides(environment, tuple(config_overrides))
     environment["GIT_PAGER"] = ""
     environment["PAGER"] = ""
     environment["GIT_ATTR_NOSYSTEM"] = "1"
@@ -143,24 +288,9 @@ def _trusted_git_environment(repository: Path) -> dict:
     environment["GIT_PROTOCOL_FROM_USER"] = "0"
     environment["GIT_TERMINAL_PROMPT"] = "0"
     environment["PATH"] = _safe_search_path(repository)
-    environment.pop("GIT_EXTERNAL_DIFF", None)
+    sanitize_managed_proxy(environment)
     if os.name == "nt":
         environment["NoDefaultCurrentDirectoryInExePath"] = "1"
-    return environment
-
-
-def run_git(repo_root, arguments: list[str], **options):
-    """Run trusted Git against `repo_root` from an external directory.
-
-    Accepts the keyword options input_text, check, runner, and timeout.
-    """
-    unknown = sorted(set(options) - set(RUN_GIT_DEFAULTS))
-    if unknown:
-        raise TypeError(f"run_git() got unexpected keyword arguments: {', '.join(unknown)}")
-    settings = {**RUN_GIT_DEFAULTS, **options}
-    repository = Path(repo_root).resolve()
-    executable = Path(resolve_git(repository))
-    environment = _trusted_git_environment(repository)
     command = [
         str(executable),
         "-C",
@@ -170,18 +300,18 @@ def run_git(repo_root, arguments: list[str], **options):
         *SAFE_CONFIG,
         *arguments,
     ]
-    execute = settings["runner"] or subprocess.run
+    execute = runner or subprocess.run
     return execute(
         command,
         cwd=_safe_directory(repository, executable),
         env=environment,
-        input=settings["input_text"],
+        input=input_text,
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
-        check=settings["check"],
-        timeout=settings["timeout"],
+        check=check,
+        timeout=timeout,
     )
 
 
@@ -224,31 +354,35 @@ def _workspace_path(
         return None
     if not must_exist and candidate.exists():
         return None
-    return Path(os.path.abspath(workspace / value))
+    # The returned path must name the checked location. A symlink inside the
+    # workspace makes the literal path and the resolved path diverge.
+    literal = Path(os.path.abspath(workspace / value))
+    if literal != Path(os.path.abspath(workspace)) / candidate.relative_to(root):
+        return None
+    return literal
+
+
+def _fetch_remote(value: str) -> bool:
+    """Return whether a fetch remote is a GitHub URL or a bare remote name."""
+    if _github_source(value):
+        return True
+    return (bool(value) and value[0].isascii() and value[0].isalnum()
+            and all(character in REMOTE_NAME_CHARACTERS for character in value))
 
 
 def _transport_arguments(workspace: Path, arguments: list[str]) -> list[str] | None:
     """Validate the fixed clone and fetch CLI surface."""
     if not arguments or arguments[0] not in {"clone", "fetch"}:
         return None
-    if arguments[0] == "clone":
-        return _clone_arguments(workspace, arguments)
-    return _fetch_arguments(workspace, arguments)
-
-
-def _clone_arguments(workspace: Path, arguments: list[str]) -> list[str] | None:
-    """Validate `clone <github-url> <new-directory>`."""
-    if len(arguments) != CLONE_ARGUMENT_COUNT or not _github_source(arguments[1]):
-        return None
-    destination = _workspace_path(workspace, arguments[2], must_exist=False)
-    if destination is None:
-        return None
-    return ["clone", "--", arguments[1], str(destination)]
-
-
-def _fetch_arguments(workspace: Path, arguments: list[str]) -> list[str] | None:
-    """Validate `fetch <repository-directory> [refspec...]`."""
-    if len(arguments) < FETCH_MIN_ARGUMENT_COUNT:
+    operation = arguments[0]
+    if operation == "clone":
+        if len(arguments) != 3 or not _github_source(arguments[1]):
+            return None
+        destination = _workspace_path(workspace, arguments[2], must_exist=False)
+        if destination is None:
+            return None
+        return ["clone", "--", arguments[1], str(destination)]
+    if len(arguments) < 2:
         return None
     repository = _workspace_path(
         workspace, arguments[1], must_exist=True, allow_root=True,
@@ -257,6 +391,8 @@ def _fetch_arguments(workspace: Path, arguments: list[str]) -> list[str] | None:
         return None
     remaining = arguments[2:]
     if any(not _literal(value) for value in remaining):
+        return None
+    if remaining and not _fetch_remote(remaining[0]):
         return None
     return ["-C", str(repository), "fetch", *remaining]
 
@@ -267,15 +403,21 @@ def main(argv: list[str] | None = None) -> int:
     workspace = _workspace_root(Path.cwd())
     if workspace is None:
         print("trusted Git must run inside a repository", file=sys.stderr)
-        return 2
+        return USAGE_FAILURE
     command = _transport_arguments(workspace, arguments)
     if command is None:
         print("usage: trusted_git.py clone <github-url> <new-directory>",
               file=sys.stderr)
         print("       trusted_git.py fetch <repository-directory> [refspec... ]",
               file=sys.stderr)
-        return 2
-    result = run_git(workspace, command)
+        return USAGE_FAILURE
+    try:
+        result = run_git(workspace, command)
+    except OSError as error:
+        # resolve_git and _safe_directory raise these with a fixed message.
+        print(f"error: {error}. Install Git outside the repository and retry.",
+              file=sys.stderr)
+        return RUNNER_FAILURE
     if result.stdout:
         print(result.stdout, end="")
     if result.stderr:

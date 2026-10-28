@@ -125,6 +125,51 @@ def _current_branch(repo=None) -> str:
     return branch
 
 
+def _import_bot_registry():
+    """Import the bot registry on demand.
+
+    Hooks import this module for find_violations only, so a copy without the
+    registry keeps the branch gate working.
+    """
+    try:
+        from scripts import trusted_bot_identities
+    except ModuleNotFoundError:
+        import trusted_bot_identities
+    return trusted_bot_identities
+
+
+def _apply_bot_exemption(branch: str, violations: list[str]) -> list[str]:
+    """Clear violations when the pull request event proves a trusted bot branch."""
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+        return violations
+    try:
+        bots = _import_bot_registry()
+    except ModuleNotFoundError as error:
+        print(
+            f"error: bot exemption registry missing ({error.name}); branch rules "
+            "apply. Copy scripts/trusted_bot_identities.py from the policy source.",
+            file=sys.stderr,
+        )
+        return violations
+    if not branch.startswith(bots.EXEMPT_BRANCH_PREFIXES):
+        return violations
+    try:
+        event = bots.load_event_author(os.environ.get("GITHUB_EVENT_PATH", ""))
+    except bots.EventPayloadError as error:
+        print(
+            f"error: bot exemption check failed ({error}); branch rules apply. "
+            "Re-run the workflow.",
+            file=sys.stderr,
+        )
+        return violations
+    if event is None:
+        return violations
+    bot = bots.match_exempt_bot(event.login, branch)
+    if bot is not None and (bot.account_id is None or bots.event_verifies(bot, branch, event)):
+        return []
+    return violations
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("branch", nargs="?", help="branch to check (default: current branch)")
@@ -155,6 +200,8 @@ def main() -> int:
         prefixes,
         strict=args.strict_agent_preflight,
     )
+    if violations and not args.branch:
+        violations = _apply_bot_exemption(branch, violations)
     if violations:
         for message in violations:
             print(message, file=sys.stderr)

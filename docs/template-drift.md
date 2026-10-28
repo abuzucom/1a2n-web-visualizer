@@ -9,12 +9,27 @@ the reason for each.
 
 ## Adopted revision
 
-Template commit `848d069`. One commit copies `scripts/` and `hooks/` whole,
-together with `AGENTS.md`, `docs/agent-policy/*.md`,
+Template commit `b452348`, re-adopted from `848d069`. One commit carries
+`scripts/`, `hooks/`, `AGENTS.md`, `docs/agent-policy/*.md`,
 `shared-files.json`, `hook-coverage-baseline.json`, the four client hook
 registrations, and the template tests for every adopted hook and checker.
-`scripts/complete_gate_adoption.py` installed the registrations as one
+`scripts/complete_gate_adoption.py` installed the gate files as one
 transaction.
+
+The `848d069` installer selects files from its own required-path lists.
+Those lists lack `hooks/_command_execution_gate.py` and
+`.local-path-allowlist`, which the `b452348` checker requires. Both files
+landed before the transaction ran. Neither file acts until the new hooks
+and checker load it.
+
+Every shared file except five matches the upstream `shared-files.json`
+digest:
+- `hooks/_cmd_parser.py`, `hooks/_platform_policy.py`,
+  `tests/json_line_worker_child.py`, and `tests/test_platform_policy.py`
+  carry the lint fixes listed below. Upstream left them unchanged since
+  `848d069`.
+- `hooks/_gate_core.py` is a three-way merge of upstream onto the local file.
+  It keeps every local fix, the UNC path rule, and the fsmonitor rule below.
 
 `scripts/sync.py --check-shared` compares the gate files against
 `shared-files.json` in CI. A gate fix landing upstream and not here fails that
@@ -56,8 +71,6 @@ fixes:
 - Complex functions split into named helpers. Decision tables replace long
   `if` chains in the gates.
 - Blind `except` clauses name the exception types each handler covers.
-- `scripts/trusted_git.py` `run_git` takes its keyword options through one
-  validated mapping. Every existing call keeps working.
 - `scripts/check_hook_coverage.py` `run_test_shard` takes the root and
   environment as one `location` argument. `tests/test_shard_priority.py`
   follows that signature.
@@ -72,6 +85,40 @@ record the changed files. `scripts/check_pr_review_response.py`, `ci/call_model.
 `ci/run_model_command.py` also differ from foucault 3.3.14 by named constants.
 `tests/test_foucault_review_wiring.py` pins the current digest of each file.
 Upstreaming these fixes to `abuzucom/agents` needs a separate issue.
+
+The `b452348` re-adoption takes the upstream file whole wherever upstream
+rewrote code that carried a local fix. The local fixes in those files are
+gone:
+- `hooks/enforce_branch_name.py`, `hooks/block_destructive_bash.py`, and
+  `hooks/block_destructive_cmd.py`
+- `scripts/trusted_git.py`, `scripts/trusted_gh.py`,
+  `scripts/check_changelog.py`, and `scripts/check_gate_pr_integrity.py`
+
+CI runs ruff on `tools/` only, so no check depends on those fixes.
+
+### fsmonitor rule in `hooks/_gate_core.py`
+
+True drift. `tests/test_builtin_fsmonitor_gate.py` and
+`tests/test_fsmonitor_version_compatibility.py` exist only here. On Git
+2.35.2 or later, a boolean `core.fsmonitor` value selects the built-in daemon
+rather than a program path. The local rule lets `git status` run without a
+prompt in that case. Every other `core.fsmonitor` value still prompts.
+
+### Dependabot changelog automation
+
+Declined removal. Upstream removed
+`.github/workflows/dependabot-changelog.yml`,
+`scripts/create_dependabot_changelog_pr.py`, and
+`tests/test_dependabot_changelog.py` after `848d069`. This repository keeps
+all three.
+
+### `actions/github-script` pin in `gate-integrity.yml`
+
+Expected to differ. Upstream pins `actions/github-script` 7.1.0.
+`tests/test_action_version_pins.py` allows only the reviewed 9.0.0 pin. The
+approval-timeline step uses that pin. `tests/test_gate_pr_integrity_timeline.py`
+expects the 9.0.0 SHA here, with active-human approval of that specification
+change.
 
 ### Checkers and tests this repository holds alone
 

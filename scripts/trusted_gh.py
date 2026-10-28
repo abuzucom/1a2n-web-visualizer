@@ -3,34 +3,53 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import urllib.parse
 from pathlib import Path
 
+# The proxy constants stay importable from this module for existing callers.
+try:
+    from scripts.trusted_git import (
+        MANAGED_PROXY_HOST, MANAGED_PROXY_PORT, PROXY_VARIABLES,
+        is_managed_proxy_placeholder, sanitize_managed_proxy,
+    )
+except ModuleNotFoundError:
+    from trusted_git import (
+        MANAGED_PROXY_HOST, MANAGED_PROXY_PORT, PROXY_VARIABLES,
+        is_managed_proxy_placeholder, sanitize_managed_proxy,
+    )
+
 
 ACCOUNT_OUTPUT_LIMIT = 256
 COMMAND_OUTPUT_LIMIT = 1024 * 1024
 METADATA_OUTPUT_LIMIT = 65536
 GH_TIMEOUT_SECONDS = 5
-PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-                   "http_proxy", "https_proxy", "all_proxy")
-MANAGED_PROXY_HOST = "127.0.0.1"
-MANAGED_PROXY_PORT = 9
+# GitHub CLI exits with 4 when a command requires authentication.
+GH_AUTH_REQUIRED_EXIT = 4
+AUTHENTICATION_FAILURE = re.compile(r"HTTP 401\b")
+INSTALLATION_TOKEN_FAILURE = "Resource not accessible by integration"
+INSTALLATION_TOKEN_STATUS = "HTTP 403"
+NETWORK_FAILURE = re.compile(
+    r"proxyconnect|connection refused|dial tcp|no such host|i/o timeout"
+    r"|TLS handshake",
+    re.IGNORECASE,
+)
 LOGIN = re.compile(r"\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\Z")
 TEXT_OPTIONS = frozenset(("--body", "--title"))
 REPOSITORY_COMMANDS = frozenset(("pr", "issue", "run"))
 REPOSITORY_NAME = re.compile(r"\A[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?\Z")
 BRANCH_NAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._/-]{0,199}\Z")
 GLOBAL_VALUE_OPTIONS = frozenset(("-R", "--repo", "--hostname"))
-
-# An OWNER/REPOSITORY slug has exactly two parts.
-SLUG_PARTS = 2
-# Length of the bare short option "-R".
-SHORT_REPO_OPTION_LENGTH = 2
-# The account request prints ID and login separated by a tab.
-ACCOUNT_FIELDS = 2
+# gh caches under $TMPDIR/gh-cli-cache. A shared temp root lets the first
+# account or sandbox own that folder and deny every later caller, so each
+# call gets a private directory. Go reads TMPDIR on POSIX and TMP, then
+# TEMP, on Windows.
+PRIVATE_TEMP_PREFIX = "trusted-gh-"
+TEMP_VARIABLES = ("TMPDIR", "TMP", "TEMP")
+MAX_REPORTED_PATH = 200
 
 
 def find_literal_escape_sequences(arguments: list[str]) -> list[str]:
@@ -135,7 +154,7 @@ def _repository_from_origin(origin: str) -> str:
         raise ValueError("repository origin is not a supported GitHub remote")
     path = path.removesuffix(".git")
     parts = path.split("/")
-    if len(parts) != SLUG_PARTS or not all(REPOSITORY_NAME.fullmatch(part) for part in parts):
+    if len(parts) != 2 or not all(REPOSITORY_NAME.fullmatch(part) for part in parts):
         raise ValueError("repository origin has an invalid owner or repository")
     return "/".join(parts)
 
@@ -167,7 +186,7 @@ def _has_repository_option(arguments: list[str]) -> bool:
     for index, argument in enumerate(arguments):
         if argument in ("-R", "--repo") and index + 1 < len(arguments):
             return True
-        if argument.startswith("--repo=") or argument.startswith("-R") and len(argument) > SHORT_REPO_OPTION_LENGTH:
+        if argument.startswith("--repo=") or argument.startswith("-R") and len(argument) > 2:
             return True
     return False
 
@@ -286,22 +305,60 @@ def _safe_search_path(repository: Path) -> str:
 
 def _is_managed_proxy_placeholder(value: str) -> bool:
     """Return whether a proxy value is the managed Codex placeholder."""
-    candidate = value.strip()
-    try:
-        parsed = urllib.parse.urlsplit(candidate if "://" in candidate
-                                       else "//" + candidate)
-        port = parsed.port
-    except ValueError:
-        return False
-    return parsed.hostname == MANAGED_PROXY_HOST and port == MANAGED_PROXY_PORT
+    return is_managed_proxy_placeholder(value)
 
 
 def _sanitize_proxy_environment(environment: dict) -> None:
     """Remove only managed proxy placeholders from an environment."""
-    for variable in PROXY_VARIABLES:
-        value = environment.get(variable)
-        if value and _is_managed_proxy_placeholder(value):
-            environment.pop(variable, None)
+    sanitize_managed_proxy(environment)
+
+
+def proxy_variable_names(environment: dict) -> list[str]:
+    """Return proxy variable names that survive placeholder removal."""
+    remaining = dict(environment)
+    sanitize_managed_proxy(remaining)
+    return [name for name in PROXY_VARIABLES if remaining.get(name)]
+
+
+class GitHubAccessError(OSError):
+    """A GitHub CLI account check failed with a diagnosed category."""
+
+    MESSAGES = {
+        "authentication": "GitHub CLI has no authenticated account; "
+                          "an active human must sign in",
+        "network": "GitHub CLI could not reach GitHub; this is not an "
+                   "authentication result",
+        "installation_token": "GitHub CLI holds an app installation token, which "
+                              "cannot read /user; run this under a user account",
+        "unclassified": "GitHub CLI account check failed with exit {returncode}; "
+                        "this does not prove missing authentication",
+    }
+
+    def __init__(self, category: str, returncode: int):
+        super().__init__(self.MESSAGES[category].format(returncode=returncode))
+        self.category = category
+        self.returncode = returncode
+
+
+def classify_gh_failure(returncode: int, stderr: str) -> str:
+    """Return the failure category for a nonzero GitHub CLI result."""
+    if returncode == GH_AUTH_REQUIRED_EXIT or AUTHENTICATION_FAILURE.search(stderr):
+        return "authentication"
+    if INSTALLATION_TOKEN_STATUS in stderr and INSTALLATION_TOKEN_FAILURE in stderr:
+        return "installation_token"
+    if NETWORK_FAILURE.search(stderr):
+        return "network"
+    return "unclassified"
+
+
+def describe_access_error(error: GitHubAccessError) -> str:
+    """Return a user-facing message that names proxy variables, not values."""
+    message = str(error)
+    if error.category != "network":
+        return message
+    names = proxy_variable_names(dict(os.environ))
+    listed = ", ".join(names) if names else "none set"
+    return f"{message}; inspect proxy variables: {listed}"
 
 
 def run_gh(repo_root, arguments: list[str], *, runner=None, timeout=None):
@@ -317,17 +374,46 @@ def run_gh(repo_root, arguments: list[str], *, runner=None, timeout=None):
     if os.name == "nt":
         environment["NoDefaultCurrentDirectoryInExePath"] = "1"
     execute = runner or subprocess.run
-    return execute(
-        [str(executable), *arguments],
-        cwd=_safe_directory(repository, executable),
-        env=environment,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-        timeout=timeout,
-    )
+    private = tempfile.mkdtemp(
+        prefix=PRIVATE_TEMP_PREFIX, dir=_safe_directory(repository, executable))
+    try:
+        for name in TEMP_VARIABLES:
+            environment[name] = private
+        return execute(
+            [str(executable), *arguments],
+            cwd=private,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=timeout,
+        )
+    finally:
+        _remove_private_directory(private)
+
+
+def _remove_private_directory(path: str) -> None:
+    """Remove one private gh temp directory, warning when removal fails."""
+    try:
+        shutil.rmtree(path)
+    except OSError as error:
+        print(f"warning: could not remove GitHub CLI temp directory "
+              f"{_bounded_path(path)} ({type(error).__name__}); remove it manually",
+              file=sys.stderr)
+
+
+def _bounded_path(path: object) -> str:
+    """Return a path as bounded printable ASCII for diagnostics."""
+    return ascii(str(path))[1:-1][:MAX_REPORTED_PATH]
+
+
+def describe_permission_error(error: PermissionError) -> str:
+    """Return a message naming the unwritable path and the recovery step."""
+    location = _bounded_path(error.filename) if error.filename else "the temp directory"
+    return (f"error: GitHub CLI temporary storage is not writable ({location}); "
+            "set TMPDIR to a writable directory and retry")
 
 
 def parse_account(output: str) -> dict:
@@ -335,7 +421,7 @@ def parse_account(output: str) -> dict:
     if len(output) > ACCOUNT_OUTPUT_LIMIT:
         raise ValueError("GitHub account output exceeds the bound")
     fields = output.strip().split("\t")
-    if len(fields) != ACCOUNT_FIELDS or not fields[0].isdigit() or int(fields[0]) < 1:
+    if len(fields) != 2 or not fields[0].isdigit() or int(fields[0]) < 1:
         raise ValueError("GitHub account output has an invalid account ID")
     if not LOGIN.fullmatch(fields[1]):
         raise ValueError("GitHub account output has an invalid login")
@@ -350,81 +436,78 @@ def authenticated_account(repo_root) -> dict:
         timeout=GH_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
-        raise OSError("GitHub CLI has no authenticated account")
+        category = classify_gh_failure(result.returncode, result.stderr or "")
+        raise GitHubAccessError(category, result.returncode)
     return parse_account(result.stdout)
 
 
-POLICY_DENIED_MESSAGE = "error: GitHub command denied by policy; review the command"
-# Checked in order. FileNotFoundError precedes its OSError parent.
-RUN_ERROR_MESSAGES = (
-    (subprocess.TimeoutExpired, "error: GitHub CLI timed out; verify connectivity and retry"),
-    (ValueError, "error: GitHub CLI input or repository metadata is invalid; inspect and retry"),
-    (FileNotFoundError,
-     "error: GitHub CLI or repository metadata is unavailable; inspect installation"),
-    (OSError, "error: GitHub CLI execution failed; inspect connectivity and repository context"),
-)
-ACCOUNT_ERROR_MESSAGES = (
-    (subprocess.TimeoutExpired, "error: GitHub CLI timed out; verify connectivity and retry"),
-    (ValueError, "error: GitHub account metadata is invalid; inspect authentication"),
-    (FileNotFoundError, "error: GitHub CLI is unavailable; inspect installation"),
-    (OSError, "error: GitHub authentication failed; inspect connectivity and account state"),
-)
+def verify_account(repo_root) -> None:
+    """Verify the authenticated account, allowing only a CI installation token.
 
-
-def _report_error(error: BaseException, messages) -> int:
-    """Print the fixed message for the first matching error type and return 1."""
-    for error_type, message in messages:
-        if isinstance(error, error_type):
-            print(message, file=sys.stderr)
-            return 1
-    raise error
-
-
-def _preflight_error(arguments: list[str]) -> str:
-    """Return the refusal message for arguments the wrapper never runs."""
-    if not arguments:
-        return "error: run requires GitHub CLI arguments"
-    if find_literal_escape_sequences(arguments):
-        return ("error: an argument contains literal escape text; use real newlines "
-                "or --body-file")
-    return ""
-
-
-def _load_gate_core():
-    """Import the shared GitHub command policy, or return None when absent."""
-    hooks_directory = Path(__file__).resolve().parent.parent / "hooks"
-    sys.path.insert(0, str(hooks_directory))
+    A GitHub Actions `GITHUB_TOKEN` is an app installation token and cannot
+    read /user. Only that failure, only on an Actions runner, skips the check.
+    """
     try:
-        import _gate_core as gate_core
-    except ImportError:
-        return None
-    return gate_core
+        authenticated_account(repo_root)
+    except GitHubAccessError as error:
+        if error.category == "installation_token" and os.environ.get("GITHUB_ACTIONS") == "true":
+            return
+        raise
 
 
 def _run_requested_command(repo_root, arguments: list[str]) -> int:
     """Run one authenticated GitHub CLI command with bounded output."""
-    refusal = _preflight_error(arguments)
-    if refusal:
-        print(refusal, file=sys.stderr)
+    if not arguments:
+        print("error: run requires GitHub CLI arguments", file=sys.stderr)
         return 2
-    gate_core = _load_gate_core()
-    if gate_core is None:
+    escape_options = find_literal_escape_sequences(arguments)
+    if escape_options:
+        print(
+            "error: an argument contains literal escape text; use real newlines "
+            "or --body-file",
+            file=sys.stderr,
+        )
+        return 2
+    hooks_directory = Path(__file__).resolve().parent.parent / "hooks"
+    sys.path.insert(0, str(hooks_directory))
+    try:
+        import _gate_core as gate_core
+    except ImportError as error:
         print("error: GitHub safety policy is unavailable; repair adoption", file=sys.stderr)
         return 2
-    decision, _reason = gate_core.forge_verdict("gh", arguments)
+    decision, reason = gate_core.forge_verdict("gh", arguments)
     if decision == "deny":
-        print(POLICY_DENIED_MESSAGE, file=sys.stderr)
+        print("error: GitHub command denied by policy; review the command", file=sys.stderr)
         return 2
     try:
         effective_arguments = with_repository_context(Path(repo_root), arguments)
-        decision, _reason = gate_core.forge_verdict("gh", effective_arguments)
+        decision, reason = gate_core.forge_verdict("gh", effective_arguments)
         if decision == "deny":
-            print(POLICY_DENIED_MESSAGE, file=sys.stderr)
+            print("error: GitHub command denied by policy; review the command", file=sys.stderr)
             return 2
-        authenticated_account(repo_root)
+        verify_account(repo_root)
         result = run_gh(repo_root, effective_arguments)
-    except (subprocess.TimeoutExpired, OSError, ValueError) as error:
-        return _report_error(error, RUN_ERROR_MESSAGES)
+    except subprocess.TimeoutExpired:
+        print("error: GitHub CLI timed out; verify connectivity and retry", file=sys.stderr)
+        return 1
+    except ValueError:
+        print("error: GitHub CLI input or repository metadata is invalid; inspect and retry",
+              file=sys.stderr)
+        return 1
+    except FileNotFoundError:
+        print("error: GitHub CLI or repository metadata is unavailable; inspect installation",
+              file=sys.stderr)
+        return 1
+    except GitHubAccessError as error:
+        print(f"error: {describe_access_error(error)}", file=sys.stderr)
+        return 1
+    except PermissionError as error:
+        print(describe_permission_error(error), file=sys.stderr)
+        return 1
+    except OSError:
+        print("error: GitHub CLI execution failed; inspect connectivity and repository context",
+              file=sys.stderr)
+        return 1
     sys.stdout.write(result.stdout[:COMMAND_OUTPUT_LIMIT])
     sys.stderr.write(result.stderr[:COMMAND_OUTPUT_LIMIT])
     return result.returncode
@@ -439,8 +522,25 @@ def main() -> int:
         return _run_requested_command(os.getcwd(), sys.argv[2:])
     try:
         account = authenticated_account(os.getcwd())
-    except (subprocess.TimeoutExpired, OSError, ValueError) as error:
-        return _report_error(error, ACCOUNT_ERROR_MESSAGES)
+    except subprocess.TimeoutExpired:
+        print("error: GitHub CLI timed out; verify connectivity and retry", file=sys.stderr)
+        return 1
+    except ValueError:
+        print("error: GitHub account metadata is invalid; inspect authentication", file=sys.stderr)
+        return 1
+    except FileNotFoundError:
+        print("error: GitHub CLI is unavailable; inspect installation", file=sys.stderr)
+        return 1
+    except GitHubAccessError as error:
+        print(f"error: {describe_access_error(error)}", file=sys.stderr)
+        return 1
+    except PermissionError as error:
+        print(describe_permission_error(error), file=sys.stderr)
+        return 1
+    except OSError:
+        print("error: GitHub authentication failed; inspect connectivity and account state",
+              file=sys.stderr)
+        return 1
     print(json.dumps(account, sort_keys=True))
     return 0
 
