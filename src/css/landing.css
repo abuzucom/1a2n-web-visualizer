@@ -44,7 +44,7 @@ h1 .kern-l { letter-spacing: -0.07em; }
 
 p.sub {
   margin: 30px 0 54px;
-  color: var(--brand-silver);
+  color: var(--brand-charcoal);
   font-family: var(--type-utility);
   font-size: 0.95rem;
   font-weight: 700;
@@ -75,9 +75,13 @@ a.card:nth-child(2) {
   background: var(--brand-charcoal);
 }
 
+/* Paper on paper needs the outline to read as a card. Pitch text on paper
+ * reaches 15.95:1; silver could not reach 4.5:1 with any brand text color. */
 a.card.demo-card {
-  background: var(--brand-silver);
-  color: var(--brand-paper);
+  background: var(--brand-paper);
+  color: var(--brand-pitch);
+  outline: 2px solid var(--brand-pitch);
+  outline-offset: -2px;
 }
 
 a.card.mobile-card {
@@ -112,7 +116,7 @@ a.card span {
 
 a.card:hover span { color: var(--brand-pitch); }
 
-a.card.demo-card span { color: var(--brand-paper); }
+a.card.demo-card span { color: var(--brand-pitch); }
 
 a.card.demo-card:hover span { color: var(--brand-pitch); }
 
@@ -122,7 +126,7 @@ a.card.mobile-card:hover { background: var(--brand-paper); }
 
 footer {
   margin-top: 34px;
-  color: var(--brand-silver);
+  color: var(--brand-charcoal);
   font-family: var(--type-utility);
   font-size: 0.85rem;
   line-height: 1.5;

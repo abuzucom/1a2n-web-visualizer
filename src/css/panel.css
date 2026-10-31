@@ -149,7 +149,7 @@ body {
 
 .hint {
   margin-top: 14px;
-  color: var(--brand-silver);
+  color: var(--brand-concrete);
   font-family: var(--type-utility);
   font-size: 10px;
   line-height: 1.6;
@@ -160,4 +160,18 @@ code {
   background: var(--brand-pitch);
   color: var(--brand-paper);
   font-family: inherit;
+}
+
+/* Names a field for assistive technology without changing the layout. The
+ * id selector outranks the shared #panel label rule. */
+#panel .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }

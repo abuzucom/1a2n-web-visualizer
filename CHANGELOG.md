@@ -24,6 +24,13 @@ All notable changes to this project are documented here. Format loosely follows
   shortcuts.
 - Announce fullscreen and demo toasts through a polite live region.
   Keep a failed start reason visible in the help box.
+- Announce OBS status updates through a polite live region.
+- Label the OBS preset filter and the auto-cycle interval field. The
+  interval label states the unit in seconds.
+- Remove the hidden OBS panel from the tab order.
+- Raise small text contrast to at least 4.5:1. The landing subtitle and
+  footer use charcoal. The demo card uses pitch text on paper with a
+  pitch outline. OBS hints use concrete.
 
 ## [1.16.6] (2026-10-26)
 

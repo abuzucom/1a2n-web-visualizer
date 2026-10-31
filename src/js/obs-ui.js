@@ -218,7 +218,8 @@
   document.addEventListener('keydown', function (e) {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-    if (e.key.toLowerCase() === 'h') panel.classList.toggle('hidden');
+    // The panel fades with opacity; inert keeps its controls out of the tab order.
+    if (e.key.toLowerCase() === 'h') panel.inert = panel.classList.toggle('hidden');
     if (e.key.toLowerCase() === 'a') setAudioGuard(!viz.isAudioGuardArmed());
     if (e.key.toLowerCase() === 'i') diagnostics.toggle();
   });
