@@ -4,9 +4,11 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.16.7] (2026-10-31)
+## [1.16.8] (2026-10-31)
 
 ### Fixed
+- Set the `package.json` and `package-lock.json` version to match the
+  changelog. Both files read 1.16.3 before this change.
 - Start the mobile visualizer from a native button. Keyboard users can
   now reach and activate it.
 - Keep mobile controls visible while keyboard focus stays inside them.
