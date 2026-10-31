@@ -186,6 +186,30 @@ body.hyperspeed #hyperspeedBtn {
   font-weight: 700;
 }
 
+#help button.go {
+  padding: 12px 16px;
+  border: 1px solid var(--brand-pitch);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* The help box is paper, so the default paper focus ring would vanish. */
+#help button.go:focus-visible { outline-color: var(--brand-pitch); }
+
+#help button.go[hidden] { display: none; }
+
+#help .start-error {
+  margin: 16px 0 0;
+  color: var(--brand-pitch);
+  font-family: var(--type-utility);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#help .start-error:empty { display: none; }
+
 @media (min-width: 640px) {
   #controls {
     right: auto;

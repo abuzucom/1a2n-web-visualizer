@@ -24,14 +24,15 @@
         <p class="eyebrow">1a2n / Mobile</p>
         <h1>Audio visualizer</h1>
         <p>Touch controls for a browser-sized visualizer.</p>
-        <div class="go" id="startPrompt">Tap to start &rarr;</div>
+        <button type="button" class="go" id="startPrompt">Tap to start &rarr;</button>
+        <p id="startError" class="start-error" role="alert"></p>
         <div id="startupStatus" role="status" aria-live="polite" hidden>
           Loading visualizer...
         </div>
       </div>
     </div>
 
-    <nav id="controls" aria-label="Visualizer controls">
+    <nav id="controls" aria-label="Visualizer controls" inert>
       <button id="shuffleBtn" type="button">Shuffle</button>
       <button id="backBtn" type="button" disabled>Back</button>
       <button id="intervalBtn" type="button" aria-label="Change preset interval. Current 30 seconds">
