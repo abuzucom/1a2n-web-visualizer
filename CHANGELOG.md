@@ -13,6 +13,17 @@ All notable changes to this project are documented here. Format loosely follows
   Focus and key presses wake the faded controls.
 - Keep the mobile audio error visible in the help box after a failed
   start.
+- Remove hidden fullscreen and demo list panels from the tab order and
+  the accessibility tree. Closing a panel returns focus to its opener.
+- Give the excluded and favorites panels dialog semantics and label
+  their text areas with the panel headings.
+- Keep the fullscreen corner buttons out of the tab order before
+  startup and while a list panel covers them. Name each emoji button.
+- Leave Space and Enter on focused buttons to native activation. Typing
+  in a text field and Ctrl, Cmd, or Alt combinations no longer trigger
+  shortcuts.
+- Announce fullscreen and demo toasts through a polite live region.
+  Keep a failed start reason visible in the help box.
 
 ## [1.16.6] (2026-10-26)
 
