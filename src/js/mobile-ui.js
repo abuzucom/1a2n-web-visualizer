@@ -6,6 +6,8 @@
   const help = document.getElementById('help');
   const startPrompt = document.getElementById('startPrompt');
   const startupStatus = document.getElementById('startupStatus');
+  const startError = document.getElementById('startError');
+  const controls = document.getElementById('controls');
   const shuffleBtn = document.getElementById('shuffleBtn');
   const backBtn = document.getElementById('backBtn');
   const intervalBtn = document.getElementById('intervalBtn');
@@ -53,13 +55,25 @@
     randomFirst: true,
   });
 
+  /* Keyboard focus inside the controls keeps them visible. Fading them would
+   * hide both the focused button and its focus indicator. */
+  function hasFocusInControls() {
+    return Boolean(controls && controls.contains(document.activeElement));
+  }
+
+  function hideIdleControls() {
+    if (hasFocusInControls()) {
+      idleTimer = setTimeout(hideIdleControls, IDLE_TIMEOUT_MS);
+      return;
+    }
+    document.body.classList.add('controls-idle');
+  }
+
   function wakeControls() {
     if (!viz.isStarted()) return;
     document.body.classList.remove('controls-idle');
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(function () {
-      document.body.classList.add('controls-idle');
-    }, IDLE_TIMEOUT_MS);
+    idleTimer = setTimeout(hideIdleControls, IDLE_TIMEOUT_MS);
   }
 
   function shufflePreset() {
@@ -120,16 +134,21 @@
     startupPending = true;
     startPrompt.hidden = true;
     startupStatus.hidden = false;
+    startError.textContent = '';
     try {
       await viz.start();
       startupStatus.hidden = true;
       help.classList.add('hidden');
+      help.inert = true;
+      controls.inert = false;
       document.body.classList.add('running');
       wakeControls();
       say('Running');
     } catch (error) {
       startupStatus.hidden = true;
       startPrompt.hidden = false;
+      // The toast fades; the help box keeps the reason visible for a retry.
+      startError.textContent = 'Audio error: ' + error.message;
       say('Audio error: ' + error.message);
     } finally {
       startupPending = false;
@@ -140,7 +159,10 @@
   bindAction(backBtn, goBack);
   bindAction(intervalBtn, changeInterval);
   bindAction(hyperspeedBtn, function () { hyperspeed.toggle(); wakeControls(); });
+  bindAction(startPrompt, start);
   help.addEventListener('click', start);
+  controls.addEventListener('focusin', wakeControls);
+  document.addEventListener('keydown', wakeControls);
   canvas.addEventListener('click', function () {
     if (!viz.isStarted()) start();
     else wakeControls();

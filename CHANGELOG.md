@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.7] (2026-10-31)
+
+### Fixed
+- Start the mobile visualizer from a native button. Keyboard users can
+  now reach and activate it.
+- Keep mobile controls visible while keyboard focus stays inside them.
+  Focus and key presses wake the faded controls.
+- Keep the mobile audio error visible in the help box after a failed
+  start.
+
 ## [1.16.6] (2026-10-26)
 
 ### Dependencies
