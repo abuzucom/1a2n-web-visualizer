@@ -135467,17 +135467,6 @@
       "physicalFile": "chunk-9223.js"
     },
     {
-      "sourceName": "Triptaculartothemax(maxtaculartothetr",
-      "displayName": "[EXP] Triptaculartothemax(maxtaculartothetr",
-      "canonicalHash": "74f2e422e1c52b1bdd0552fbb6f081a99b374ff3a48066bc239a0a83746ac0c4",
-      "mainlineMatches": [],
-      "normalizedNameMatches": [],
-      "missingTextures": [],
-      "sourcePath": "52kpresets/presets/Triptaculartothemax(maxtaculartothetr.milk",
-      "logicalChunk": 407,
-      "physicalFile": "chunk-9223.js"
-    },
-    {
       "sourceName": "Tschoey - Devil's Eye",
       "displayName": "[EXP] Tschoey - Devil's Eye",
       "canonicalHash": "6ba039fcd5696b84f68fec82fa768ab7ff8e54bf5d962a8ac155df4893899f81",
@@ -148084,17 +148073,6 @@
       "physicalFile": "chunk-9233.js"
     },
     {
-      "sourceName": "Zylot - Visions Of The Void (Growing Mix)",
-      "displayName": "[EXP] Zylot - Visions Of The Void (Growing Mix)",
-      "canonicalHash": "8869ad26eccb36ef49155a14705f3bbe611582f819326351c21592f027da66b6",
-      "mainlineMatches": [],
-      "normalizedNameMatches": [],
-      "missingTextures": [],
-      "sourcePath": "52kpresets/presets/Zylot - Visions Of The Void (Growing Mix).milk",
-      "logicalChunk": 417,
-      "physicalFile": "chunk-9233.js"
-    },
-    {
       "sourceName": "Zylot - Visions of the Void (growing)",
       "displayName": "[EXP] Zylot - Visions of the Void (growing)",
       "canonicalHash": "65a85d4dd695ecdab3e919628337bcbe9c5291542bb62e558a0ba92c49d89780",
@@ -148575,17 +148553,6 @@
       "normalizedNameMatches": [],
       "missingTextures": [],
       "sourcePath": "52kpresets/presets/Zylot and Phat - Hypnotic Artifacts _Psy_red_purple_shape.milk",
-      "logicalChunk": 417,
-      "physicalFile": "chunk-9233.js"
-    },
-    {
-      "sourceName": "Zylot and Phat - Hypnotic Artifacts _shell",
-      "displayName": "[EXP] Zylot and Phat - Hypnotic Artifacts _shell",
-      "canonicalHash": "59bf7628ec2262ce7beeb9119fa9b4b0ab5b941af244098282a4603bff8b1c0b",
-      "mainlineMatches": [],
-      "normalizedNameMatches": [],
-      "missingTextures": [],
-      "sourcePath": "52kpresets/presets/Zylot and Phat - Hypnotic Artifacts _shell.milk",
       "logicalChunk": 417,
       "physicalFile": "chunk-9233.js"
     },
@@ -301970,17 +301937,6 @@
       "normalizedNameMatches": [],
       "missingTextures": [],
       "sourcePath": "52kpresets/presets/yin - 380 - Magic ride2.milk",
-      "logicalChunk": 559,
-      "physicalFile": "chunk-9375.js"
-    },
-    {
-      "sourceName": "yin - 380 - Magic ride_1",
-      "displayName": "[EXP] yin - 380 - Magic ride_1",
-      "canonicalHash": "50751f8e5f9999aca92bffb76d0eb53ac3af9347bbea82f66ddfecb99d310d8a",
-      "mainlineMatches": [],
-      "normalizedNameMatches": [],
-      "missingTextures": [],
-      "sourcePath": "52kpresets/presets/yin - 380 - Magic ride_1.milk",
       "logicalChunk": 559,
       "physicalFile": "chunk-9375.js"
     },

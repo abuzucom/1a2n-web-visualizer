@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.7] (2026-10-31)
+
+### Removed
+- Curated out 19 presets on request: 14 mainline presets, 4 `[EXP] ` presets,
+  and 1 preset from the vendored `butterchurnPresetsExtra` pack.
+  `tools/remove_presets.js` and `tools/remove-experimental-duplicates.py`
+  updated `src/presets-extra/`, `src/vendor/butterchurnPresetsExtra.min.js`,
+  `preset-inventory.csv`, `removed-presets.csv`, `experimental-presets.json`,
+  and `experimental-exclusions.json`. The application ships 17,965 presets now
+  (372 vendored + 17,593 from `src/presets-extra/`).
+
 ## [1.16.6] (2026-10-26)
 
 ### Dependencies
