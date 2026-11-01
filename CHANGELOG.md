@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.9] (2026-11-01)
+
+### Fixed
+- Load non-EXP lazy presets without waiting for the experimental texture
+  parts. R and X no longer stall for the whole texture download, or
+  forever when a texture part never answers.
+- Stop waiting for experimental textures after 10 seconds. A stalled
+  texture part no longer blocks EXP presets.
+- Skip EXP presets in random picks until their textures are ready.
+- Prefetch the next random preset from the first rendered frame onward.
+  R, X, and shuffle cycling apply an already loaded preset.
+- Mark a lazy preset missing from its loaded chunk as unavailable.
+  Fallback no longer retries it in a loop.
+- Count each broken preset once when deciding whether a fallback can
+  still find a working preset.
+- Pick random presets in constant time in the common case instead of
+  scanning the whole library on every pick.
+- Log lazy preset load failures with the preset name instead of leaving
+  an unhandled rejection.
+
 ## [1.16.8] (2026-10-31)
 
 ### Fixed

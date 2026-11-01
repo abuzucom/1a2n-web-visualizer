@@ -879,3 +879,154 @@ test('a start that fails after the input connects releases it and can be retried
 
   assert.equal(viz.isStarted(), true, 'a retry after a failed start still works');
 });
+
+// The harness never fires script onload, so every experimental texture part
+// stays pending. That is the stalled-download case the tests below rely on.
+function useExtraIndex(harness, chunks) {
+  harness.window.BCExtraPresetIndex = {
+    chunks: chunks,
+    files: chunks.map(function (_, cid) { return 'chunk-' + String(cid).padStart(3, '0') + '.js'; }),
+  };
+}
+
+function flushPromises() {
+  return sleep(0);
+}
+
+test('random loads a non-EXP lazy chunk while textures are still pending', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  useExtraIndex(harness, [['lazy']]);
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+  await viz.start();
+
+  viz.random();
+  await flushPromises();
+
+  assert.equal(harness.chunkLoads(), 1, 'the chunk request does not wait on EXP textures');
+});
+
+test('rejecting in shuffle mode loads a non-EXP lazy chunk while textures are pending', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  useExtraIndex(harness, [['lazy']]);
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false, shuffle: true });
+  await viz.start();
+
+  assert.equal(viz.removeCurrentFromShuffle(), 'vendor');
+  await flushPromises();
+
+  assert.equal(harness.chunkLoads(), 1);
+});
+
+test('random skips EXP presets until the textures are ready', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  useExtraIndex(harness, [['[EXP] e'], ['plain']]);
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+  await viz.start();
+  harness.window.__bcPresetChunk(1, { plain: { baseVals: {} } });
+
+  for (let i = 0; i < 20; i++) {
+    const before = viz.currentName();
+    viz.random();
+    assert.notEqual(viz.currentName(), before, 'each random pick applies at once');
+    assert.notEqual(viz.currentName(), '[EXP] e');
+  }
+  assert.equal(harness.chunkLoads(), 0);
+
+  harness.window.__bcExtraImagesExpPart(0, 1, {});
+  await flushPromises();
+  for (let i = 0; i < 50 && harness.chunkLoads() === 0; i++) {
+    viz.random();
+    await flushPromises();
+  }
+
+  assert.equal(harness.chunkLoads(), 1, 'EXP presets rejoin the random pool once textures load');
+});
+
+test('a lazy chunk without its preset still falls back to a working preset', async function () {
+  const good = { baseVals: {} };
+  const harness = createHarness({
+    d_good: good,
+    a_bad: { baseVals: {}, frame_eqs_str: 'return )' },
+    b_bad: { baseVals: {}, frame_eqs_str: 'return )' },
+  });
+  useExtraIndex(harness, [['c_lazy']]);
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+  await viz.start();
+  assert.equal(viz.currentName(), 'd_good');
+
+  viz.goto(0);
+  await flushPromises();
+  assert.equal(harness.chunkLoads(), 1, 'both broken presets fail and the walk reaches the lazy one');
+  const loadsBefore = harness.loadCalls.length;
+
+  harness.window.__bcPresetChunk(0, {});
+  await flushPromises();
+
+  assert.equal(harness.loadCalls.length, loadsBefore + 1, 'the fallback loads a preset');
+  assert.equal(harness.loadCalls[harness.loadCalls.length - 1], good);
+  assert.equal(viz.currentName(), 'd_good');
+});
+
+test('random never repeats the current preset and reports when none remain', async function () {
+  const toasts = [];
+  const harness = createHarness({ a: { baseVals: {} }, b: { baseVals: {} }, c: { baseVals: {} } });
+  useExtraIndex(harness, []);
+  const viz = harness.window.BCViz.create(harness.canvas, {
+    cycleOn: false, shuffle: true, onToast: function (message) { toasts.push(message); },
+  });
+  await viz.start();
+
+  for (let i = 0; i < 30; i++) {
+    const before = viz.currentName();
+    viz.random();
+    assert.notEqual(viz.currentName(), before);
+  }
+  viz.removeCurrentFromShuffle();
+  viz.removeCurrentFromShuffle();
+  const excluded = viz.excludedList();
+  assert.equal(excluded.includes(viz.currentName()), false);
+  viz.removeCurrentFromShuffle();
+
+  assert.ok(toasts.some(function (m) { return /no working random preset/.test(m); }));
+});
+
+test('the first frame prefetches the next random pick so R applies at once', async function () {
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  useExtraIndex(harness, [['lazy']]);
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
+  await viz.start();
+  assert.equal(harness.chunkLoads(), 0, 'startup loads no lazy chunk');
+
+  harness.runFrame();
+  await flushPromises();
+
+  assert.equal(harness.chunkLoads(), 1, 'the first frame prefetches the next random pick');
+  assert.equal(viz.isChunkLoading(), false, 'a prefetch is not a user-visible load');
+  harness.window.__bcPresetChunk(0, { lazy: { baseVals: {} } });
+
+  viz.random();
+
+  assert.equal(viz.currentName(), 'lazy', 'R applies the prefetched preset synchronously');
+  assert.equal(harness.chunkLoads(), 1);
+});
+
+test('random rechecks a prefetched pick that became unavailable', async function () {
+  const toasts = [];
+  const harness = createHarness({ vendor: { baseVals: {} } });
+  useExtraIndex(harness, [['lazy']]);
+  const viz = harness.window.BCViz.create(harness.canvas, {
+    cycleOn: false, onToast: function (message) { toasts.push(message); },
+  });
+  await viz.start();
+  harness.runFrame();
+  await flushPromises();
+  harness.window.__bcPresetChunk(0, {});
+  await flushPromises();
+
+  viz.random();
+  await flushPromises();
+
+  assert.equal(viz.currentName(), 'vendor');
+  assert.equal(harness.chunkLoads(), 1, 'no second request for the unavailable pick');
+  assert.ok(toasts.some(function (m) { return /no working random preset/.test(m); }));
+});
