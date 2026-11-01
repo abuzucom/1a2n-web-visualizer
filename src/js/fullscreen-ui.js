@@ -9,6 +9,7 @@
   const startupStatus = document.getElementById('startupStatus');
   const startupStatusText = document.getElementById('startupStatusText');
   const startupProgressBar = document.getElementById('startupProgressBar');
+  const startError = document.getElementById('startError');
   const removeBtn      = document.getElementById('removeBtn');
   const excludedBtn    = document.getElementById('excludedBtn');
   const excludedPanel  = document.getElementById('excludedPanel');
@@ -21,6 +22,10 @@
   const favoritesTextEl   = document.getElementById('favoritesListText');
   const copyFavoritesBtn  = document.getElementById('copyFavoritesBtn');
   const closeFavoritesBtn = document.getElementById('closeFavoritesBtn');
+  const cornerButtons = [removeBtn, excludedBtn, favoriteBtn, favoritesBtn];
+  const TEXT_ENTRY_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
+  const ACTIVATION_TAGS = ['BUTTON', 'A', 'SUMMARY'];
+  let panelOpener = null;
 
   let toastTimer = null;
   let startupPending = false;
@@ -189,17 +194,54 @@
     if (removed) say('\uD83D\uDEAB Removed from shuffle: ' + removed);
   }
 
+  /* Corner buttons leave the tab order until startup succeeds and while a
+   * list panel covers them, since both states render them invisible. */
+  function setCornerButtonsInert(inert) {
+    cornerButtons.forEach(function (button) { button.inert = inert; });
+  }
+
+  function isPanelOpen(panel) {
+    return !panel.classList.contains('hidden');
+  }
+
+  /* The panels fade with opacity, so inert is what removes their controls
+   * from the tab order and the accessibility tree while hidden. */
+  function openPanel(panel) {
+    if (!isPanelOpen(excludedPanel) && !isPanelOpen(favoritesPanel)) {
+      panelOpener = document.activeElement;
+    }
+    panel.classList.remove('hidden');
+    panel.inert = false;
+    setCornerButtonsInert(true);
+  }
+
+  function restorePanelFocus() {
+    const opener = panelOpener;
+    panelOpener = null;
+    if (!opener || opener === document.body || typeof opener.focus !== 'function') return;
+    opener.focus();
+  }
+
+  function closePanel(panel) {
+    if (!isPanelOpen(panel)) return;
+    panel.classList.add('hidden');
+    panel.inert = true;
+    if (isPanelOpen(excludedPanel) || isPanelOpen(favoritesPanel)) return;
+    setCornerButtonsInert(false);
+    restorePanelFocus();
+  }
+
   function showExcludedPanel() {
     if (!viz.isStarted()) return;
     const list = viz.excludedList();
     excludedList.value = list.length ? list.join('\n') : '(none excluded yet)';
-    excludedPanel.classList.remove('hidden');
+    openPanel(excludedPanel);
     excludedList.focus();
     excludedList.select();
   }
 
   function hideExcludedPanel() {
-    excludedPanel.classList.add('hidden');
+    closePanel(excludedPanel);
   }
 
   function copyExcludedList() {
@@ -227,13 +269,13 @@
     if (!viz.isStarted()) return;
     const list = viz.favoritesList();
     favoritesTextEl.value = list.length ? list.join('\n') : '(none favorited yet)';
-    favoritesPanel.classList.remove('hidden');
+    openPanel(favoritesPanel);
     favoritesTextEl.focus();
     favoritesTextEl.select();
   }
 
   function hideFavoritesPanel() {
-    favoritesPanel.classList.add('hidden');
+    closePanel(favoritesPanel);
   }
 
   function copyFavoritesList() {
@@ -255,6 +297,7 @@
     if (viz.isStarted() || startupPending) return;
     startupPending = true;
     showStartupStatus();
+    startError.textContent = '';
     window.setTimeout(async function () {
       try {
         await viz.start(audioPrefs.resolve(viz.listDevices(), audioPrefs.read()) || undefined);
@@ -262,9 +305,12 @@
         clearStartupStatus(false);
         help.classList.add('hidden');
         document.body.classList.add('running');
+        setCornerButtonsInert(false);
         say('\u25B6 Running \u2014 press ? for controls');
       } catch (e) {
         clearStartupStatus(true);
+        // The toast fades; the help box keeps the reason visible for a retry.
+        startError.textContent = 'Audio error: ' + describeDeviceError(e);
         say('Audio error: ' + describeDeviceError(e));
       } finally {
         startupPending = false;
@@ -272,7 +318,25 @@
     }, 0);
   }
 
+  /* Shortcuts must not steal keys that the focused element handles natively:
+   * typing in a text field, or Space and Enter activating a button or link.
+   * Browser and system combinations with Ctrl, Cmd, or Alt pass through.
+   * Shift stays allowed because ?, <, >, _ and + need it. */
+  function shouldIgnoreShortcut(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return true;
+    const target = e.target;
+    if (!target || !target.tagName) return false;
+    if (TEXT_ENTRY_TAGS.indexOf(target.tagName) !== -1 || target.isContentEditable) {
+      return e.key !== 'Escape';
+    }
+    if (ACTIVATION_TAGS.indexOf(target.tagName) !== -1) {
+      return e.key === ' ' || e.key === 'Enter';
+    }
+    return false;
+  }
+
   document.addEventListener('keydown', function (e) {
+    if (shouldIgnoreShortcut(e)) return;
     if (!viz.isStarted()) {
       if (e.key.length === 1 || e.key === 'Enter') start();  // ignore bare modifier presses
       return;

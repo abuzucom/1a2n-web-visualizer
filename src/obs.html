@@ -24,6 +24,7 @@
       <select id="device"><option value="">&mdash; grant mic access first &mdash;</option></select>
       <button id="startBtn">Start visualizer</button>
       <label class="preset-label" for="preset">Preset</label>
+      <label class="visually-hidden" for="presetFilter">Filter presets</label>
       <input type="search" id="presetFilter" placeholder="Filter presets…" autocomplete="off">
       <select id="preset"></select>
       <div class="row">
@@ -34,13 +35,14 @@
       <div class="check">
         <input type="checkbox" id="cycle" checked>
         <label class="cycle-label" for="cycle">Auto-cycle every</label>
-        <input class="cycle-secs" type="number" id="cycleSecs" value="20" min="3"> s
+        <label class="visually-hidden" for="cycleSecs">Auto-cycle interval in seconds</label>
+        <input class="cycle-secs" type="number" id="cycleSecs" value="20" min="3"> <span aria-hidden="true">s</span>
       </div>
       <div class="check">
         <input type="checkbox" id="audioGuard">
         <label class="cycle-label" for="audioGuard">Audio guard (reconnect a lost input)</label>
       </div>
-      <div id="status"></div>
+      <div id="status" role="status" aria-live="polite"></div>
       <div class="hint">
         Arm the audio guard (<code>A</code>) once the set is running, not during opening dead air:
         while armed, an input that stays gone for 20 seconds is reconnected automatically.

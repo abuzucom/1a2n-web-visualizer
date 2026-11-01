@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.16.7] (2026-10-31)
+## [1.16.9] (2026-10-31)
 
 ### Removed
 - Curated out 19 presets on request: 14 mainline presets, 4 `[EXP] ` presets,
@@ -14,6 +14,36 @@ All notable changes to this project are documented here. Format loosely follows
   `preset-inventory.csv`, `removed-presets.csv`, `experimental-presets.json`,
   and `experimental-exclusions.json`. The application ships 17,965 presets now
   (372 vendored + 17,593 from `src/presets-extra/`).
+
+## [1.16.8] (2026-10-31)
+
+### Fixed
+- Set the `package.json` and `package-lock.json` version to match the
+  changelog. Both files read 1.16.3 before this change.
+- Start the mobile visualizer from a native button. Keyboard users can
+  now reach and activate it.
+- Keep mobile controls visible while keyboard focus stays inside them.
+  Focus and key presses wake the faded controls.
+- Keep the mobile audio error visible in the help box after a failed
+  start.
+- Remove hidden fullscreen and demo list panels from the tab order and
+  the accessibility tree. Closing a panel returns focus to its opener.
+- Give the excluded and favorites panels dialog semantics and label
+  their text areas with the panel headings.
+- Keep the fullscreen corner buttons out of the tab order before
+  startup and while a list panel covers them. Name each emoji button.
+- Leave Space and Enter on focused buttons to native activation. Typing
+  in a text field and Ctrl, Cmd, or Alt combinations no longer trigger
+  shortcuts.
+- Announce fullscreen and demo toasts through a polite live region.
+  Keep a failed start reason visible in the help box.
+- Announce OBS status updates through a polite live region.
+- Label the OBS preset filter and the auto-cycle interval field. The
+  interval label states the unit in seconds.
+- Remove the hidden OBS panel from the tab order.
+- Raise small text contrast to at least 4.5:1. The landing subtitle and
+  footer use charcoal. The demo card uses pitch text on paper with a
+  pitch outline. OBS hints use concrete.
 
 ## [1.16.6] (2026-10-26)
 

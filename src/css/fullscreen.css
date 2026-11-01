@@ -301,3 +301,13 @@ kbd {
   #help .startup-progress > div { animation: none; transition: none; }
   #help .go.pulse { animation: none; }
 }
+
+#help .start-error {
+  margin: 20px 0 0;
+  color: var(--brand-pitch);
+  font-family: var(--type-utility);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#help .start-error:empty { display: none; }
