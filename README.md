@@ -1,7 +1,7 @@
 # 1a2n Web Visualizer
 
 
-MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 17,984 presets: 373 from four butterchurn preset packs, 14,249 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, 3,024 `[EXP]` presets, 57 `[EXP2]` presets, and 281 `[EXP3]` presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
+MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 17,946 presets: 373 from four butterchurn preset packs, 14,223 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, 3,013 `[EXP]` presets, 57 `[EXP2]` presets, and 280 `[EXP3]` presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
 `/fullscreen.html`, `/demo.html`, and `/mobile.html`). GitHub Actions deploys
@@ -447,9 +447,9 @@ The `.milk` to JSON pipeline (`tools/convert-milk-presets.js`) prioritizes stabi
 
 ## Extra Presets (~18k total)
 
-`src/presets-extra/` holds 14,249 mainline presets from [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn). These pack into 184 logical chunks that load lazily through injected `<script>` tags when selected. This works from `file://` under the strict CSP. An in-memory LRU keeps at most 16 chunks resident. If the folder is missing, the app falls back to the 373 vendored presets.
+`src/presets-extra/` holds 14,223 mainline presets from [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn). These pack into 184 logical chunks that load lazily through injected `<script>` tags when selected. This works from `file://` under the strict CSP. An in-memory LRU keeps at most 16 chunks resident. If the folder is missing, the app falls back to the 373 vendored presets.
 
-The experimental NestDrop import contains 3,024 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 582 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 17,984 presets.
+The experimental NestDrop import contains 3,013 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 582 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 17,946 presets.
 
 A second experimental batch contains 57 presets, tagged `[EXP2] ` so it
 stays visually distinct from the `[EXP]` NestDrop import while curating.
@@ -463,7 +463,7 @@ those came from
 (pinned commit `b6e4610`), the same upstream `fetch-cream-of-the-crop-presets.py`
 already trusts.
 
-A third experimental batch contains 281 presets, tagged `[EXP3] ` per the
+A third experimental batch contains 280 presets, tagged `[EXP3] ` per the
 repo's per-batch prefix convention (see AGENTS.md). Sourced from
 [projectM-visualizer/presets-milkdrop-original](https://github.com/projectM-visualizer/presets-milkdrop-original)
 (pinned commit `e03b83e`), the official "Original Milkdrop Preset Pack". Of
@@ -472,7 +472,7 @@ equations and were recorded, not silently dropped. 123 were skipped as
 already curated out, already imported, or duplicate content. One retained
 preset needed the `clouds` texture, sourced from the same
 presets-milkdrop-texture-pack pin already vendored for the `[EXP2] ` batch.
-The combined preset inventory now totals 17,984 rows across 582 logical
+The combined preset inventory now totals 17,946 rows across 582 logical
 chunks.
 
 The folder contains generated, committed output. After an upstream update,
