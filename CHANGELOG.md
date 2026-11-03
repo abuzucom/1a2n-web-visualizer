@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.16.10] (2026-11-01)
+## [1.16.11] (2026-11-01)
 
 ### Removed
 - Removed 38 presets on request. The removals cover 26 mainline presets
@@ -13,6 +13,17 @@ All notable changes to this project are documented here. Format loosely follows
   `tools/remove-experimental-duplicates.py` handled the experimental
   removals. The preset inventory now holds 17,946 rows across 582 logical
   chunks.
+
+## [1.16.10] (2026-11-01)
+
+### Security
+- Bumped `fast-uri` from 3.1.8 to 3.1.9. The release fixes four URI parsing
+  and normalization advisories. The fixed defects cover percent-encoded
+  scheme spoofing, host confusion in domain canonicalization, incorrect
+  relative-reference normalization, and scheme injection in suffix
+  references.
+  `fast-uri` reaches this repository only as a development dependency of
+  `serve`.
 
 ## [1.16.9] (2026-11-01)
 
