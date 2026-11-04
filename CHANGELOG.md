@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.11] (2026-11-01)
+
+### Removed
+- Removed 38 presets on request. The removals cover 26 mainline presets
+  from `src/presets-extra/`, 11 `[EXP] ` presets, and 1 `[EXP3] ` preset.
+  `tools/remove_presets.js` handled the mainline removals.
+  `tools/remove-experimental-duplicates.py` handled the experimental
+  removals. The preset inventory now holds 17,946 rows across 582 logical
+  chunks.
+
 ## [1.16.10] (2026-11-01)
 
 ### Security
