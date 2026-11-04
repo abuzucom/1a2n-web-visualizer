@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.12] (2026-11-04)
+
+### Fixed
+- Correct custom wave and shape parser calls and preserve wave point equations.
+- Require runtime equation fields and report custom equation conversion failures.
+- Separate converted expressions from the runtime return statement.
+- Adapt optimized native shaders with the matching upstream postprocessor.
+  Preserve helper declarations and bound shader size and delimiter nesting.
+
 ## [1.16.11] (2026-11-01)
 
 ### Removed

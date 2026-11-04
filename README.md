@@ -440,8 +440,16 @@ to build the converter.
 The `.milk` to JSON pipeline (`tools/convert-milk-presets.js`) prioritizes stability, correctness, and batch safety.
 
 - **Isolated Shader Compilation:** The native `milkdrop-shader-converter` (HLSL to GLSL) can hang on malformed inputs. The pipeline dispatches shader translation to a child process (`tools/convert-shader-worker.js`). A strict timeout kills stuck shaders and yields an empty shader instead of halting the batch.
-- **Strict Equation Validation:** The pipeline checks all generated JavaScript equations using `acorn.parse()`. This guarantees valid math equations before writing to disk and prevents runtime browser errors.
-- **Graceful Degradation:** If EEL equations for a wave or shape fail to translate, the converter retains the static `baseVals` instead of discarding the preset.
+- **Equation validation:** The pipeline checks generated JavaScript syntax with `acorn.parse()`.
+  Validation requires fields that Butterchurn compiles unconditionally or for enabled items.
+  Optional pixel and point equations follow the runtime guards. Syntax checks do not establish rendering correctness.
+- **Equation failures:** Failed wave or shape conversion retains static `baseVals` and required empty equation strings.
+  The returned `warnings` array identifies the affected item. Reject warned presets from import candidates.
+- **Shader adaptation:** Native optimization feeds the matching upstream shader postprocessor.
+  The worker preserves helper declarations and adapts fragment output to Butterchurn's `ret` variable.
+  Input and compiled shaders have a 1 MiB limit. Compiled delimiter nesting has a 128-level limit.
+  Missing output, malformed delimiters, adaptation failures, and timeouts produce conversion warnings.
+  Browser compilation and rendering checks remain required for every import candidate.
 - **Correctness Over Minification:** The pipeline ships the generated JavaScript exactly as emitted. It avoids JS minifiers, which can rename dynamic global state variables like `time` or `bass`. Browser JIT compilers optimize these loops automatically.
 - **Robust Batching:** The pipeline recursively walks source directories, detects duplicate basenames, and outputs a unified JSON dictionary to `stdout`. It routes warnings and errors to `stderr`.
 
