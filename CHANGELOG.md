@@ -4,6 +4,11 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.18.1] (2026-11-04)
+
+### Documentation
+- Remove obsolete integration references from the repository guide and template drift notes.
+
 ## [1.18.0] (2026-11-04)
 
 ### Removed

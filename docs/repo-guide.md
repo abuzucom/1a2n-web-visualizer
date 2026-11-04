@@ -108,16 +108,14 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   `docs/template-drift.md`); `sync.py` assembles the policy copies,
   `check_action_pins.py` enforces
   commit-pinned GitHub Actions, `check_protected_files.py` backs the
-  protected-file review gate, `jira_sync.py` links PRs and deploys to Jira.
+  protected-file review gate.
 - Deployed via `.github/workflows/deploy.yml` to GitHub Pages on push to
   `develop`; alternatively self-hosted via the included Docker/Caddy config.
   Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff,
   HTML/CSS validation via the Nu Html Checker), `protected-files.yml`
   (code-owner approval gate, see `docs/protected-file-review.md`),
   `security-review-pr.yml` (foucault model review of each pull request, see
-  `docs/pr-security-review.md`). `deploy.yml` also publishes each Pages
-  deployment to the Jira `VID` project. No workflow runs the pull request
-  half of `jira_sync.py` (see `docs/jira-integration.md`).
+  `docs/pr-security-review.md`).
 
 ## Gotchas
 
@@ -240,8 +238,7 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   `docs/local-hosting.md`.
 - Audio setup: `docs/audio-routing.md`, `docs/obs-setup.md`.
 - CI and automation: `docs/protected-file-review.md` before touching
-  protected files (workflows, scripts, deployment config, runtime pages);
-  `docs/jira-integration.md` for the `VID` Jira project integration.
+  protected files (workflows, scripts, deployment config, runtime pages).
 
 
 ## Local policy notes
