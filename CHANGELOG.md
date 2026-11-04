@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.18.0] (2026-11-04)
+
+### Removed
+- Remove the remaining Jira integration and deployment publishing step.
+- Remove the sync script, dedicated tests, integration guide, and current documentation references.
+
+### Tests
+- Preserve Pages permissions, pinned deployment actions, and failure retry behavior.
+
 ## [1.17.0] (2026-11-04)
 
 ### Added
