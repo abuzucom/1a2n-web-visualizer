@@ -93,10 +93,8 @@ function convertShader(shaderBody) {
   }
 }
 
-/** Best-effort per-wave/shape conversion: only equations that actually look
- * like non-trivial EEL text are converted; anything else is left as bare
- * baseVals (matching the common "disabled, no custom equations" case). */
-function convertWaveOrShape(item, kind, index, presetVersion) {
+/** Convert custom equations and report failures without omitting required fields. */
+function convertWaveOrShape(item, kind, index, presetVersion, warnings) {
   // splitPreset() can leave the raw (unconverted) equation text sitting in
   // baseVals under keys like "init"/"per_frame"/"per_point" -- it tries to
   // parse them as numbers, which fails to NaN (JSON.stringify renders NaN
@@ -105,56 +103,41 @@ function convertWaveOrShape(item, kind, index, presetVersion) {
   const baseVals = Object.fromEntries(
     Object.entries(item.baseVals || {}).filter(([, v]) => typeof v !== 'number' || Number.isFinite(v)),
   );
+  const result = {
+    baseVals,
+    init_eqs_str: '',
+    frame_eqs_str: '',
+    ...(kind === 'wave' ? { point_eqs_str: '' } : {}),
+  };
   const hasCustomEqs =
     (item.init_eqs_str && item.init_eqs_str.trim()) ||
     (item.frame_eqs_str && item.frame_eqs_str.trim()) ||
     (kind === 'wave' && item.point_eqs_str && item.point_eqs_str.trim());
-
-  if (!hasCustomEqs) {
-    return {
-      baseVals,
-      init_eqs_str: '',
-      frame_eqs_str: '',
-      ...(kind === 'wave' ? { point_eqs_str: '' } : {}),
-    };
-  }
-
+  if (!hasCustomEqs) return result;
   try {
-    const converted = eel.convert_preset_wave_and_shape(
-      kind,
-      index,
-      presetVersion,
-      item.init_eqs_str || '',
-      item.frame_eqs_str || '',
-      kind === 'wave' ? (item.point_eqs_str || '') : '',
-    );
-    const result = {
-      baseVals,
-      init_eqs_str: '',
-      frame_eqs_str: '',
-      ...(kind === 'wave' ? { point_eqs_str: '' } : {}),
-    };
+    const converted = kind === 'wave'
+      ? eel.make_wave_map(presetVersion, item)
+      : eel.make_shape_map(presetVersion, item);
     if (converted.perFrameInitEQs && converted.perFrameInitEQs.trim()) {
       result.init_eqs_str = converted.perFrameInitEQs.trim();
     }
     if (converted.perFrameEQs && converted.perFrameEQs.trim()) {
       result.frame_eqs_str = converted.perFrameEQs.trim();
     }
-    if (kind === 'wave' && converted.perPixelEQs && converted.perPixelEQs.trim()) {
-      result.point_eqs_str = converted.perPixelEQs.trim();
+    if (kind === 'wave' && converted.perPointEQs && converted.perPointEQs.trim()) {
+      result.point_eqs_str = converted.perPointEQs.trim();
     }
     return result;
   } catch (error) {
-    console.warn(`warning: custom equation conversion failed, falling back to baseVals: ${error.message}`);
-    // Conversion of this item's custom equations failed -- fall back to
-    // just its baseVals rather than dropping the whole preset.
-    return { baseVals };
+    warnings.push(`${kind}[${index}]: ${error.message.replace(/[\r\n]/g, ' ')}`);
+    return result;
   }
 }
 
 /** Reject generated equation text that Butterchurn cannot compile. */
 function validateEquation(source, label) {
-  if (!source || !source.trim()) return;
+  if (typeof source !== 'string') throw new TypeError(`${label}: expected an equation string`);
+  if (!source.trim()) return;
   try {
     acorn.parse(`function __bcEquation(a) {${source}\nreturn a;}`, {
       ecmaVersion: 'latest',
@@ -167,21 +150,44 @@ function validateEquation(source, label) {
 
 /** Validate every generated JavaScript equation without executing it. */
 function validatePresetEquations(preset) {
-  for (const field of ['init_eqs_str', 'frame_eqs_str', 'pixel_eqs_str']) {
+  for (const field of ['init_eqs_str', 'frame_eqs_str']) {
     validateEquation(preset[field], field);
   }
+  if (preset.pixel_eqs_str !== undefined) validateEquation(preset.pixel_eqs_str, 'pixel_eqs_str');
   for (const [kind, items] of [['shape', preset.shapes], ['wave', preset.waves]]) {
     items.forEach((item, index) => {
-      for (const field of ['init_eqs_str', 'frame_eqs_str', 'point_eqs_str']) {
-        validateEquation(item[field], `${kind}[${index}].${field}`);
-      }
+      validateItemEquations(item, kind, index);
     });
   }
 }
 
+/** Match runtime guards for disabled items and optional wave point equations. */
+function validateItemEquations(item, kind, index) {
+  const enabled = Boolean(item.baseVals && item.baseVals.enabled);
+  for (const field of ['init_eqs_str', 'frame_eqs_str']) {
+    if (enabled || item[field] !== undefined) validateEquation(item[field], `${kind}[${index}].${field}`);
+  }
+  if (kind === 'wave' && item.point_eqs_str !== undefined) {
+    validateEquation(item.point_eqs_str, `${kind}[${index}].point_eqs_str`);
+  }
+}
+
+/** Separate generated statements from Butterchurn's appended return statement. */
+function terminatePresetEquations(preset) {
+  const items = [preset, ...preset.shapes, ...preset.waves];
+  const fields = ['init_eqs_str', 'frame_eqs_str', 'pixel_eqs_str', 'point_eqs_str'];
+  for (const item of items) {
+    for (const field of fields) {
+      const source = item[field];
+      if (typeof source === 'string' && source.trim() && !source.trimEnd().endsWith(';')) {
+        item[field] = `${source}\n;`;
+      }
+    }
+  }
+}
+
 /** Converts raw .milk preset text into the target preset-object shape.
- * Returns { preset, warnings } -- warnings lists any shader that failed to
- * convert and was replaced with "" (empty = no custom warp/comp effect). */
+ * Return { preset, warnings } with explicit shader and custom equation failures. */
 function convertMilkText(text) {
   const split = utils.splitPreset(text);
   const warnings = [];
@@ -205,8 +211,8 @@ function convertMilkText(text) {
     init_eqs_str: '',
     frame_eqs_str: '',
     pixel_eqs_str: '',
-    waves: (split.waves || []).map((w, i) => convertWaveOrShape(w, 'wave', i, split.presetVersion)),
-    shapes: (split.shapes || []).map((s, i) => convertWaveOrShape(s, 'shape', i, split.presetVersion)),
+    waves: (split.waves || []).map((w, i) => convertWaveOrShape(w, 'wave', i, split.presetVersion, warnings)),
+    shapes: (split.shapes || []).map((s, i) => convertWaveOrShape(s, 'shape', i, split.presetVersion, warnings)),
   };
   if (basic.perFrameInitEQs && basic.perFrameInitEQs.trim()) {
     preset.init_eqs_str = basic.perFrameInitEQs.trim();
@@ -218,6 +224,7 @@ function convertMilkText(text) {
     preset.pixel_eqs_str = basic.perPixelEQs.trim();
   }
 
+  terminatePresetEquations(preset);
   validatePresetEquations(preset);
   return { preset, warnings };
 }

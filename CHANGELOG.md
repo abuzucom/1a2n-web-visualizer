@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] (2026-11-04)
+
+### Added
+- Import 228 curated `[EXP4] ` presets across five sources in two lazy-loaded chunks.
+- Record pinned source paths, content hashes, upstream license notices, and unresolved rights.
+- Preserve current curation and PR 173 exclusions. The inventory contains 18,174 presets.
+
+## [1.16.12] (2026-11-04)
+
+### Fixed
+- Correct custom wave and shape parser calls and preserve wave point equations.
+- Require runtime equation fields and report custom equation conversion failures.
+- Separate converted expressions from the runtime return statement.
+- Adapt optimized native shaders with the matching upstream postprocessor.
+  Preserve helper declarations and bound shader size and delimiter nesting.
+
 ## [1.16.11] (2026-11-01)
 
 ### Removed

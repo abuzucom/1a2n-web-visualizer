@@ -15,6 +15,40 @@
 const fs = require('fs');
 const utils = require('milkdrop-preset-utils');
 const converter = require('milkdrop-shader-converter');
+const MAX_SHADER_BYTES = 1048576;
+const MAX_SHADER_DEPTH = 128;
+
+/** Reject malformed compiler output before upstream text transformations. */
+function validateCompiledShader(source) {
+  if (!source.trim()) throw new Error('native converter returned empty output');
+  if (Buffer.byteLength(source) > MAX_SHADER_BYTES) throw new Error('compiled shader exceeds size limit');
+  const stack = [];
+  const pairs = { ')': '(', ']': '[', '}': '{' };
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (character === '/' && next === '/') {
+      const end = source.indexOf('\n', index);
+      index = end === -1 ? source.length : end;
+      continue;
+    }
+    if (character === '/' && next === '*') {
+      const end = source.indexOf('*/', index + 1);
+      if (end === -1) throw new Error('unterminated shader comment');
+      index = end + 1;
+      continue;
+    }
+    if ('([{'.includes(character)) stack.push(character);
+    if (stack.length > MAX_SHADER_DEPTH) throw new Error('compiled shader exceeds nesting limit');
+    if (Object.hasOwn(pairs, character) && stack.pop() !== pairs[character]) {
+      throw new Error('unbalanced compiled shader delimiters');
+    }
+  }
+  if (stack.length) throw new Error('unbalanced compiled shader delimiters');
+  const entryPoints = source.match(/\bvoid main \(\)/g) || [];
+  if (entryPoints.length !== 1) throw new Error('expected one optimized shader entry point');
+  if (!source.includes('_glesFragData[0] = ')) throw new Error('compiled shader has no fragment output');
+}
 
 /**
  * Listen for messages from the parent process and convert presets.
@@ -22,36 +56,20 @@ const converter = require('milkdrop-shader-converter');
 function main() {
   const [, , inputPath] = process.argv;
   const shaderBody = fs.readFileSync(inputPath, 'utf8');
+  if (Buffer.byteLength(shaderBody) > MAX_SHADER_BYTES) throw new Error('input shader exceeds size limit');
 
   const prepared = utils.prepareShader(shaderBody);
-  // The native converter's entry point is hardcoded to "main" -- rename the
-  // preset's shader_body function to match. optimize=true (glsl-optimizer)
-  // has been observed to hang on valid input, so this uses the safe
-  // unoptimized path and extracts just the function body, matching what
-  // butterchurn's own runtime getShaderParts() extracts from "shader_body
-  // { ... }" at load time -- the stored preset field is that same
-  // convention, not a standalone compiled shader.
+  // The matching upstream postprocessor requires optimized native output.
+  // The parent process enforces the deadline around translation and optimization.
   const renamed = prepared.replace('shader_body (float2 uv', 'main (float2 uv');
-  const compiled = converter.convertHLSLString(renamed, false).toString('utf8');
-  // hlsl2glsl-fork always renames the translated entry function to
-  // "xlat_main" internally and wraps it in its own "void main() {...}" that
-  // calls it -- the real translated body lives in the xlat_main definition.
-  const openIdx = compiled.indexOf('xlat_main(');
-  if (openIdx === -1) throw new Error('could not locate compiled xlat_main() function');
-  const braceOpen = compiled.indexOf('{', openIdx);
-  if (braceOpen === -1) throw new Error('could not locate function body opening brace');
-  let depth = 0;
-  let braceClose = -1;
-  for (let i = braceOpen; i < compiled.length; i++) {
-    if (compiled[i] === '{') depth++;
-    else if (compiled[i] === '}') {
-      depth--;
-      if (depth === 0) { braceClose = i; break; }
-    }
+  const output = converter.convertHLSLString(renamed, true);
+  if (!Buffer.isBuffer(output)) throw new Error('native converter returned no shader buffer');
+  const compiled = output.toString('utf8');
+  validateCompiledShader(compiled);
+  const glsl = utils.processOptimizedShader(compiled);
+  if (!glsl.includes('shader_body') || /\bvoid main\b|_glesFragData|xlv_TEXCOORD0/.test(glsl)) {
+    throw new Error('optimized shader adaptation left unsupported entry-point symbols');
   }
-  if (braceClose === -1) throw new Error('could not locate matching closing brace');
-  const body = compiled.slice(braceOpen + 1, braceClose).trim();
-  const glsl = `shader_body\n{\n${body}\n}`;
   process.stdout.write(JSON.stringify({ ok: true, glsl }));
 }
 

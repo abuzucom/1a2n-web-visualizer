@@ -1,7 +1,7 @@
 # 1a2n Web Visualizer
 
 
-MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 17,946 presets: 373 from four butterchurn preset packs, 14,223 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, 3,013 `[EXP]` presets, 57 `[EXP2]` presets, and 280 `[EXP3]` presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
+MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 18,174 presets: 373 from four butterchurn preset packs, 14,223 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, 3,013 `[EXP]` presets, 57 `[EXP2]` presets, 280 `[EXP3]` presets, and 228 `[EXP4]` presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
 `/fullscreen.html`, `/demo.html`, and `/mobile.html`). GitHub Actions deploys
@@ -440,8 +440,16 @@ to build the converter.
 The `.milk` to JSON pipeline (`tools/convert-milk-presets.js`) prioritizes stability, correctness, and batch safety.
 
 - **Isolated Shader Compilation:** The native `milkdrop-shader-converter` (HLSL to GLSL) can hang on malformed inputs. The pipeline dispatches shader translation to a child process (`tools/convert-shader-worker.js`). A strict timeout kills stuck shaders and yields an empty shader instead of halting the batch.
-- **Strict Equation Validation:** The pipeline checks all generated JavaScript equations using `acorn.parse()`. This guarantees valid math equations before writing to disk and prevents runtime browser errors.
-- **Graceful Degradation:** If EEL equations for a wave or shape fail to translate, the converter retains the static `baseVals` instead of discarding the preset.
+- **Equation validation:** The pipeline checks generated JavaScript syntax with `acorn.parse()`.
+  Validation requires fields that Butterchurn compiles unconditionally or for enabled items.
+  Optional pixel and point equations follow the runtime guards. Syntax checks do not establish rendering correctness.
+- **Equation failures:** Failed wave or shape conversion retains static `baseVals` and required empty equation strings.
+  The returned `warnings` array identifies the affected item. Reject warned presets from import candidates.
+- **Shader adaptation:** Native optimization feeds the matching upstream shader postprocessor.
+  The worker preserves helper declarations and adapts fragment output to Butterchurn's `ret` variable.
+  Input and compiled shaders have a 1 MiB limit. Compiled delimiter nesting has a 128-level limit.
+  Missing output, malformed delimiters, adaptation failures, and timeouts produce conversion warnings.
+  Browser compilation and rendering checks remain required for every import candidate.
 - **Correctness Over Minification:** The pipeline ships the generated JavaScript exactly as emitted. It avoids JS minifiers, which can rename dynamic global state variables like `time` or `bass`. Browser JIT compilers optimize these loops automatically.
 - **Robust Batching:** The pipeline recursively walks source directories, detects duplicate basenames, and outputs a unified JSON dictionary to `stdout`. It routes warnings and errors to `stderr`.
 
@@ -449,7 +457,7 @@ The `.milk` to JSON pipeline (`tools/convert-milk-presets.js`) prioritizes stabi
 
 `src/presets-extra/` holds 14,223 mainline presets from [ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn). These pack into 184 logical chunks that load lazily through injected `<script>` tags when selected. This works from `file://` under the strict CSP. An in-memory LRU keeps at most 16 chunks resident. If the folder is missing, the app falls back to the 373 vendored presets.
 
-The experimental NestDrop import contains 3,013 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 582 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 17,946 presets.
+The experimental NestDrop import contains 3,013 `[EXP] ` presets in 377 physical files (`chunk-9000.js` through `chunk-9376.js`). They occupy logical chunk IDs after the mainline chunks. The combined index contains 584 logical chunks. The physical filename range is only a file namespace; the loader uses the logical ID from `index.js` when registering each chunk. The overall total is 18,174 presets.
 
 A second experimental batch contains 57 presets, tagged `[EXP2] ` so it
 stays visually distinct from the `[EXP]` NestDrop import while curating.
@@ -472,8 +480,22 @@ equations and were recorded, not silently dropped. 123 were skipped as
 already curated out, already imported, or duplicate content. One retained
 preset needed the `clouds` texture, sourced from the same
 presets-milkdrop-texture-pack pin already vendored for the `[EXP2] ` batch.
-The combined preset inventory now totals 17,946 rows across 582 logical
+The combined preset inventory now totals 18,174 rows across 584 logical
 chunks.
+
+A fourth experimental batch adds 228 presets with the `[EXP4] ` prefix.
+The batch includes 77 Poweramp presets, 124 Flexi presets, 8 Jarema presets,
+6 M0Rf30 presets, and 13 WMP ports. Flash-warning presets, worms-dependent
+presets, and two unnamed components remain excluded. The assessment checks
+current inventory duplicates, the removal ledger, and PR 173 removals.
+The import adds two physical chunks and requires no additional textures.
+
+[EXP4 provenance and license notices](docs/exp4-provenance.json) record every
+original source path, pinned revision, and canonical content hash.
+Author license evidence covers 14 presets. Redistribution rights remain
+unresolved for 214 presets. Repository-wide collection licenses do not
+establish rights for every collected preset. The project license does not
+replace upstream rights or grant additional redistribution permission.
 
 The folder contains generated, committed output. After an upstream update,
 refresh it with the curation-preserving script (see
