@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.18.2] (2026-11-04)
+
+### Removed
+- Remove 19 curated presets from PR 173 across the current collections.
+  The batch covers 14 mainline presets, four original experimental presets,
+  and one vendored preset. The inventory contains 18,155 presets.
+- Preserve the EXP4 import, converter repairs, Jira removal, and newer curation records.
+
 ## [1.18.1] (2026-11-04)
 
 ### Documentation
