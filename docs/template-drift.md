@@ -75,8 +75,8 @@ Upstreaming these fixes to `abuzucom/agents` needs a separate issue.
 
 ### Checkers and tests this repository holds alone
 
-`scripts/check_protected_files.py` and `scripts/jira_sync.py` have no template
-counterpart. The template declined `check_protected_files.py`. The
+`scripts/check_protected_files.py` has no template counterpart.
+The template declined `check_protected_files.py`. The
 server-side backstop for edits to `hooks/`, `.claude/`, `.codex/`, `.gemini/`,
 `.agents/`, and `docs/agent-policy/` is this repository's own, through
 [`protected-file-review.md`](protected-file-review.md).

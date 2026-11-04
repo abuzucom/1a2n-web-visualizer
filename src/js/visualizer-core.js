@@ -10,6 +10,14 @@
 
   const MAX_PIXEL_RATIO = 2;
   const CHUNK_TIMEOUT_MS = 10000;
+  /* Textures are non-critical, so a stalled part must not hold EXP presets
+   * back longer than a stalled chunk would. */
+  const EXPERIMENTAL_IMAGES_WAIT_MS = CHUNK_TIMEOUT_MS;
+  /* Uniform draws before the linear-scan fallback. Each draw is O(1); the
+   * fallback runs only when most of the library is ineligible. */
+  const RANDOM_PICK_ATTEMPTS = 32;
+  /* Covers every NestDrop import batch prefix: [EXP] , [EXP2] , [EXP3] , ... */
+  const EXPERIMENTAL_PREFIX = '[EXP';
   const CHUNK_PAD_LENGTH = 3;
   const EXPONENTIAL_BACKOFF_BASE = 2;
   const DEFAULT_CACHE_MAX = 16;
@@ -235,17 +243,51 @@
     return (controller.idx + direction + controller.store.keys.length) % controller.store.keys.length;
   }
 
-  function candidatePool(controller, includeFailedFallback) {
-    let pool = controller.store.keys.map(function (_, index) { return index; })
-      .filter(function (index) {
-        const name = controller.store.keys[index];
-        return index !== controller.idx && !controller.excluded.has(name) && !controller.store.failed.has(name);
-      });
-    if (!pool.length && includeFailedFallback !== false) {
-      pool = controller.store.keys.map(function (_, index) { return index; })
-        .filter(function (index) { return index !== controller.idx; });
+  /** Only experimental presets depend on the lazily loaded texture parts. */
+  function needsExperimentalImages(name) {
+    return name.indexOf(EXPERIMENTAL_PREFIX) === 0;
+  }
+
+  function isLoadable(controller, name) {
+    return !controller.excluded.has(name) && !controller.store.failed.has(name);
+  }
+
+  /** True while at least one preset is neither excluded nor failed. */
+  function hasLoadableCandidate(controller) {
+    return controller.store.keys.some(function (name) { return isLoadable(controller, name); });
+  }
+
+  /** A random pick must not repeat the current preset. Until the textures
+   * are ready it also skips EXP presets, so a pick never waits on them. */
+  function isRandomEligible(controller, index, allowExperimental) {
+    const name = controller.store.keys[index];
+    if (index === controller.idx || !isLoadable(controller, name)) return false;
+    return allowExperimental || !needsExperimentalImages(name);
+  }
+
+  /** One pass over the library. Prefers presets that need no textures and
+   * falls back to EXP presets when nothing else remains. */
+  function candidatePool(controller) {
+    const preferred = [];
+    const eligible = [];
+    for (let index = 0; index < controller.store.keys.length; index++) {
+      if (!isRandomEligible(controller, index, true)) continue;
+      eligible.push(index);
+      if (isRandomEligible(controller, index, controller.experimentalImagesReady)) preferred.push(index);
     }
-    return pool;
+    return preferred.length ? preferred : eligible;
+  }
+
+  /** Uniform over eligible presets: rejection sampling keeps the common case
+   * O(1), and the linear pool covers a mostly excluded library. */
+  function pickRandomIndex(controller) {
+    const count = controller.store.keys.length;
+    for (let attempt = 0; attempt < RANDOM_PICK_ATTEMPTS; attempt++) {
+      const index = Math.floor(Math.random() * count);
+      if (isRandomEligible(controller, index, controller.experimentalImagesReady)) return index;
+    }
+    const pool = candidatePool(controller);
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
   }
 
   function applyPreset(controller, index, blend, announce) {
@@ -284,7 +326,41 @@
     controller.lastGoodName = name;
     controller.onPreset(index, name);
     if (announce !== false) controller.onToast(name);
+    if (controller.prefetchEnabled) prefetchNextRandom(controller);
     return true;
+  }
+
+  function chunkReady(controller, name) {
+    const ready = needsExperimentalImages(name) && controller.ensureExperimentalImages
+      ? controller.ensureExperimentalImages()
+      : Promise.resolve();
+    return ready.then(function () {
+      return ensureChunk(controller.store.state, controller.store.state.extraChunkOf[name]);
+    });
+  }
+
+  /** Mark a lazy preset whose chunk loaded without it, so no pick retries it. */
+  function markUnavailable(controller, name) {
+    controller.store.failed.add(name);
+  }
+
+  /**
+   * Choose the next random preset now and fetch its chunk in the background.
+   * It leaves loadSeq and pendingChunkLoads alone, so it never cancels a user
+   * navigation and never counts as a visible load.
+   */
+  function prefetchNextRandom(controller) {
+    if (controller.store.keys.length < MIN_POOL_SIZE) return;
+    const index = pickRandomIndex(controller);
+    controller.nextRandomIndex = index;
+    if (index == null) return;
+    const name = controller.store.keys[index];
+    if (name in controller.store.presets) return;
+    chunkReady(controller, name).then(function (ok) {
+      if (!ok || !(name in controller.store.presets)) markUnavailable(controller, name);
+    }).catch(function (error) {
+      console.error('Random preset prefetch failed:', { name: name, error: error });
+    });
   }
 
   function restoreLastGood(controller, blendOverride) {
@@ -307,31 +383,28 @@
   function loadMissingPreset(controller, index, blend, announce, seq, mode) {
     const name = controller.store.keys[index];
     controller.pendingChunkLoads++;
-    const ready = controller.ensureExperimentalImages
-      ? controller.ensureExperimentalImages()
-      : Promise.resolve();
-    ready.then(function () {
-      return ensureChunk(controller.store.state, controller.store.state.extraChunkOf[name]);
-    }).then(function (ok) {
+    chunkReady(controller, name).then(function (ok) {
       controller.pendingChunkLoads--;
       if (seq !== controller.loadSeq) return;
       if (!ok || !(name in controller.store.presets)) {
+        markUnavailable(controller, name);
         controller.onToast('\u26A0 preset unavailable, skipping: ' + name);
-        if (controller.store.failed.size + controller.excluded.size < controller.store.keys.length) {
-          const fallback = fallbackIndex(controller, mode);
-          if (fallback != null) loadPreset(controller, fallback, blend, announce, mode);
-        }
+        if (!hasLoadableCandidate(controller)) return;
+        const fallback = fallbackIndex(controller, mode);
+        if (fallback != null) loadPreset(controller, fallback, blend, announce, mode);
         return;
       }
       loadPreset(controller, index, blend, announce, mode);
+    }, function (error) {
+      controller.pendingChunkLoads--;
+      console.error('Lazy preset load failed:', { name: name, error: error });
+    }).catch(function (error) {
+      console.error('Lazy preset apply failed:', { name: name, error: error });
     });
   }
 
   function fallbackIndex(controller, mode) {
-    if (mode === 'random') {
-      const pool = candidatePool(controller, false);
-      return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
-    }
+    if (mode === 'random') return pickRandomIndex(controller);
     return stepIndex(controller, 1);
   }
 
@@ -369,13 +442,20 @@
    * Select and load a random preset from the visualizer index.
    */
   function loadRandom(controller) {
-    if (controller.store.keys.length < MIN_POOL_SIZE) return loadPreset(controller, 0, undefined, true, 'random');
-    const pool = candidatePool(controller, false);
-    if (!pool.length) {
-      controller.onToast('\u26A0 no working random preset found');
-      return false;
+    if (controller.store.keys.length < MIN_POOL_SIZE) {
+      loadPreset(controller, 0, undefined, true, 'random');
+      return;
     }
-    loadPreset(controller, pool[Math.floor(Math.random() * pool.length)], undefined, true, 'random');
+    const prefetched = controller.nextRandomIndex;
+    controller.nextRandomIndex = null;
+    const index = prefetched != null && isRandomEligible(controller, prefetched, true)
+      ? prefetched
+      : pickRandomIndex(controller);
+    if (index == null) {
+      controller.onToast('\u26A0 no working random preset found');
+      return;
+    }
+    loadPreset(controller, index, undefined, true, 'random');
   }
 
   /**
@@ -428,6 +508,9 @@
       driver: null,
       rendering: false,
       pendingChunkLoads: 0,
+      nextRandomIndex: null,
+      prefetchEnabled: false,
+      experimentalImagesReady: false,
     };
   }
 
@@ -674,6 +757,7 @@
     audio.experimentalImagesLoading = new Promise(function (resolve) {
       let total = null;
       let received = 0;
+      setTimeout(resolve, EXPERIMENTAL_IMAGES_WAIT_MS);
       global.__bcExtraImagesExpPart = function (number, count, images) {
         total = count;
         received += 1;
@@ -693,8 +777,7 @@
   /**
    * Schedule the idle prefetch of experimental texture parts.
    */
-  function scheduleImagePrefetch(audio) {
-    const prefetch = function () { ensureExperimentalImages(audio); };
+  function scheduleImagePrefetch(prefetch) {
     if (typeof global.requestIdleCallback === 'function') {
       global.requestIdleCallback(prefetch, { timeout: 15000 });
     } else {
@@ -813,9 +896,11 @@
     });
     playback.visualizer = audio.visualizer;
     playback.linkGuard = installLinkGuard(audio.canvas);
-    playback.ensureExperimentalImages = function () { return ensureExperimentalImages(audio); };
+    playback.ensureExperimentalImages = function () {
+      return ensureExperimentalImages(audio).then(function () { playback.experimentalImagesReady = true; });
+    };
     loadExtraImages(audio);
-    scheduleImagePrefetch(audio);
+    scheduleImagePrefetch(playback.ensureExperimentalImages);
     /* A recovery builds a new butterchurn instance with a new analyser chain.
      * Without this the restored visualizer renders against dead audio forever. */
     if (audio.sourceNode) audio.visualizer.connectAudio(audio.sourceNode);
@@ -850,6 +935,12 @@
    */
   function renderOnce(audio, playback) {
     if (!playback.rendering) return;
+    /* The first frame, not start(), arms the prefetch: startup must never
+     * load or wait on a lazy chunk. */
+    if (!playback.prefetchEnabled) {
+      playback.prefetchEnabled = true;
+      prefetchNextRandom(playback);
+    }
     /* Outside the try: pump() is exception safe by contract, and a demo fault
      * must not be reported as a render failure. While the page is hidden this
      * tick comes off the audio thread, which timer throttling cannot reach. */

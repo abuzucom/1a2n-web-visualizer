@@ -4,16 +4,84 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.16.9] (2026-10-31)
+## [1.18.2] (2026-11-04)
 
 ### Removed
-- Curated out 19 presets on request: 14 mainline presets, 4 `[EXP] ` presets,
-  and 1 preset from the vendored `butterchurnPresetsExtra` pack.
-  `tools/remove_presets.js` and `tools/remove-experimental-duplicates.py`
-  updated `src/presets-extra/`, `src/vendor/butterchurnPresetsExtra.min.js`,
-  `preset-inventory.csv`, `removed-presets.csv`, `experimental-presets.json`,
-  and `experimental-exclusions.json`. The application ships 17,965 presets now
-  (372 vendored + 17,593 from `src/presets-extra/`).
+- Remove 19 curated presets from PR 173 across the current collections.
+  The batch covers 14 mainline presets, four original experimental presets,
+  and one vendored preset. The inventory contains 18,155 presets.
+- Preserve the EXP4 import, converter repairs, Jira removal, and newer curation records.
+
+## [1.18.1] (2026-11-04)
+
+### Documentation
+- Remove obsolete integration references from the repository guide and template drift notes.
+
+## [1.18.0] (2026-11-04)
+
+### Removed
+- Remove the remaining Jira integration and deployment publishing step.
+- Remove the sync script, dedicated tests, integration guide, and current documentation references.
+
+### Tests
+- Preserve Pages permissions, pinned deployment actions, and failure retry behavior.
+
+## [1.17.0] (2026-11-04)
+
+### Added
+- Import 228 curated `[EXP4] ` presets across five sources in two lazy-loaded chunks.
+- Record pinned source paths, content hashes, upstream license notices, and unresolved rights.
+- Preserve current curation and PR 173 exclusions. The inventory contains 18,174 presets.
+
+## [1.16.12] (2026-11-04)
+
+### Fixed
+- Correct custom wave and shape parser calls and preserve wave point equations.
+- Require runtime equation fields and report custom equation conversion failures.
+- Separate converted expressions from the runtime return statement.
+- Adapt optimized native shaders with the matching upstream postprocessor.
+  Preserve helper declarations and bound shader size and delimiter nesting.
+
+## [1.16.11] (2026-11-01)
+
+### Removed
+- Removed 38 presets on request. The removals cover 26 mainline presets
+  from `src/presets-extra/`, 11 `[EXP] ` presets, and 1 `[EXP3] ` preset.
+  `tools/remove_presets.js` handled the mainline removals.
+  `tools/remove-experimental-duplicates.py` handled the experimental
+  removals. The preset inventory now holds 17,946 rows across 582 logical
+  chunks.
+
+## [1.16.10] (2026-11-01)
+
+### Security
+- Bumped `fast-uri` from 3.1.8 to 3.1.9. The release fixes four URI parsing
+  and normalization advisories. The fixed defects cover percent-encoded
+  scheme spoofing, host confusion in domain canonicalization, incorrect
+  relative-reference normalization, and scheme injection in suffix
+  references.
+  `fast-uri` reaches this repository only as a development dependency of
+  `serve`.
+
+## [1.16.9] (2026-11-01)
+
+### Fixed
+- Load non-EXP lazy presets without waiting for the experimental texture
+  parts. R and X no longer stall for the whole texture download, or
+  forever when a texture part never answers.
+- Stop waiting for experimental textures after 10 seconds. A stalled
+  texture part no longer blocks EXP presets.
+- Skip EXP presets in random picks until their textures are ready.
+- Prefetch the next random preset from the first rendered frame onward.
+  R, X, and shuffle cycling apply an already loaded preset.
+- Mark a lazy preset missing from its loaded chunk as unavailable.
+  Fallback no longer retries it in a loop.
+- Count each broken preset once when deciding whether a fallback can
+  still find a working preset.
+- Pick random presets in constant time in the common case instead of
+  scanning the whole library on every pick.
+- Log lazy preset load failures with the preset name instead of leaving
+  an unhandled rejection.
 
 ## [1.16.8] (2026-10-31)
 
