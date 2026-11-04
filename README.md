@@ -32,7 +32,7 @@ butterchurn-visualizer/
 +-- docker-compose.yml      # Docker Compose deployment configuration
 +-- .dockerignore
 +-- .github/
-|   +-- workflows/          # Deployment, Jira, lint, security, and pin checks
+|   +-- workflows/          # Deployment, lint, security, and pin checks
 +-- patches/                # Native converter compatibility patch
 +-- scripts/                # CI checks and instruction synchronization
 +-- tests/                  # CI check tests
@@ -83,7 +83,6 @@ butterchurn-visualizer/
     +-- obs-setup.md
     +-- audio-routing.md
     +-- local-hosting.md
-    +-- jira-integration.md
     +-- protected-file-review.md
 ```
 
@@ -346,11 +345,6 @@ Changes from `@itsjustatank` do not require self-approval; changes from agent
 or bot identities require approval from `@itsjustatank` on the current commit.
 See [`docs/protected-file-review.md`](docs/protected-file-review.md) for the
 branch protection and agent identity requirements.
-
-Jira synchronization is opt-in through the `needs-jira` label and uses the
-`JIRA_EMAIL` and `JIRA_API_TOKEN` repository secrets. See
-[`docs/jira-integration.md`](docs/jira-integration.md) for the maintainer
-workflow and deployment linking behavior.
 
 ## Controls
 
