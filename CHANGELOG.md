@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] (2026-11-04)
+
+### Added
+- Import 228 curated `[EXP4] ` presets across five sources in two lazy-loaded chunks.
+- Record pinned source paths, content hashes, upstream license notices, and unresolved rights.
+- Preserve current curation and PR 173 exclusions. The inventory contains 18,174 presets.
+
 ## [1.16.12] (2026-11-04)
 
 ### Fixed
