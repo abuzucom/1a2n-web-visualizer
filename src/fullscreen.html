@@ -15,7 +15,9 @@
     <link rel="stylesheet" href="css/diagnostics.css">
   </head>
   <!-- Keep this markup in step with demo.html, which shares
-       fullscreen.css and fullscreen-ui.js with this page. -->
+       fullscreen.css and fullscreen-ui.js with this page. The energy
+       assignment panel is the one deliberate difference: the curation keys
+       belong to the fullscreen build only. -->
   <body>
     <canvas id="viz"></canvas>
     <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -48,6 +50,8 @@
           <tr><td class="k"><kbd>K</kbd></td><td>View presets favorited this session</td></tr>
           <tr><td class="k"><kbd>A</kbd></td><td>Arm / disarm the audio guard</td></tr>
           <tr><td class="k"><kbd>I</kbd></td><td>Show diagnostics overlay</td></tr>
+          <tr><td class="k"><kbd>7</kbd> / <kbd>8</kbd> / <kbd>9</kbd></td><td>Assign low / medium / high energy</td></tr>
+          <tr><td class="k"><kbd>"</kbd></td><td>View presets assigned this session</td></tr>
           <tr><td class="k"><kbd>?</kbd></td><td>Show this help</td></tr>
         </table>
         <div class="go pulse" id="startPrompt">Click or press any key to start</div>
@@ -83,6 +87,20 @@
         </div>
       </div>
     </div>
+    <div id="assignedPanel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="assignedTitle" inert>
+      <div class="box">
+        <h1 id="assignedTitle">Energy assignments</h1>
+        <p>Copy the list to remove these presets later, or copy the block to update the energy catalog.</p>
+        <textarea id="assignedList" readonly rows="10" aria-labelledby="assignedTitle"></textarea>
+        <p>Catalog assignment block</p>
+        <textarea id="assignmentBlock" readonly rows="8" aria-labelledby="assignedTitle"></textarea>
+        <div class="actions">
+          <button id="copyAssignedBtn">Copy List</button>
+          <button id="copyAssignmentsBtn">Copy Assignments</button>
+          <button id="closeAssignedBtn">Close</button>
+        </div>
+      </div>
+    </div>
     <script defer src="vendor/butterchurn.min.js"></script>
     <script defer src="vendor/butterchurnExtraImages.min.js"></script>
     <script defer src="vendor/butterchurnPresets.min.js"></script>
@@ -101,6 +119,7 @@
     <script defer src="js/diagnostics.js"></script>
     <script defer src="js/demo-audio.js"></script>
     <script defer src="js/visualizer-core.js"></script>
+    <script defer src="js/energy-curation.js"></script>
     <script defer src="js/hyperspeed.js"></script>
     <script defer src="js/fullscreen-ui.js"></script>
   </body>

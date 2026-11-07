@@ -4,6 +4,31 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.0] (2026-11-06)
+
+### Added
+- Add an energy catalog that gives each preset one low, medium, or high
+  category.
+- Add a performance catalog that lists the presets curated for performance
+  playback.
+- Add the energy curation keys to the fullscreen build. The keys record the
+  category for the current preset and move on to a preset that has not
+  played yet.
+- Add an assigned-presets panel to the fullscreen build. It lists the
+  session assignments under low, medium, and high. The panel copies the
+  preset names for a later removal session. The panel copies the catalog
+  assignment block separately.
+- Add a performance page. The keys play the next preset of the pressed
+  energy from the performance catalog. Every eligible preset plays once per
+  category cycle. Each following cycle uses an order that differs from the
+  previous one.
+- Add `tools/curate_catalogs.py` for the energy and performance catalogs.
+- Add `tools/validate_catalogs.py` for the catalog checks.
+
+### Changed
+- Clear the removed presets from both catalogs in the removal tool.
+- Report the catalog changes in the dry-run output of the removal tool.
+
 ## [1.18.2] (2026-11-04)
 
 ### Removed

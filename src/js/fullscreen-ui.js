@@ -22,10 +22,22 @@
   const favoritesTextEl   = document.getElementById('favoritesListText');
   const copyFavoritesBtn  = document.getElementById('copyFavoritesBtn');
   const closeFavoritesBtn = document.getElementById('closeFavoritesBtn');
+  const assignedPanel     = document.getElementById('assignedPanel');
+  const assignedList      = document.getElementById('assignedList');
+  const assignmentText    = document.getElementById('assignmentBlock');
+  const copyAssignedBtn   = document.getElementById('copyAssignedBtn');
+  const copyAssignmentsBtn = document.getElementById('copyAssignmentsBtn');
+  const closeAssignedBtn  = document.getElementById('closeAssignedBtn');
   const cornerButtons = [removeBtn, excludedBtn, favoriteBtn, favoritesBtn];
   const TEXT_ENTRY_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
   const ACTIVATION_TAGS = ['BUTTON', 'A', 'SUMMARY'];
   let panelOpener = null;
+
+  /* The curation keys and the assigned-presets panel belong to the
+   * fullscreen build. demo.html shares this script, so the panel markup
+   * decides whether the feature is available. */
+  const curation = window.BCEnergyCuration ? window.BCEnergyCuration.create() : null;
+  const curationEnabled = Boolean(assignedPanel && curation);
 
   let toastTimer = null;
   let startupPending = false;
@@ -41,6 +53,7 @@
   const CYCLE_STEP_LARGE = 5;
   const TEMPO_STEP_BPM = 4;
   const INTENSITY_STEP = 0.1;
+  const JSON_INDENT = 2;
   function say(msg) {
     const s = msg.length > MAX_TOAST_LENGTH ? msg.slice(0, TRUNCATED_TOAST_LENGTH) + '\u2026' : msg;
     toast.textContent = s;
@@ -201,13 +214,13 @@
   }
 
   function isPanelOpen(panel) {
-    return !panel.classList.contains('hidden');
+    return Boolean(panel) && !panel.classList.contains('hidden');
   }
 
   /* The panels fade with opacity, so inert is what removes their controls
    * from the tab order and the accessibility tree while hidden. */
   function openPanel(panel) {
-    if (!isPanelOpen(excludedPanel) && !isPanelOpen(favoritesPanel)) {
+    if (!isPanelOpen(excludedPanel) && !isPanelOpen(favoritesPanel) && !isPanelOpen(assignedPanel)) {
       panelOpener = document.activeElement;
     }
     panel.classList.remove('hidden');
@@ -226,7 +239,7 @@
     if (!isPanelOpen(panel)) return;
     panel.classList.add('hidden');
     panel.inert = true;
-    if (isPanelOpen(excludedPanel) || isPanelOpen(favoritesPanel)) return;
+    if (isPanelOpen(excludedPanel) || isPanelOpen(favoritesPanel) || isPanelOpen(assignedPanel)) return;
     setCornerButtonsInert(false);
     restorePanelFocus();
   }
@@ -246,11 +259,16 @@
 
   function copyExcludedList() {
     const list = viz.excludedList();
-    const text = list.join('\n');
-    excludedList.select();
+    copyText(list.join('\n'), excludedList, 'Copied ' + list.length + ' preset name(s)');
+  }
+
+  /* One copy path for every list panel. The element holds the text either
+   * way, so a failed clipboard write still leaves it selected. */
+  function copyText(text, element, copiedMessage) {
+    element.select();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(function () {
-        say('Copied ' + list.length + ' preset name(s)');
+        say(copiedMessage);
       }, function () {
         say('Copy failed \u2014 text is selected, use Ctrl/Cmd+C');
       });
@@ -280,17 +298,59 @@
 
   function copyFavoritesList() {
     const list = viz.favoritesList();
-    const text = list.join('\n');
-    favoritesTextEl.select();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () {
-        say('Copied ' + list.length + ' preset name(s)');
-      }, function () {
-        say('Copy failed \u2014 text is selected, use Ctrl/Cmd+C');
-      });
-    } else {
-      say('Text is selected \u2014 use Ctrl/Cmd+C to copy');
-    }
+    copyText(list.join('\n'), favoritesTextEl, 'Copied ' + list.length + ' preset name(s)');
+  }
+
+  /* Assign the current preset an energy category, then move on to a preset
+   * that has not played this session. The excluded list stays untouched, so
+   * the preset remains in the rotation. */
+  function assignEnergy(category) {
+    if (!curationEnabled || !viz.isStarted()) return;
+    const name = viz.currentName();
+    if (!name) return;
+    curation.assign(name, category);
+    const next = viz.playUnplayedRandom();
+    say(category + ': ' + (next || name));
+  }
+
+  function formatAssignedGroups(groups) {
+    const lines = [];
+    let total = 0;
+    groups.forEach(function (group) {
+      lines.push('[' + group.category + ']');
+      group.names.forEach(function (name) { lines.push(name); });
+      total += group.names.length;
+    });
+    if (!total) return '(none assigned yet)';
+    return lines.join('\n');
+  }
+
+  function showAssignedPanel() {
+    if (!curationEnabled || !viz.isStarted()) return;
+    assignedList.value = formatAssignedGroups(curation.groups());
+    assignmentText.value = JSON.stringify(curation.assignmentBlock(), null, JSON_INDENT);
+    openPanel(assignedPanel);
+    assignedList.focus();
+    assignedList.select();
+  }
+
+  function hideAssignedPanel() {
+    if (!curationEnabled) return;
+    closePanel(assignedPanel);
+  }
+
+  /* The removal list holds bare preset names, one per line, because the
+   * removal tool matches on names. */
+  function copyAssignedList() {
+    const names = curation.names();
+    copyText(names.join('\n'), assignedList, 'Copied ' + names.length + ' preset name(s)');
+  }
+
+  /* The assignment block is the catalog input. It stays separate from the
+   * removal list. */
+  function copyAssignments() {
+    const text = JSON.stringify(curation.assignmentBlock(), null, JSON_INDENT);
+    copyText(text, assignmentText, 'Copied the energy assignment block');
   }
 
   async function start() {
@@ -379,9 +439,13 @@
       case 'l': case 'L': showExcludedPanel(); break;
       case 'm': case 'M': favoriteCurrent(); break;
       case 'k': case 'K': showFavoritesPanel(); break;
+      case '7': assignEnergy('low'); break;
+      case '8': assignEnergy('medium'); break;
+      case '9': assignEnergy('high'); break;
+      case '"': showAssignedPanel(); break;
       case 'a': case 'A': toggleAudioGuard(); break;
       case 'i': case 'I': diagnostics.toggle(); break;
-      case 'Escape': hideExcludedPanel(); hideFavoritesPanel(); break;
+      case 'Escape': hideExcludedPanel(); hideFavoritesPanel(); hideAssignedPanel(); break;
       case '?': help.classList.toggle('hidden'); break;
     }
   });
@@ -395,6 +459,11 @@
   favoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); showFavoritesPanel(); });
   copyFavoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); copyFavoritesList(); });
   closeFavoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); hideFavoritesPanel(); });
+  if (curationEnabled) {
+    copyAssignedBtn.addEventListener('click', function (e) { e.stopPropagation(); copyAssignedList(); });
+    copyAssignmentsBtn.addEventListener('click', function (e) { e.stopPropagation(); copyAssignments(); });
+    closeAssignedBtn.addEventListener('click', function (e) { e.stopPropagation(); hideAssignedPanel(); });
+  }
 
   /* -- idle-fade: hide corner buttons after 3 s of inactivity ------ */
   let idleTimer = null;

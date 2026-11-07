@@ -290,6 +290,71 @@
     return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
   }
 
+  /**
+   * Create the session set of presets that already played.
+   *
+   * The set clears once every eligible preset has played, which starts a
+   * new cycle. A pick never returns the preset that is on screen.
+   */
+  function createPlayedSession() {
+    const played = new Set();
+
+    function pool(names, current) {
+      const eligible = [];
+      for (let index = 0; index < names.length; index += 1) {
+        const name = names[index];
+        if (name === current) continue;
+        if (played.has(name)) continue;
+        eligible.push(name);
+      }
+      return eligible;
+    }
+
+    return {
+      hasPlayed: function (name) { return played.has(name); },
+      markPlayed: function (name) { played.add(name); },
+      size: function () { return played.size; },
+      pickUnplayed: function (names, current) {
+        let eligible = pool(names, current);
+        if (!eligible.length) {
+          played.clear();
+          eligible = pool(names, current);
+        }
+        if (!eligible.length) return null;
+        return eligible[Math.floor(Math.random() * eligible.length)];
+      },
+    };
+  }
+
+  /** Presets that are neither excluded, nor failed, nor already played. */
+  function unplayedNames(controller) {
+    const names = [];
+    for (let index = 0; index < controller.store.keys.length; index++) {
+      const name = controller.store.keys[index];
+      if (!isLoadable(controller, name)) continue;
+      names.push(name);
+    }
+    return names;
+  }
+
+  /**
+   * Load a random preset that has not played this session and return its
+   * name. The excluded list stays untouched, so the preset remains in the
+   * rotation for the rest of the session.
+   */
+  function playUnplayedRandom(controller) {
+    const current = controller.store.keys[controller.idx];
+    const picked = controller.session.pickUnplayed(unplayedNames(controller), current);
+    if (picked == null) {
+      controller.onToast('\u26A0 no unplayed preset found');
+      return null;
+    }
+    const index = controller.store.keys.indexOf(picked);
+    controller.session.markPlayed(picked);
+    loadPreset(controller, index, undefined, true, 'random');
+    return picked;
+  }
+
   function applyPreset(controller, index, blend, announce) {
     const name = controller.store.keys[index];
     const cid = controller.store.state.extraChunkOf[name];
@@ -321,6 +386,7 @@
       return false;
     }
     controller.idx = index;
+    controller.session.markPlayed(name);
     controller.lastGoodPreset = preset;
     controller.lastGoodBlend = effectiveBlend;
     controller.lastGoodName = name;
@@ -495,6 +561,7 @@
       idx: 0,
       excluded: new Set(),
       favorites: new Set(),
+      session: createPlayedSession(),
       loadSeq: 0,
       cycleOn: opts.cycleOn !== false,
       shuffleOn: opts.shuffle === true,
@@ -1172,6 +1239,7 @@
       next: function () { loadPreset(playback, stepIndex(playback, 1)); restartCycle(playback); },
       prev: function () { loadPreset(playback, stepIndex(playback, -1)); restartCycle(playback); },
       random: function () { loadRandom(playback); restartCycle(playback); },
+      playUnplayedRandom: function () { return playUnplayedRandom(playback); },
       goto: function (index, announce) { loadPreset(playback, index, undefined, announce); restartCycle(playback); },
       toggleCycle: function () {
         playback.cycleOn = !playback.cycleOn;
@@ -1210,5 +1278,5 @@
     }, createDemoApi(audio));
   }
 
-  global.BCViz = { create: create };
+  global.BCViz = { create: create, createPlayedSession: createPlayedSession };
 })(window);

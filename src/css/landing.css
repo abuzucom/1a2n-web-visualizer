@@ -21,7 +21,7 @@ body {
 :focus-visible { outline-color: var(--brand-pitch); }
 
 main {
-  width: min(100%, 980px);
+  width: min(100%, 1180px);
 }
 
 h1 {
@@ -55,7 +55,9 @@ p.sub {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* One column per entry point, so the cards keep their width as the
+   * landing page gains entries. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 

@@ -4,9 +4,8 @@
 MilkDrop-style audio visualizer pages built with [butterchurn](https://github.com/jberg/butterchurn). Use them as an **OBS browser source**, a **standalone fullscreen visualizer**, or a touch-first mobile experience. The application includes 18,155 presets: 372 from four butterchurn preset packs, 14,209 mainline presets from the [tens-of-thousands](https://github.com/ansorre/tens-of-thousands-milkdrop-presets-for-butterchurn) collection, 3,009 `[EXP]` presets, 57 `[EXP2]` presets, 280 `[EXP3]` presets, and 228 `[EXP4]` presets. It lazy-loads the mainline and experimental collections in chunks. The application is fully self-hosted and requires no CDN.
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
-`/fullscreen.html`, `/demo.html`, and `/mobile.html`). GitHub Actions deploys
-it from the
-`develop` branch.
+`/fullscreen.html`, `/demo.html`, `/mobile.html`, and `/performance.html`).
+GitHub Actions deploys it from the `develop` branch.
 
 All entry points share one controller module:
 
@@ -14,6 +13,7 @@ All entry points share one controller module:
 - `src/fullscreen.html`: Provides a keyboard-controlled interface with no visible UI. It shows a five-second startup indicator, selects a random resident vendored preset, hides the cursor, and shuffles presets by default. Use it for window capture or secondary displays.
 - `src/demo.html`: Runs the fullscreen build against a synthetic audio track generated in the page, so the presets react with no microphone permission and no virtual audio cable. The track is silent. It shares `fullscreen.css` and `fullscreen-ui.js` with the fullscreen build and adds genre, tempo, and intensity keys.
 - `src/mobile.html`: Provides a touch-first browser interface with shuffle, visit history, interval, and hyperspeed controls. It does not request browser fullscreen or expose curation controls.
+- `src/performance.html`: Plays only the presets in the curated performance catalog. Press <kbd>7</kbd>, <kbd>8</kbd>, or <kbd>9</kbd> to play the next low, medium, or high energy preset. The page holds no preset list and no curation controls.
 
 The UI follows the brand visual system across all entry points. The palette uses Pitch (`#0B0B0B`), Paper (`#EAE7E1`), Charcoal (`#242424`), Concrete (`#A6A39D`), and Dull Silver (`#74777A`). Libre Franklin provides display and editorial text, with Helvetica, Neue Haas Grotesk, and Arial fallbacks. Cousine provides utility text, with IBM Plex Mono and Courier New fallbacks.
 
@@ -27,6 +27,8 @@ butterchurn-visualizer/
 +-- .gitignore
 +-- package.json            # Development tools and server configuration
 +-- preset-inventory.csv    # Every preset name, its pack, and chunk id
++-- energy-catalog.json     # Preset id -> low, medium, or high energy
++-- performance-catalog.json # Preset ids curated for performance playback
 +-- Caddyfile               # Caddy web server configuration
 +-- Dockerfile              # Container definition for local hosting
 +-- docker-compose.yml      # Docker Compose deployment configuration
@@ -42,6 +44,7 @@ butterchurn-visualizer/
 |   +-- fullscreen.html     # Standalone fullscreen entry point
 |   +-- demo.html           # Synthetic-audio demo entry point
 |   +-- mobile.html         # Touch-first browser entry point
+|   +-- performance.html    # Energy-tier performance entry point
 |   +-- css/
 |   |   +-- brand.css            # shared brand palette and typography tokens
 |   |   +-- landing.css          # landing page presentation
@@ -52,6 +55,8 @@ butterchurn-visualizer/
 |   |   +-- visualizer-core.js   # shared BCViz controller (the brains)
 |   |   +-- obs-ui.js            # panel wiring
 |   |   +-- fullscreen-ui.js     # keyboard wiring
+|   |   +-- performance-ui.js   # performance page wiring
+|   |   +-- energy-curation.js  # session energy assignments
 |   |   +-- mobile-ui.js         # touch wiring
 |   |   +-- mobile-state.js      # in-memory mobile history and intervals
 |   |   +-- hyperspeed.js        # shared hyperspeed scheduler
@@ -67,6 +72,9 @@ butterchurn-visualizer/
 |   +-- presets-extra/           # ~19k lazy-loaded presets (generated, committed)
 |       +-- index.js             # preset name -> chunk mapping
 |       +-- chunk-NNN.js         # generated logical/physical chunks
+|   +-- catalogs/                # runtime bundles for the checked-in catalogs
+|       +-- energy-catalog.js    # generated from energy-catalog.json
+|       +-- performance-catalog.js # generated from performance-catalog.json
 +-- tools/
 |   +-- fetch-extra-presets.py           # regenerates src/presets-extra/ from upstream
 |   +-- fetch-extra-presets-curated.py   # same, but re-applies prior curation
@@ -77,6 +85,8 @@ butterchurn-visualizer/
 |   +-- convert-milk-presets.js           # converts raw .milk to JSON
 |   +-- convert-shader-worker.js          # isolated shader conversion worker
 |   +-- remove_presets.js                 # removes exact curated names
+|   +-- curate_catalogs.py                # curates the energy and performance catalogs
+|   +-- validate_catalogs.py              # checks both catalogs and their bundles
 |   +-- validate-experimental-presets.js  # checks generated equation JavaScript
 |   +-- butterchurn-image-names.json
 +-- docs/
@@ -178,7 +188,8 @@ python3 -m http.server --directory src 8000
 ```
 
 Open <http://localhost:8000/fullscreen.html>, <http://localhost:8000/demo.html>,
-<http://localhost:8000/mobile.html>, or <http://localhost:8000/obs.html>.
+<http://localhost:8000/mobile.html>, <http://localhost:8000/obs.html>, or
+<http://localhost:8000/performance.html>.
 
 **Demo mode:** <http://localhost:8000/demo.html> needs no audio setup at all. It
 generates its own track and drives the presets from that, so it is the quickest
@@ -203,6 +214,7 @@ https://visualizer.1a2n.net/obs.html
 https://visualizer.1a2n.net/fullscreen.html
 https://visualizer.1a2n.net/demo.html
 https://visualizer.1a2n.net/mobile.html
+https://visualizer.1a2n.net/performance.html
 ```
 
 On every push to `develop`, `.github/workflows/deploy.yml` publishes `src/`.
@@ -367,8 +379,33 @@ branch protection and agent identity requirements.
 | <kbd>K</kbd> | Show presets favorited this session |
 | <kbd>A</kbd> | Arm/disarm the audio guard (reconnects a lost input; see [`docs/unattended-operation.md`](docs/unattended-operation.md)) |
 | <kbd>I</kbd> | Show/hide the diagnostics overlay (also `?diag=1`) |
-| <kbd>Escape</kbd> | Close the excluded-presets or favorites panel |
+| <kbd>7</kbd> / <kbd>8</kbd> / <kbd>9</kbd> | Assign the current preset low, medium, or high energy, then play a preset that has not played yet |
+| <kbd>"</kbd> | Show the presets assigned during the session, grouped by energy |
+| <kbd>Escape</kbd> | Close the excluded-presets, favorites, or energy-assignment panel |
 | <kbd>?</kbd> | Show/hide the help menu |
+
+The energy keys are the curation path. Pressing one records the category for
+the current preset and moves on to a preset that has not played yet. One
+session can classify many presets. The assigned-presets panel lists the
+session assignments under low, medium, and high. Its **Copy List** button
+copies the preset names for a later removal session. Its **Copy Assignments**
+button copies the catalog assignment block. An agent applies that block to
+`energy-catalog.json`. The two outputs stay separate. The curation keys never
+write to the excluded list or the favorites list. Each list keeps its current
+meaning.
+
+### Performance (`performance.html`)
+
+| Key | Action |
+| --- | --- |
+| <kbd>7</kbd> | Play the next low energy preset from the performance catalog |
+| <kbd>8</kbd> | Play the next medium energy preset from the performance catalog |
+| <kbd>9</kbd> | Play the next high energy preset from the performance catalog |
+
+Each category keeps its own cycle. Every eligible preset plays once per
+cycle, and the next cycle uses a different order. A category with no curated
+preset leaves the visualizer unchanged and shows a message. The page holds no
+preset list and no curation controls.
 
 ### Demo (`demo.html`)
 
@@ -541,6 +578,50 @@ node tools/remove_presets.js --names-file names.txt --dry-run
 It does not update the preset counts documented in this README/CHANGELOG -
 recompute those by hand after a removal (see the numbers in the "Extra
 Presets" section above for the formula).
+
+The same run also clears the removed presets from `energy-catalog.json` and
+`performance-catalog.json`, and it rewrites the runtime bundles that follow
+those catalogs. The dry-run report names the catalog entries that would go.
+
+### Energy and performance catalogs
+
+Two checked-in catalogs sit next to the preset inventory. `energy-catalog.json`
+gives each preset one energy category, either `low`, `medium`, or `high`.
+`performance-catalog.json` lists the presets curated for performance
+playback. A catalog entry names its preset as `pack:name`, because the same
+preset name exists in more than one pack.
+
+`tools/curate_catalogs.py` manages both files and regenerates the runtime
+bundles under `src/catalogs/`. The pages load the bundles as scripts. The
+catalogs work from `file://` under the strict CSP.
+
+```bash
+python3 tools/curate_catalogs.py --list                       # print both catalogs
+python3 tools/curate_catalogs.py --add "Preset Name"          # curate for performance
+python3 tools/curate_catalogs.py --remove "Preset Name"       # drop that curation
+python3 tools/curate_catalogs.py --apply-assignments block.json # apply an assignment block
+python3 tools/curate_catalogs.py --add "Preset Name" --dry-run # preview the change
+```
+
+An assignment block holds preset names and the category for each name:
+
+```json
+{
+  "version": 1,
+  "presets": {
+    "Preset Name": "low"
+  }
+}
+```
+
+The assigned-presets panel in the fullscreen build copies that block. Apply
+it with `--apply-assignments`, and the tool resolves each name to its pack.
+A new assignment replaces the previous category for that preset.
+
+`tools/validate_catalogs.py` checks that the categories use only `low`,
+`medium`, and `high`, that every entry names an existing preset, that a
+preset holds at most one category, and that every runtime bundle matches the
+source catalog. Run the check with `npm run validate:catalogs`.
 
 `tools/analyze_curation_history.js` reconstructs the history of removed presets via `git log`. It auto-discovers commits touching `src/presets-extra/` or `src/vendor/*.min.js`, remaining correct across history rewrites. It prints frequency statistics (top words, bigrams, and likely contributor prefixes) over the removed names. It provides raw data without classifying presets as risky or unwanted. This script originally generated `removed-presets.csv`. Use `tools/remove_presets.js` to maintain the ledger going forward:
 
