@@ -97,6 +97,7 @@ function createMath(value) {
 }
 
 const RUNTIME_NAMES = ['Low One', 'Low Two', 'Medium One', 'High One', 'Not Curated'];
+const LAZY_NAME = 'Lazy Collection Preset';
 
 function createHarness(options) {
   const settings = options || {};
@@ -111,9 +112,9 @@ function createHarness(options) {
     BCPerformanceCatalog: settings.performance || { version: 1, presets: [] },
   };
   const viz = {
-    keys: function () { return RUNTIME_NAMES.slice(); },
+    keys: function () { return RUNTIME_NAMES.concat([LAZY_NAME]); },
     isStarted: function () { return true; },
-    goto: function (index) { played.push(RUNTIME_NAMES[index]); },
+    goto: function (index) { played.push(RUNTIME_NAMES.concat([LAZY_NAME])[index]); },
     start: function () { return Promise.resolve(); },
     listDevices: function () { return []; },
     currentDeviceId: function () { return ''; },
@@ -239,6 +240,35 @@ test('each category keeps its own cycle', function () {
   harness.document.dispatch('keydown', { key: '8' });
 
   assert.deepEqual(harness.played, ['Medium One', 'Low One', 'Medium One']);
+});
+
+test('a preset that loads lazily still plays', function () {
+  const harness = createHarness(catalogs(
+    { 'presets-extra:Lazy Collection Preset': 'low' },
+    ['presets-extra:Lazy Collection Preset'],
+  ));
+
+  harness.document.dispatch('keydown', { key: '7' });
+
+  assert.deepEqual(harness.played, ['Lazy Collection Preset']);
+});
+
+test('a two preset category never repeats the previous order', function () {
+  const harness = createHarness(catalogs(
+    { 'presets-extra:Low One': 'low', 'presets-extra:Low Two': 'low' },
+    ['presets-extra:Low One', 'presets-extra:Low Two'],
+  ));
+
+  harness.document.dispatch('keydown', { key: '7' });
+  harness.document.dispatch('keydown', { key: '7' });
+  harness.document.dispatch('keydown', { key: '7' });
+  harness.document.dispatch('keydown', { key: '7' });
+  const firstCycle = harness.played.slice(0, 2);
+  const secondCycle = harness.played.slice(2, 4);
+
+  assert.equal(firstCycle.length, 2);
+  assert.equal(secondCycle.length, 2);
+  assert.notDeepEqual(secondCycle, firstCycle, 'the new cycle uses a different order');
 });
 
 test('the performance page holds no preset list and no curation controls', function () {

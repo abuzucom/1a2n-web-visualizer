@@ -12,7 +12,13 @@ SPEC = importlib.util.spec_from_file_location("curate_catalogs", TOOL_PATH)
 TOOL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(TOOL)
 
-INVENTORY = "name,pack,chunk\n" "Alpha,presets-extra,0\n" "Beta,presets-extra,1\n"
+INVENTORY = (
+    "name,pack,chunk\n"
+    "Alpha,presets-extra,0\n"
+    "Beta,presets-extra,1\n"
+    "Shared,butterchurnPresetsExtra,\n"
+    "Shared,presets-extra,2\n"
+)
 
 
 class CurationToolTest(unittest.TestCase):
@@ -93,6 +99,54 @@ class CurationToolTest(unittest.TestCase):
 
         self.assertEqual(TOOL.main(["--remove", "Alpha"]), 0)
         self.assertEqual(self.read_performance()["presets"], ["presets-extra:Beta"])
+
+    def test_two_removals_in_one_run_drop_both_presets(self):
+        TOOL.main(["--add", "Alpha"])
+        TOOL.main(["--add", "Beta"])
+
+        self.assertEqual(TOOL.main(["--remove", "Alpha", "--remove", "Beta"]), 0)
+        self.assertEqual(self.read_performance()["presets"], [])
+        bundle = self.performance_bundle.read_text(encoding="utf-8")
+        self.assertNotIn("Alpha", bundle)
+        self.assertNotIn("Beta", bundle)
+
+    def test_a_preset_in_two_packs_uses_the_pack_the_runtime_plays(self):
+        self.assertEqual(TOOL.main(["--add", "Shared"]), 0)
+
+        self.assertEqual(
+            self.read_performance()["presets"],
+            ["butterchurnPresetsExtra:Shared"],
+        )
+
+    def test_an_assignment_replaces_the_category_of_the_same_preset(self):
+        first = self.root / "first.json"
+        first.write_text(json.dumps({"presets": {"butterchurnPresetsExtra:Shared": "low"}}),
+                         encoding="utf-8")
+        second = self.root / "second.json"
+        second.write_text(json.dumps({"presets": {"presets-extra:Shared": "high"}}),
+                          encoding="utf-8")
+
+        self.assertEqual(TOOL.main(["--apply-assignments", str(first)]), 0)
+        self.assertEqual(TOOL.main(["--apply-assignments", str(second)]), 0)
+
+        self.assertEqual(
+            self.read_energy()["presets"],
+            {"presets-extra:Shared": "high"},
+        )
+
+    def test_an_assignment_for_a_pack_that_holds_no_preset_is_rejected(self):
+        block = self.root / "block.json"
+        block.write_text(json.dumps({"presets": {"butterchurnPresets:Alpha": "low"}}),
+                         encoding="utf-8")
+
+        self.assertEqual(TOOL.main(["--apply-assignments", str(block)]), 1)
+        self.assertEqual(self.read_energy()["presets"], {})
+
+    def test_a_missing_performance_catalog_starts_empty(self):
+        self.performance.unlink()
+
+        self.assertEqual(TOOL.main(["--add", "Alpha"]), 0)
+        self.assertEqual(self.read_performance()["presets"], ["presets-extra:Alpha"])
 
     def test_a_dry_run_writes_nothing(self):
         self.assertEqual(TOOL.main(["--add", "Alpha", "--dry-run"]), 0)

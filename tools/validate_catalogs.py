@@ -7,25 +7,27 @@ preset carries at most one energy category, and the runtime bundles match
 the catalogs they were built from.
 """
 import argparse
+import importlib.util
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+CURATION_PATH = Path(__file__).resolve().with_name("curate_catalogs.py")
+SPEC = importlib.util.spec_from_file_location("curate_catalogs", CURATION_PATH)
+CURATE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(CURATE)
 
-from curate_catalogs import (  # noqa: E402
-    CATEGORIES,
-    ENERGY_BUNDLE_PATH,
-    ENERGY_CATALOG_PATH,
-    ENERGY_GLOBAL,
-    PERFORMANCE_BUNDLE_PATH,
-    PERFORMANCE_CATALOG_PATH,
-    PERFORMANCE_GLOBAL,
-    bundle_text,
-    id_name,
-    load_inventory,
-    read_catalog,
-)
+CATEGORIES = CURATE.CATEGORIES
+ENERGY_CATALOG_PATH = CURATE.ENERGY_CATALOG_PATH
+PERFORMANCE_CATALOG_PATH = CURATE.PERFORMANCE_CATALOG_PATH
+ENERGY_BUNDLE_PATH = CURATE.ENERGY_BUNDLE_PATH
+PERFORMANCE_BUNDLE_PATH = CURATE.PERFORMANCE_BUNDLE_PATH
+ENERGY_GLOBAL = CURATE.ENERGY_GLOBAL
+PERFORMANCE_GLOBAL = CURATE.PERFORMANCE_GLOBAL
+bundle_text = CURATE.bundle_text
+id_name = CURATE.id_name
+load_inventory = CURATE.load_inventory
+read_catalog = CURATE.read_catalog
 
 
 def check_categories(assignments, findings):
@@ -96,7 +98,7 @@ def main(argv=None):
     findings = []
     inventory = load_inventory(ROOT / "preset-inventory.csv")
     energy = read_catalog(ENERGY_CATALOG_PATH)
-    performance = read_catalog(PERFORMANCE_CATALOG_PATH)
+    performance = read_catalog(PERFORMANCE_CATALOG_PATH, [])
     check_energy(energy, inventory, findings)
     check_performance(performance, inventory, findings)
     check_bundle(ENERGY_BUNDLE_PATH, ENERGY_GLOBAL, energy, findings)

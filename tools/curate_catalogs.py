@@ -42,13 +42,19 @@ def atomic_write_text(path, text):
         Path(temporary.name).unlink(missing_ok=True)
 
 
-def read_catalog(path):
-    """Read one catalog file and return its payload."""
+def read_catalog(path, default_presets=None):
+    """Read one catalog file and return its payload with the expected shape."""
+    empty = {} if default_presets is None else default_presets
     if not path.exists():
-        return {"version": CATALOG_VERSION, "presets": {}}
+        return {"version": CATALOG_VERSION, "presets": empty}
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{path.name} must contain a JSON object")
+    presets = data.get("presets")
+    if presets is None:
+        data["presets"] = empty
+    elif not isinstance(presets, type(empty)):
+        raise ValueError(f"{path.name} needs a presets {type(empty).__name__}")
     return data
 
 
@@ -100,21 +106,29 @@ def id_name(identifier):
 
 
 def resolve_identifier(name, inventory):
-    """Return the catalog identifier for one preset name."""
+    """Return the catalog identifier for one preset name.
+
+    The runtime merges the vendored packs before the lazy collection, so a
+    name that exists in both plays from the vendored pack. The catalog
+    records that pack, so an entry names the preset the app loads.
+    """
     packs = inventory.get(name)
     if not packs:
         raise ValueError(f"preset not found in the inventory: {name}")
-    pack = MAIN_PACK if MAIN_PACK in packs else packs[0]
+    vendored = [pack for pack in packs if pack != MAIN_PACK]
+    pack = vendored[0] if vendored else MAIN_PACK
     return catalog_id(pack, name)
 
 
-def resolve_key(key, inventory, known_packs):
+def resolve_key(key, inventory):
     """Return the catalog identifier for a name or an identifier."""
     if key in inventory:
         return resolve_identifier(key, inventory)
     pack, separator, name = key.partition(":")
-    if separator and pack in known_packs and name in inventory:
-        return catalog_id(pack, name)
+    if separator and name in inventory:
+        if pack in inventory[name]:
+            return catalog_id(pack, name)
+        raise ValueError(f"pack {pack} does not hold the preset {name}")
     raise ValueError(f"preset not found in the inventory: {key}")
 
 
@@ -144,20 +158,23 @@ def add_to_performance(names, performance, inventory):
 
 def remove_from_performance(names, performance, inventory):
     """Remove presets from the performance catalog and report each change."""
-    entries = performance.setdefault("presets", [])
+    entries = performance.get("presets", [])
     changes = []
+    dropped = set()
     for name in names:
         identifier = resolve_identifier(name, inventory)
-        kept = [entry for entry in entries if id_name(entry) != id_name(identifier)]
-        if len(kept) == len(entries):
+        matching = [entry for entry in entries if id_name(entry) == id_name(identifier)]
+        if not matching:
             changes.append(f"performance catalog does not hold {identifier}")
             continue
-        performance["presets"] = kept
+        dropped.update(matching)
         changes.append(f"performance catalog -= {identifier}")
+    if dropped:
+        performance["presets"] = [entry for entry in entries if entry not in dropped]
     return changes
 
 
-def apply_assignments(block_path, energy, inventory, known_packs):
+def apply_assignments(block_path, energy, inventory):
     """Apply one assignment block to the energy catalog."""
     block = json.loads(block_path.read_text(encoding="utf-8-sig"))
     entries = block.get("presets") if isinstance(block, dict) else None
@@ -168,7 +185,11 @@ def apply_assignments(block_path, energy, inventory, known_packs):
     for key, category in entries.items():
         if category not in CATEGORIES:
             raise ValueError(f"unknown energy category {category!r} for {key!r}")
-        identifier = resolve_key(key, inventory, known_packs)
+        identifier = resolve_key(key, inventory)
+        name = id_name(identifier)
+        for existing in list(assignments):
+            if existing != identifier and id_name(existing) == name:
+                del assignments[existing]
         assignments[identifier] = category
         changes.append(f"energy catalog {identifier} = {category}")
     return changes
@@ -203,11 +224,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     inventory = load_inventory(INVENTORY_PATH)
-    known_packs = {pack for packs in inventory.values() for pack in packs}
     energy = read_catalog(ENERGY_CATALOG_PATH)
-    performance = read_catalog(PERFORMANCE_CATALOG_PATH)
-    energy.setdefault("presets", {})
-    performance.setdefault("presets", [])
+    performance = read_catalog(PERFORMANCE_CATALOG_PATH, [])
 
     try:
         changes = []
@@ -218,7 +236,7 @@ def main(argv=None):
         if args.remove_names_file:
             changes += remove_from_performance(read_name_file(args.remove_names_file), performance, inventory)
         if args.apply_assignments:
-            changes += apply_assignments(args.apply_assignments, energy, inventory, known_packs)
+            changes += apply_assignments(args.apply_assignments, energy, inventory)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

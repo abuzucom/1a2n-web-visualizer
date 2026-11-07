@@ -67,7 +67,7 @@ function createTimers() {
   };
 }
 
-function createDocument(elements) {
+function createDocument(elements, bodyAttributes) {
   const listeners = {};
   const document = {
     activeElement: null,
@@ -92,7 +92,10 @@ function createDocument(elements) {
       return evt;
     },
   };
-  document.body.getAttribute = function () { return null; };
+  document.body.getAttribute = function (name) {
+    if (!bodyAttributes) return null;
+    return Object.prototype.hasOwnProperty.call(bodyAttributes, name) ? bodyAttributes[name] : null;
+  };
   document.activeElement = document.body;
   return document;
 }
@@ -130,10 +133,20 @@ function createHarness(options) {
     elements[id].classList.add('hidden');
     elements[id].inert = true;
   });
-  const document = createDocument(elements);
+  const declaresCuration = settings.declaresCuration === undefined
+    ? settings.withCuration !== false
+    : settings.declaresCuration;
+  const bodyAttributes = declaresCuration ? { 'data-energy-curation': '1' } : {};
+  const document = createDocument(elements, bodyAttributes);
   const timers = createTimers();
   const copied = [];
   const calls = { next: 0, random: 0, playUnplayed: 0, exclude: 0, current: 'Preset One' };
+  const clipboard = settings.clipboard === false ? undefined : {
+    writeText: function (text) {
+      copied.push(text);
+      return Promise.resolve();
+    },
+  };
   const window = {
     BCHyperspeed: { create: function () { return { toggle: function () { return true; } }; } },
     setTimeout: timers.setTimeout,
@@ -141,14 +154,7 @@ function createHarness(options) {
     setInterval: timers.setInterval,
     clearInterval: timers.clearInterval,
   };
-  const navigator = {
-    clipboard: {
-      writeText: function (text) {
-        copied.push(text);
-        return Promise.resolve();
-      },
-    },
-  };
+  const navigator = { clipboard: clipboard };
   vm.runInNewContext(readSource('src/js/diagnostics.js'), { window: window });
   vm.runInNewContext(readSource('src/js/energy-curation.js'), { window: window });
   const viz = {
@@ -264,6 +270,39 @@ test('the demo build keeps the curation keys inert', function () {
   harness.document.dispatch('keydown', { key: '"' });
 
   assert.equal(harness.calls.playUnplayed, 0, 'no curation without the panel markup');
+});
+
+test('the page declares the curation feature', function () {
+  const harness = createHarness({ declaresCuration: false });
+
+  harness.document.dispatch('keydown', { key: '7' });
+  harness.document.dispatch('keydown', { key: '"' });
+
+  assert.equal(harness.calls.playUnplayed, 0, 'the page attribute decides');
+  assert.equal(harness.elements.assignedPanel.classList.contains('hidden'), true);
+});
+
+test('the manual copy fallback leaves the bare names in the list', function () {
+  const harness = createHarness({ clipboard: false });
+
+  harness.document.dispatch('keydown', { key: '7' });
+  harness.document.dispatch('keydown', { key: '"' });
+  harness.elements.copyAssignedBtn.dispatch('click');
+
+  assert.equal(harness.elements.assignedList.value, 'Preset One', 'the fallback copies names');
+});
+
+test('the assigned list keeps its grouped display after a copy', function () {
+  const harness = createHarness();
+
+  harness.document.dispatch('keydown', { key: '7' });
+  harness.document.dispatch('keydown', { key: '"' });
+  harness.elements.copyAssignedBtn.dispatch('click');
+
+  return Promise.resolve().then(function () {
+    assert.match(harness.elements.assignedList.value, /\[low\]/);
+    assert.match(harness.elements.assignedList.value, /Preset One/);
+  });
 });
 
 test('the fullscreen markup gives the assignment panel dialog semantics', function () {

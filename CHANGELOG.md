@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.2] (2026-11-07)
+
+### Fixed
+- Drop every requested preset in one curation run. The removal pass rebuilt
+  the catalog from the original list. Only the last removal survived.
+- Record the pack the runtime plays in a catalog entry. A name that exists
+  in two packs plays from the vendored pack.
+- Load a missing performance catalog as an empty list. The shared default
+  had the wrong shape and crashed the curation tool.
+- Replace the category of the same preset when an assignment names another
+  pack. The catalog and the validator now agree on one category per preset.
+- Reject an assignment for a pack that holds no preset. The validator
+  rejected such a catalog after the curation tool wrote it.
+- Keep a catalog entry whose pack the removal did not target. The removal
+  tool now matches the pack that the removal removed.
+- Copy the bare preset names when the clipboard write fails. The manual
+  fallback now copies the same text as the button.
+- Follow the page attribute for the curation feature. The panel markup no
+  longer decides whether the curation keys work.
+- Load the shared catalog helpers without a lint suppression.
+
 ## [1.19.1] (2026-11-07)
 
 ### Fixed

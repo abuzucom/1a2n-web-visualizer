@@ -34,10 +34,12 @@
   let panelOpener = null;
 
   /* The curation keys and the assigned-presets panel belong to the
-   * fullscreen build. demo.html shares this script, so the panel markup
-   * decides whether the feature is available. */
-  const curation = window.BCEnergyCuration ? window.BCEnergyCuration.create() : null;
-  const curationEnabled = Boolean(assignedPanel && curation);
+   * fullscreen build. The page declares the feature, and demo.html shares
+   * this script without the declaration. */
+  const curationRequested = document.body.getAttribute('data-energy-curation') === '1';
+  const curation = curationRequested && window.BCEnergyCuration
+    ? window.BCEnergyCuration.create()
+    : null;
 
   let toastTimer = null;
   let startupPending = false;
@@ -262,13 +264,15 @@
     copyText(list.join('\n'), excludedList, 'Copied ' + list.length + ' preset name(s)');
   }
 
-  /* One copy path for every list panel. The element holds the text either
-   * way, so a failed clipboard write still leaves it selected. */
-  function copyText(text, element, copiedMessage) {
+  /* One copy path for every list panel. The element holds the copied text
+   * while the copy runs, so the manual fallback copies the same text. */
+  function copyText(text, element, copiedMessage, onCopied) {
+    element.value = text;
     element.select();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(function () {
         say(copiedMessage);
+        if (onCopied) onCopied();
       }, function () {
         say('Copy failed \u2014 text is selected, use Ctrl/Cmd+C');
       });
@@ -305,7 +309,7 @@
    * that has not played this session. The excluded list stays untouched, so
    * the preset remains in the rotation. */
   function assignEnergy(category) {
-    if (!curationEnabled || !viz.isStarted()) return;
+    if (!curation || !viz.isStarted()) return;
     const name = viz.currentName();
     if (!name) return;
     curation.assign(name, category);
@@ -326,7 +330,7 @@
   }
 
   function showAssignedPanel() {
-    if (!curationEnabled || !viz.isStarted()) return;
+    if (!curation || !assignedPanel || !viz.isStarted()) return;
     assignedList.value = formatAssignedGroups(curation.groups());
     assignmentText.value = JSON.stringify(curation.assignmentBlock(), null, JSON_INDENT);
     openPanel(assignedPanel);
@@ -335,15 +339,19 @@
   }
 
   function hideAssignedPanel() {
-    if (!curationEnabled) return;
+    if (!assignedPanel) return;
     closePanel(assignedPanel);
   }
 
   /* The removal list holds bare preset names, one per line, because the
-   * removal tool matches on names. */
+   * removal tool matches on names. The grouped display returns after the
+   * copy, so the panel keeps both views. */
   function copyAssignedList() {
     const names = curation.names();
-    copyText(names.join('\n'), assignedList, 'Copied ' + names.length + ' preset name(s)');
+    const grouped = formatAssignedGroups(curation.groups());
+    copyText(names.join('\n'), assignedList, 'Copied ' + names.length + ' preset name(s)', function () {
+      assignedList.value = grouped;
+    });
   }
 
   /* The assignment block is the catalog input. It stays separate from the
@@ -459,9 +467,13 @@
   favoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); showFavoritesPanel(); });
   copyFavoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); copyFavoritesList(); });
   closeFavoritesBtn.addEventListener('click', function (e) { e.stopPropagation(); hideFavoritesPanel(); });
-  if (curationEnabled) {
+  if (copyAssignedBtn) {
     copyAssignedBtn.addEventListener('click', function (e) { e.stopPropagation(); copyAssignedList(); });
+  }
+  if (copyAssignmentsBtn) {
     copyAssignmentsBtn.addEventListener('click', function (e) { e.stopPropagation(); copyAssignments(); });
+  }
+  if (closeAssignedBtn) {
     closeAssignedBtn.addEventListener('click', function (e) { e.stopPropagation(); hideAssignedPanel(); });
   }
 

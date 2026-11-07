@@ -110,6 +110,27 @@ class RemovePresetsCatalogTest(unittest.TestCase):
         self.assertNotIn("Alpha", self.read("preset-inventory.csv"))
         self.assertIn("Alpha", self.read("removed-presets.csv"))
 
+    def test_a_catalog_entry_for_another_pack_survives(self):
+        # The catalog names the pack the runtime plays. The removal targets
+        # the presets-extra pack, so an entry for another pack keeps
+        # pointing at a preset that still plays.
+        self.write("energy-catalog.json", json.dumps(
+            {"version": 1, "presets": {"butterchurnPresetsExtra:Alpha": "low"}}, indent=2) + "\n")
+        self.write("src/catalogs/energy-catalog.js",
+                   'window.BCEnergyCatalog = {"version":1,"presets":'
+                   '{"butterchurnPresetsExtra:Alpha":"low"}};\n')
+
+        self.assertEqual(self.run_tool("--names-file", "names.txt").returncode, 0)
+
+        energy = json.loads(self.read("energy-catalog.json"))
+        self.assertEqual(energy["presets"], {"butterchurnPresetsExtra:Alpha": "low"})
+
+    def test_a_catalog_entry_for_the_removed_pack_goes(self):
+        self.assertEqual(self.run_tool("--names-file", "names.txt").returncode, 0)
+
+        energy = json.loads(self.read("energy-catalog.json"))
+        self.assertEqual(energy["presets"], {"presets-extra:Beta": "high"})
+
     def test_the_consistency_check_reports_no_stale_catalog_entries(self):
         result = self.run_tool("--names-file", "names.txt")
 
