@@ -4,6 +4,60 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.2] (2026-11-07)
+
+### Fixed
+- Drop every requested preset in one curation run. The removal pass rebuilt
+  the catalog from the original list. Only the last removal survived.
+- Record the pack the runtime plays in a catalog entry. A name that exists
+  in two packs plays from the vendored pack.
+- Load a missing performance catalog as an empty list. The shared default
+  had the wrong shape and crashed the curation tool.
+- Replace the category of the same preset when an assignment names another
+  pack. The catalog and the validator now agree on one category per preset.
+- Reject an assignment for a pack that holds no preset. The validator
+  rejected such a catalog after the curation tool wrote it.
+- Keep a catalog entry whose pack the removal did not target. The removal
+  tool now matches the pack that the removal removed.
+- Copy the bare preset names when the clipboard write fails. The manual
+  fallback now copies the same text as the button.
+- Follow the page attribute for the curation feature. The panel markup no
+  longer decides whether the curation keys work.
+- Load the shared catalog helpers without a lint suppression.
+
+## [1.19.1] (2026-11-07)
+
+### Fixed
+- Wrap the long removal tool test fixture line. The CI lint job checks
+  every Python file, and that fixture line ran past the line limit.
+- Assert the played session pick by exclusion. The old assertion named one
+  preset from a pool of two. It passed or failed at random.
+
+## [1.19.0] (2026-11-06)
+
+### Added
+- Add an energy catalog that gives each preset one low, medium, or high
+  category.
+- Add a performance catalog that lists the presets curated for performance
+  playback.
+- Add the energy curation keys to the fullscreen build. The keys record the
+  category for the current preset and move on to a preset that has not
+  played yet.
+- Add an assigned-presets panel to the fullscreen build. It lists the
+  session assignments under low, medium, and high. The panel copies the
+  preset names for a later removal session. The panel copies the catalog
+  assignment block separately.
+- Add a performance page. The keys play the next preset of the pressed
+  energy from the performance catalog. Every eligible preset plays once per
+  category cycle. Each following cycle uses an order that differs from the
+  previous one.
+- Add `tools/curate_catalogs.py` for the energy and performance catalogs.
+- Add `tools/validate_catalogs.py` for the catalog checks.
+
+### Changed
+- Clear the removed presets from both catalogs in the removal tool.
+- Report the catalog changes in the dry-run output of the removal tool.
+
 ## [1.18.2] (2026-11-04)
 
 ### Removed
