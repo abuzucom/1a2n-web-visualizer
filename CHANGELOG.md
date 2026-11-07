@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.4] (2026-11-07)
+
+### Added
+- Record the energy category of 84 curated presets in the energy catalog.
+
+### Removed
+- Remove 8 presets on request. The batch covers 6 mainline presets and 2
+  experimental presets.
+
 ## [1.19.3] (2026-11-07)
 
 ### Fixed

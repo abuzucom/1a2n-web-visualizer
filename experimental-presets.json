@@ -133824,17 +133824,6 @@
       "physicalFile": "chunk-9221.js"
     },
     {
-      "sourceName": "TonyMilkdrop - Mirrors & Mirrors",
-      "displayName": "[EXP] TonyMilkdrop - Mirrors & Mirrors",
-      "canonicalHash": "be8c9eb1f1fd00633f60c2eb6825e5c0b3e71e466ddc40cc013494a713517ca3",
-      "mainlineMatches": [],
-      "normalizedNameMatches": [],
-      "missingTextures": [],
-      "sourcePath": "52kpresets/presets/TonyMilkdrop - Mirrors & Mirrors.milk",
-      "logicalChunk": 405,
-      "physicalFile": "chunk-9221.js"
-    },
-    {
       "sourceName": "TonyMilkdrop - Moving",
       "displayName": "[EXP] TonyMilkdrop - Moving",
       "canonicalHash": "ac6c122dee30caf75a51a2b41f197c4d651fa5ead5ff6da1b72bc95b33d68b80",
@@ -148472,17 +148461,6 @@
       "normalizedNameMatches": [],
       "missingTextures": [],
       "sourcePath": "52kpresets/presets/Zylot and Phat - Hypnotic Artifacts _After_image_V2_eyes.milk",
-      "logicalChunk": 417,
-      "physicalFile": "chunk-9233.js"
-    },
-    {
-      "sourceName": "Zylot and Phat - Hypnotic Artifacts _After_image_V2_eyes_made for killing",
-      "displayName": "[EXP] Zylot and Phat - Hypnotic Artifacts _After_image_V2_eyes_made for killing",
-      "canonicalHash": "bdd025fc10deee85da297edeb6a15fec3bd28025a57bc1c5464102c4913fb8ec",
-      "mainlineMatches": [],
-      "normalizedNameMatches": [],
-      "missingTextures": [],
-      "sourcePath": "52kpresets/presets/Zylot and Phat - Hypnotic Artifacts _After_image_V2_eyes_made for killing.milk",
       "logicalChunk": 417,
       "physicalFile": "chunk-9233.js"
     },
