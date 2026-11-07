@@ -1239,7 +1239,11 @@
       next: function () { loadPreset(playback, stepIndex(playback, 1)); restartCycle(playback); },
       prev: function () { loadPreset(playback, stepIndex(playback, -1)); restartCycle(playback); },
       random: function () { loadRandom(playback); restartCycle(playback); },
-      playUnplayedRandom: function () { return playUnplayedRandom(playback); },
+      playUnplayedRandom: function () {
+        const name = playUnplayedRandom(playback);
+        restartCycle(playback);
+        return name;
+      },
       goto: function (index, announce) { loadPreset(playback, index, undefined, announce); restartCycle(playback); },
       toggleCycle: function () {
         playback.cycleOn = !playback.cycleOn;
