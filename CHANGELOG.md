@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.3] (2026-11-07)
+
+### Fixed
+- Restart the preset cycle timer after an energy curation key. The keys
+  reset the timer now, the way the shuffle removal key does.
+
 ## [1.19.2] (2026-11-07)
 
 ### Fixed

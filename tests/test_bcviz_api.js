@@ -459,6 +459,21 @@ test('favoriting the current preset never advances playback or restarts the cycl
   assert.equal(harness.intervalCalls(), intervalCallsBefore);
 });
 
+test('playing an unplayed preset restarts the cycle timer', async function () {
+  const harness = createHarness({ aaa: { baseVals: {} }, bbb: { baseVals: {} } });
+  const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: true, cycleSecs: 5 });
+
+  await viz.start();
+  const cycleSecsBefore = viz.getCycleSecs();
+  const intervalCallsBefore = harness.intervalCalls();
+
+  const name = viz.playUnplayedRandom();
+
+  assert.notEqual(name, null, 'the unplayed pick loaded a preset');
+  assert.equal(harness.intervalCalls(), intervalCallsBefore + 1, 'the cycle timer restarted');
+  assert.equal(viz.getCycleSecs(), cycleSecsBefore);
+});
+
 test('rendering keeps running after the page is hidden', async function () {
   const harness = createHarness({ aaa: { baseVals: {} } });
   const viz = harness.window.BCViz.create(harness.canvas, { cycleOn: false });
