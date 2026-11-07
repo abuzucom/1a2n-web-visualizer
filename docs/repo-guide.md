@@ -61,6 +61,9 @@ guide stays outside the injected policy. Read it before any change.
 - `removed-presets.csv`: durable ledger of every preset ever curated out,
   appended to by `tools/remove_presets.js` at removal time; do not hand-edit
   rows. Fetch scripts consult it to avoid resurrecting removed presets.
+- `src/catalogs/*.js`: generated runtime bundles for `energy-catalog.json` and
+  `performance-catalog.json`. Edit the JSON catalogs through
+  `tools/curate_catalogs.py`; never hand-edit a bundle.
 - Presets already curated out are an intentional editorial choice (see
   README "Curation" section); never restore one as a "fix."
 - Vendored provenance: `CHANGELOG.md` records `butterchurnPresetsExtra`,
@@ -73,12 +76,14 @@ guide stays outside the injected policy. Read it before any change.
 ## Architecture
 
 Static site, no build step or framework. `src/index.html` is a script-free
-landing page linking to three visualizer entry points, `src/obs.html`,
-`src/fullscreen.html`, and `src/mobile.html`, which share one controller
-module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
-`fullscreen-ui.js`, and `mobile-ui.js` wire up each page's UI on top of it;
-`mobile-state.js` holds the mobile page's history/state helpers and
-`hyperspeed.js` implements the rapid preset-shuffle mode.
+landing page linking to the visualizer entry points, `src/obs.html`,
+`src/fullscreen.html`, `src/demo.html`, `src/mobile.html`, and
+`src/performance.html`. Every entry point shares one controller module,
+`src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
+`fullscreen-ui.js`, `mobile-ui.js`, and `performance-ui.js` wire up each
+page's UI on top of it; `mobile-state.js` holds the mobile page's
+history/state helpers, `energy-curation.js` holds the session energy
+assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
 
 - `src/vendor/`: vendored butterchurn plus preset packs, self-hosted (no
   CDN), and the generated `butterchurnExtraImagesExp-part-N.js` experimental
@@ -89,6 +94,10 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   injected as `<script>` tags on demand. Chunk and preset counts change
   with every curation PR; `src/presets-extra/index.js` is the source of
   truth for what exists.
+- `src/catalogs/`: generated script bundles for the energy catalog and the
+  performance catalog. A catalog entry names its preset as `pack:name`. The
+  pages load the bundles as scripts because `file://` blocks `fetch()` of
+  local JSON.
 - `tools/`: Python generators (`fetch-extra-presets*.py`,
   `fetch-cream-of-the-crop-presets.py`) that build `src/presets-extra/` from
   upstream, Node curation utilities (`remove_presets.js`,
@@ -98,11 +107,14 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   Further utilities: `validate-preset-chunks.js` and
   `validate-experimental-presets.js` (validation),
   `compare-experimental-presets.py` and `remove-experimental-duplicates.py`
-  (EXP dedup analysis), `reconcile_preset_inventory.py` (inventory repair).
-  Root JSON files (`experimental-presets.json`,
+  (EXP dedup analysis), `reconcile_preset_inventory.py` (inventory repair),
+  `curate_catalogs.py` (energy and performance catalog curation), and
+  `validate_catalogs.py` (catalog validation). Root JSON files
+  (`experimental-presets.json`,
   `experimental-exclusions.json`, `experimental-textures.json`,
-  `tools/butterchurn-image-names.json`) are generated records consumed by
-  the import/validation pipeline.
+  `energy-catalog.json`, `performance-catalog.json`,
+  `tools/butterchurn-image-names.json`) hold generated records. The import
+  and validation pipeline consumes each file.
 - `scripts/`: repo automation run by CI, not the app. The `abuzucom/agents`
   template supplies `scripts/` and `hooks/` whole (see
   `docs/template-drift.md`); `sync.py` assembles the policy copies,
@@ -148,6 +160,12 @@ module, `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
   `tools/remove_presets.js` is the only sanctioned way to change presets,
   precisely because it updates the real data files and both CSVs together,
   atomically.
+- `energy-catalog.json` and `performance-catalog.json` must change in
+  lockstep with the presets the catalogs name. `tools/remove_presets.js`
+  clears both catalogs and rewrites the runtime bundle for each catalog in
+  the same atomic batch. A removed preset leaves no catalog entry behind.
+  A catalog entry names its preset as `pack:name`, because the same preset
+  name exists in more than one pack.
 - Experimental names use `[EXP] `. Analysis strips it; runtime and curation
   names retain it. EXP-only presets are never duplicate-removal targets.
 - Each distinct import batch gets its own sequential prefix passed via

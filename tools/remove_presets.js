@@ -41,6 +41,13 @@ const CSV_PATH = path.join(ROOT, 'preset-inventory.csv');
 const REMOVED_CSV_PATH = path.join(ROOT, 'removed-presets.csv');
 const CHUNK_DIR = path.join(ROOT, 'src/presets-extra');
 const VENDOR_DIR = path.join(ROOT, 'src/vendor');
+const ENERGY_CATALOG_PATH = path.join(ROOT, 'energy-catalog.json');
+const PERFORMANCE_CATALOG_PATH = path.join(ROOT, 'performance-catalog.json');
+const ENERGY_BUNDLE_PATH = path.join(ROOT, 'src/catalogs/energy-catalog.js');
+const PERFORMANCE_BUNDLE_PATH = path.join(ROOT, 'src/catalogs/performance-catalog.js');
+const ENERGY_GLOBAL = 'BCEnergyCatalog';
+const PERFORMANCE_GLOBAL = 'BCPerformanceCatalog';
+const CATALOG_INDENT = 2;
 let chunkFiles = null;
 
 const ARGS_START = 2;
@@ -492,6 +499,98 @@ function prepareCsvUpdate(csvLines, names, summary) {
   return keptLines;
 }
 
+// --- catalogs (energy categories and performance membership) ---
+
+/**
+ * Read one catalog file and return its payload, or null when it is absent.
+ */
+function readCatalog(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+/**
+ * Return the preset name inside a catalog identifier.
+ */
+function catalogIdName(identifier) {
+  const separator = identifier.indexOf(':');
+  return separator === -1 ? identifier : identifier.slice(separator + 1);
+}
+
+/**
+ * Return the pack inside a catalog identifier.
+ */
+function catalogIdPack(identifier) {
+  const separator = identifier.indexOf(':');
+  return separator === -1 ? '' : identifier.slice(0, separator);
+}
+
+/**
+ * Return the catalog file text for one payload.
+ */
+function catalogText(data) {
+  return JSON.stringify(data, null, CATALOG_INDENT) + '\n';
+}
+
+/**
+ * Return the runtime bundle text for one catalog payload.
+ */
+function bundleText(globalName, data) {
+  return `window.${globalName} = ${JSON.stringify(data)};\n`;
+}
+
+/**
+ * Return whether a catalog entry names a preset this run removed.
+ *
+ * The entry names a pack and a preset, and the removal targets one pack,
+ * so an entry for another pack keeps pointing at a preset that still
+ * plays.
+ */
+function catalogEntryRemoved(identifier, removedByPack) {
+  const names = removedByPack.get(catalogIdPack(identifier));
+  return Boolean(names) && names.has(catalogIdName(identifier));
+}
+
+/**
+ * Prepare the catalog writes for the removed presets.
+ *
+ * Each runtime bundle follows its catalog in the same batch.
+ */
+function prepareCatalogWrites(removedByPack, pendingWrites, summary) {
+  const energy = readCatalog(ENERGY_CATALOG_PATH);
+  if (energy && energy.presets) {
+    const kept = {};
+    let dropped = 0;
+    for (const [identifier, category] of Object.entries(energy.presets)) {
+      if (catalogEntryRemoved(identifier, removedByPack)) { dropped += 1; continue; }
+      kept[identifier] = category;
+    }
+    if (dropped > 0) {
+      energy.presets = kept;
+      pendingWrites.push({ kind: 'catalog', path: ENERGY_CATALOG_PATH, content: catalogText(energy) });
+      pendingWrites.push({
+        kind: 'catalog', path: ENERGY_BUNDLE_PATH, content: bundleText(ENERGY_GLOBAL, energy),
+      });
+      summary.energyCatalog = dropped;
+    }
+  }
+  const performance = readCatalog(PERFORMANCE_CATALOG_PATH);
+  if (performance && Array.isArray(performance.presets)) {
+    const kept = performance.presets.filter((identifier) => !catalogEntryRemoved(identifier, removedByPack));
+    const dropped = performance.presets.length - kept.length;
+    if (dropped > 0) {
+      performance.presets = kept;
+      pendingWrites.push({
+        kind: 'catalog', path: PERFORMANCE_CATALOG_PATH, content: catalogText(performance),
+      });
+      pendingWrites.push({
+        kind: 'catalog', path: PERFORMANCE_BUNDLE_PATH, content: bundleText(PERFORMANCE_GLOBAL, performance),
+      });
+      summary.performanceCatalog = dropped;
+    }
+  }
+}
+
 /**
  * Print a summary of the pending removal operations.
  */
@@ -500,6 +599,8 @@ function logSummary(prefix, names, summary) {
   console.log(`  presets-extra: ${summary.presetsExtra}`);
   for (const [pack, count] of Object.entries(summary.vendor)) console.log(`  ${pack}: ${count}`);
   console.log(`  preset-inventory.csv rows: ${summary.csv}`);
+  console.log(`  energy catalog entries: ${summary.energyCatalog}`);
+  console.log(`  performance catalog entries: ${summary.performanceCatalog}`);
 }
 
 /**
@@ -510,6 +611,7 @@ function writeAll(pendingWrites, keptLines) {
     if (w.kind === 'index') writeIndex(w);
     else if (w.kind === 'chunk') writeChunk(w.id, w.chunk);
     else if (w.kind === 'vendor') atomicWrite(w.path, w.content);
+    else if (w.kind === 'catalog') atomicWrite(w.path, w.content);
   }
   atomicWrite(CSV_PATH, keptLines.join('\n'));
 }
@@ -565,7 +667,7 @@ function loadRemovedNames() {
 /**
  * Verify consistency between the index and the target records.
  */
-function verifyConsistency(indexCountBefore, csvRowCountBefore, summary) {
+function verifyConsistency(indexCountBefore, csvRowCountBefore, summary, removedByPack) {
   const indexCountAfter = countIndexNames(readIndex().data);
   const csvRowCountAfter = fs.readFileSync(CSV_PATH, 'utf8').split('\n').filter((l) => l.length > 0).length;
   const indexDelta = indexCountBefore - indexCountAfter;
@@ -577,6 +679,28 @@ function verifyConsistency(indexCountBefore, csvRowCountBefore, summary) {
   if (indexDelta !== summary.presetsExtra || csvDelta !== summary.csv) {
     console.warn('WARNING: deltas do not match expectations. Investigate before committing.');
   }
+  const stale = countStaleCatalogEntries(removedByPack);
+  if (stale > 0) {
+    console.warn(`WARNING: ${stale} catalog entr(ies) still name a removed preset.`);
+  }
+}
+
+/**
+ * Count the catalog entries that still name one of the removed presets.
+ */
+function countStaleCatalogEntries(removedByPack) {
+  let stale = 0;
+  const energy = readCatalog(ENERGY_CATALOG_PATH);
+  if (energy && energy.presets) {
+    stale += Object.keys(energy.presets)
+      .filter((identifier) => catalogEntryRemoved(identifier, removedByPack)).length;
+  }
+  const performance = readCatalog(PERFORMANCE_CATALOG_PATH);
+  if (performance && Array.isArray(performance.presets)) {
+    stale += performance.presets
+      .filter((identifier) => catalogEntryRemoved(identifier, removedByPack)).length;
+  }
+  return stale;
 }
 
 /**
@@ -597,10 +721,15 @@ function main() {
   const csvTargets = names.filter((name) => byName.has(name));
 
   const pendingWrites = []; // [{ path, content }]
-  const summary = { presetsExtra: 0, vendor: {}, csv: 0 };
+  const summary = { presetsExtra: 0, vendor: {}, csv: 0, energyCatalog: 0, performanceCatalog: 0 };
+  const removedByPack = new Map();
+  for (const [pack, packNames] of byPack) {
+    removedByPack.set(pack, new Set(packNames));
+  }
   preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alreadyRemoved);
   prepareVendorWrites(byPack, pendingWrites, summary, alreadyRemoved);
   const keptLines = prepareCsvUpdate(csvLines, csvTargets, summary);
+  prepareCatalogWrites(removedByPack, pendingWrites, summary);
 
   if (dryRun) {
     console.log('Dry run. No files written.');
@@ -616,7 +745,7 @@ function main() {
   appendRemovedPresetsCsv(names, byName, initialIndex);
   writeAll(pendingWrites, keptLines);
   logSummary('Removed', names, summary);
-  verifyConsistency(indexCountBefore, csvRowCountBefore, summary);
+  verifyConsistency(indexCountBefore, csvRowCountBefore, summary, removedByPack);
 }
 
 main();
