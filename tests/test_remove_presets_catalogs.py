@@ -10,7 +10,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TOOL_PATH = REPO_ROOT / "tools" / "remove_presets.js"
 
-INDEX_TEXT = 'window.BCExtraPresetIndex={"v":2,"chunks":[["Alpha","Beta"],["Gamma"]],"files":["chunk-000.js","chunk-001.js"]};'
+INDEX_TEXT = (
+    'window.BCExtraPresetIndex={"v":2,"chunks":[["Alpha","Beta"],["Gamma"]],'
+    '"files":["chunk-000.js","chunk-001.js"]};'
+)
 CHUNK_ZERO = 'window.__bcPresetChunk(0,{"Alpha":{"a":1},"Beta":{"b":2}});'
 CHUNK_ONE = 'window.__bcPresetChunk(1,{"Gamma":{"g":3}});'
 INVENTORY_TEXT = "name,pack,chunk\nAlpha,presets-extra,0\nBeta,presets-extra,0\nGamma,presets-extra,1\n"

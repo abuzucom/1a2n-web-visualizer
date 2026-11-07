@@ -295,7 +295,9 @@ test('the played session skips presets that already played', function () {
   assert.equal(session.hasPlayed('a'), true);
   assert.equal(session.size(), 1);
   assert.equal(session.pickUnplayed(names, 'c'), 'b', 'only the unplayed preset remains');
-  assert.equal(session.pickUnplayed(names, 'a'), 'b', 'the current preset is never picked');
+  const picked = session.pickUnplayed(names, 'a');
+  assert.notEqual(picked, 'a', 'the current preset is never picked');
+  assert.ok(names.indexOf(picked) !== -1, 'the pick comes from the library');
 });
 
 test('the played session starts a new cycle after every preset played', function () {

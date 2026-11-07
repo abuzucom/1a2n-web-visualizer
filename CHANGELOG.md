@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.1] (2026-11-07)
+
+### Fixed
+- Wrap the long removal tool test fixture line. The CI lint job checks
+  every Python file, and that fixture line ran past the line limit.
+- Assert the played session pick by exclusion. The old assertion named one
+  preset from a pool of two. It passed or failed at random.
+
 ## [1.19.0] (2026-11-06)
 
 ### Added
