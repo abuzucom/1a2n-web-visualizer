@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.5] (2026-11-09)
+
+### Changed
+- Update ESLint to 10.14.0.
+- Use the hosted runner's default Java for HTML and CSS validation.
+
 ## [1.19.4] (2026-11-07)
 
 ### Added
