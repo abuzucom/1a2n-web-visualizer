@@ -312,12 +312,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Java
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          java-version: "21"
-
       - name: Cache vnu.jar
         id: vnu-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -350,6 +344,9 @@ jobs:
       # Runs on both paths: a fresh extraction and a restored cache entry.
       - name: Verify vnu.jar checksum
         run: echo "467249d9312a66bea0de153449b7b965a1ff0e5070efd00b8d0cc4237d9a40df  vnu.jar" | sha256sum -c -
+
+      - name: Test HTML validator
+        run: python3 tests/validate_html_integration.py
 
       - name: Validate HTML and CSS
         run: java -jar vnu.jar --also-check-css src/*.html src/css/*.css
