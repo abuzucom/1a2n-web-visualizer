@@ -24,7 +24,7 @@ class HtmlValidatorIntegrationTest(unittest.TestCase):
             path.write_text(INVALID_HTML, encoding="utf-8")
             invalid = self.run_validator(path)
             self.assertNotEqual(invalid.returncode, 0, invalid.stderr)
-            self.assertIn("Error:", invalid.stderr)
+            self.assertIn("error:", invalid.stderr)
 
     @staticmethod
     def run_validator(path: Path) -> subprocess.CompletedProcess:
