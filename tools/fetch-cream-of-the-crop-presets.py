@@ -174,14 +174,17 @@ def safe_extract(zf, dest):
     zf.extractall(dest)
 
 
+def read_index_data(index_path: Path) -> dict[str, Any]:
+    """Return the index payload, or an empty version 1 index when none exists."""
+    if not index_path.exists():
+        return {"v": 1, "chunks": []}
+    text = index_path.read_text(encoding="utf-8").strip()
+    return json.loads(text[len(INDEX_PREFIX):].rstrip(";"))
+
+
 def load_next_chunk_id(index_path: Path) -> int:
     """Return the next available sequential chunk ID from the index."""
-    if not index_path.exists():
-        return 0
-    text = index_path.read_text(encoding="utf-8").strip()
-    payload = text[len(INDEX_PREFIX):].rstrip(";")
-    data = json.loads(payload)
-    return len(data["chunks"])
+    return len(read_index_data(index_path)["chunks"])
 
 
 def convert_presets(milk_dir, tmp_dir):
@@ -215,7 +218,9 @@ def atomic_write_text(path, text):
 def append_chunks(kept, start_chunk_id):
     """Append `kept` as new chunk-NNN.js files starting at start_chunk_id.
 
-    Extend the index.js chunks array to match. Return a tuple of
+    Extend the index.js chunks array to match. When the index carries a
+    "files" map, append each new chunk's filename too. Index readers reject
+    an index whose chunks and files lengths differ. Return a tuple of
     (new_chunk_id_to_names, total_bytes_written).
 
     Write chunk files atomically before index.js is updated to
@@ -224,6 +229,8 @@ def append_chunks(kept, start_chunk_id):
     names = sorted(kept)
     new_chunks = [names[i:i + PRESETS_PER_CHUNK] for i in range(0, len(names), PRESETS_PER_CHUNK)]
 
+    data = read_index_data(INDEX_PATH)
+    files = data.get("files")
     total_bytes = 0
     for offset, chunk_names in enumerate(new_chunks):
         chunk_id = start_chunk_id + offset
@@ -232,10 +239,9 @@ def append_chunks(kept, start_chunk_id):
         path = OUT_DIR / f"chunk-{chunk_id:03d}.js"
         atomic_write_text(path, text)
         total_bytes += path.stat().st_size
+        if files is not None:
+            files.append(path.name)
 
-    text = INDEX_PATH.read_text(encoding="utf-8").strip()
-    payload = text[len(INDEX_PREFIX):].rstrip(";")
-    data = json.loads(payload)
     data["chunks"].extend(new_chunks)
     atomic_write_text(INDEX_PATH, f"{INDEX_PREFIX}{json.dumps(data, separators=(',', ':'))};\n")
 
@@ -272,7 +278,7 @@ def main() -> None:
     args = parser.parse_args()
 
     allowed = set(BUILTIN_TEXTURES)
-    allowed.update(json.loads(IMAGE_NAMES_FILE.read_text()))
+    allowed.update(json.loads(IMAGE_NAMES_FILE.read_text(encoding="utf-8")))
 
     existing = load_existing_names(CSV_PATH)
     lower_existing = {name.lower() for name in existing}

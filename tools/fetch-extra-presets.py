@@ -18,6 +18,10 @@ Output (all of src/presets-extra/ is wiped and regenerated):
     index.js      window.BCExtraPresetIndex = {v:1, chunks:[[names...],...]}
     chunk-NNN.js  window.__bcPresetChunk(NNN, { "<name>": <preset>, ... });
 
+The script refuses to run when index.js carries a "files" map. That map
+marks experimental output in chunk-9000+ files. A wipe would delete every
+experimental preset.
+
 Usage:
     python3 tools/fetch-extra-presets.py            # download + generate
     python3 tools/fetch-extra-presets.py --zip P    # use a local zip instead
@@ -45,6 +49,7 @@ ZIP_URL = (
 ZIP_SHA256 = "6d907cf1a47af50332301ddd171164c9b593eed2b02659fe183b72319274fa86"
 
 PRESETS_PER_CHUNK = 128
+DOWNLOAD_TIMEOUT_S = 60
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
 MAX_ZIP_ENTRIES = 50_000
 MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
@@ -53,6 +58,31 @@ MAX_MEMBER_BYTES = 10 * 1024 * 1024
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "presets-extra"
 IMAGE_NAMES_FILE = ROOT / "tools" / "butterchurn-image-names.json"
+INDEX_PREFIX = "window.BCExtraPresetIndex="
+
+
+class RegenerationRefusedError(RuntimeError):
+    """Report that a full regeneration would destroy experimental output."""
+
+
+def ensure_regeneration_allowed(out_dir: Path) -> None:
+    """Raise RegenerationRefusedError when out_dir holds experimental output.
+
+    Experimental chunks live in chunk-9000+ files. Only the index "files" map
+    reaches them. A full regeneration wipes out_dir and writes an index without
+    that map. Every experimental preset would disappear."""
+    index_path = out_dir / "index.js"
+    if not index_path.exists():
+        return
+    text = index_path.read_text(encoding="utf-8").strip()
+    data = json.loads(text[len(INDEX_PREFIX):].rstrip(";"))
+    if data.get("files"):
+        raise RegenerationRefusedError(
+            f"{index_path} has a files map. Experimental chunk files exist. "
+            "A full regeneration would delete them. Nothing was written. "
+            "Regenerate only together with a full experimental re-import "
+            "(see docs/repo-guide.md, 'Do not touch')."
+        )
 
 # Textures butterchurn provides on its own (see src/vendor/butterchurn.min.js):
 # the main/framebuffer samplers, the blur passes, and the generated noise
@@ -92,7 +122,7 @@ def get_zip_bytes(zip_arg: str) -> bytes:
         print(f"using local zip: {zip_arg} ({len(data)/1e6:.1f} MB)")
     else:
         print(f"downloading {ZIP_URL} ...")
-        with urllib.request.urlopen(ZIP_URL) as resp:
+        with urllib.request.urlopen(ZIP_URL, timeout=DOWNLOAD_TIMEOUT_S) as resp:
             data = resp.read(MAX_DOWNLOAD_BYTES + 1)
         if len(data) > MAX_DOWNLOAD_BYTES:
             raise ValueError(f"download exceeds {MAX_DOWNLOAD_BYTES} byte limit")
@@ -154,7 +184,10 @@ def write_output(kept, out_dir):
     """Wipe out_dir and write chunk-NNN.js + index.js from `kept` (preset
     name -> parsed preset). Returns (chunks, total_bytes), where `chunks` is
     the list of name-lists actually written (chunk id = list index).
+    Raise RegenerationRefusedError before any write when out_dir holds
+    experimental output.
     """
+    ensure_regeneration_allowed(out_dir)
     names = sorted(kept)
     chunks = [names[i:i + PRESETS_PER_CHUNK]
               for i in range(0, len(names), PRESETS_PER_CHUNK)]
@@ -192,11 +225,16 @@ def main() -> None:
     parser.add_argument("--zip", help="path to a local copy of the upstream zip")
     args = parser.parse_args()
 
-    allowed = set(BUILTIN_TEXTURES)
-    allowed.update(json.loads(IMAGE_NAMES_FILE.read_text()))
+    try:
+        ensure_regeneration_allowed(OUT_DIR)
+    except RegenerationRefusedError as error:
+        sys.exit(f"error: {error}")
 
-    zf = ZipFile(io.BytesIO(get_zip_bytes(args.zip)))
-    kept, excluded, bad_json = collect_presets(zf, allowed)
+    allowed = set(BUILTIN_TEXTURES)
+    allowed.update(json.loads(IMAGE_NAMES_FILE.read_text(encoding="utf-8")))
+
+    with ZipFile(io.BytesIO(get_zip_bytes(args.zip))) as zf:
+        kept, excluded, bad_json = collect_presets(zf, allowed)
     chunks, total_bytes = write_output(kept, OUT_DIR)
 
     missing_counts = {}
