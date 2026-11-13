@@ -7,10 +7,9 @@ never removal candidates.
 """
 
 import argparse
-import hashlib
+import importlib.util
 import json
 from pathlib import Path
-from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "presets-extra"
@@ -20,27 +19,14 @@ INDEX_PREFIX = "window.BCExtraPresetIndex="
 EXP_PREFIX = "[EXP] "
 EXPERIMENTAL_PHYSICAL_BASE = 9000
 
-
-def canonicalize(value: Any) -> Any:
-    """Return a normalized copy of the preset data for exact comparison."""
-    if isinstance(value, dict):
-        return {key: canonicalize(value[key]) for key in sorted(value)}
-    if isinstance(value, list):
-        return [canonicalize(item) for item in value]
-    if isinstance(value, str):
-        return value.replace("\r\n", "\n").replace("\r", "\n")
-    if value == 0:
-        return 0
-    return value
-
-
-def digest(preset: dict[str, Any]) -> str:
-    """Return the SHA-256 digest of the canonicalized preset."""
-    payload = json.dumps(
-        canonicalize(preset), ensure_ascii=False, sort_keys=True,
-        separators=(",", ":"), allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+PRESET_IO_SPEC = importlib.util.spec_from_file_location(
+    "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
+)
+PRESET_IO = importlib.util.module_from_spec(PRESET_IO_SPEC)
+PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
+# The report compares against canonicalHash values that the importer
+# recorded. Both tools must hash through the one shared function.
+digest = PRESET_IO.preset_hash
 
 
 def read_index():

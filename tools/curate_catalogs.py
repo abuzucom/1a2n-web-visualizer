@@ -10,10 +10,9 @@ than one pack.
 """
 import argparse
 import csv
+import importlib.util
 import json
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,17 +28,12 @@ CATEGORIES = ("low", "medium", "high")
 MAIN_PACK = "presets-extra"
 
 
-def atomic_write_text(path, text):
-    """Write one file without exposing a partial file."""
-    temporary = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, delete=False, newline="",
-    )
-    try:
-        with temporary:
-            temporary.write(text)
-        os.replace(temporary.name, path)
-    finally:
-        Path(temporary.name).unlink(missing_ok=True)
+PRESET_IO_SPEC = importlib.util.spec_from_file_location(
+    "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
+)
+PRESET_IO = importlib.util.module_from_spec(PRESET_IO_SPEC)
+PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
+atomic_write_text = PRESET_IO.atomic_write_text
 
 
 def read_catalog(path, default_presets=None):

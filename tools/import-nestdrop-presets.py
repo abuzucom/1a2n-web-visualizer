@@ -28,7 +28,6 @@ import csv
 import hashlib
 import importlib.util
 import json
-import os
 import re
 import subprocess
 import sys
@@ -48,6 +47,15 @@ INDEX_PREFIX = "window.BCExtraPresetIndex="
 EXP_PREFIX = "[EXP] "
 PHYSICAL_CHUNK_BASE = 9000
 PRESETS_PER_CHUNK = 128
+
+PRESET_IO_SPEC = importlib.util.spec_from_file_location(
+    "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
+)
+PRESET_IO = importlib.util.module_from_spec(PRESET_IO_SPEC)
+PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
+atomic_write_text = PRESET_IO.atomic_write_text
+canonicalize = PRESET_IO.canonicalize
+preset_hash = PRESET_IO.preset_hash
 
 BUILTIN_TEXTURES = {
     "main", "blur1", "blur2", "blur3", "noise_lq", "noise_lq_lite",
@@ -131,28 +139,6 @@ def normalize_experimental_chunks(data, files):
         if chunk_changed:
             changed[cid] = (path, chunk)
     return changed
-
-
-def canonicalize(value):
-    """Return a normalized copy of the preset dictionary for exact comparison."""
-    if isinstance(value, dict):
-        return {key: canonicalize(value[key]) for key in sorted(value)}
-    if isinstance(value, list):
-        return [canonicalize(item) for item in value]
-    if isinstance(value, str):
-        return value.replace("\r\n", "\n").replace("\r", "\n")
-    if value == 0:
-        return 0
-    return value
-
-
-def preset_hash(preset):
-    """Return the SHA-256 digest of the canonicalized preset."""
-    payload = json.dumps(
-        canonicalize(preset), ensure_ascii=False, sort_keys=True,
-        separators=(",", ":"), allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
 
 
 def build_mainline_hashes(data, files):
@@ -391,19 +377,6 @@ def csv_escape(value):
     """Escape a string for safe inclusion in a CSV file."""
     text = str(value)
     return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(csv_char in text for csv_char in '",\n') else text
-
-
-def atomic_write_text(path, text):
-    """Write one generated file without exposing a partial file."""
-    temporary = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, delete=False,
-    )
-    try:
-        with temporary:
-            temporary.write(text)
-        os.replace(temporary.name, path)
-    finally:
-        Path(temporary.name).unlink(missing_ok=True)
 
 
 def main():  # noqa: C901, PLR0912, PLR0915
