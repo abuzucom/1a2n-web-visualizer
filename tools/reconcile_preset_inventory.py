@@ -16,6 +16,7 @@ reads generated data; it never touches chunk files or index.js.
 
 import argparse
 import csv
+import importlib.util
 import io
 import json
 from pathlib import Path
@@ -25,6 +26,13 @@ INDEX_PATH = ROOT / "src" / "presets-extra" / "index.js"
 CSV_PATH = ROOT / "preset-inventory.csv"
 INDEX_PREFIX = "window.BCExtraPresetIndex="
 PACK = "presets-extra"
+
+PRESET_IO_SPEC = importlib.util.spec_from_file_location(
+    "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
+)
+PRESET_IO = importlib.util.module_from_spec(PRESET_IO_SPEC)
+PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
+atomic_write_text = PRESET_IO.atomic_write_text
 
 
 def read_live_presets() -> dict:
@@ -53,7 +61,8 @@ def main() -> None:
     args = parser.parse_args()
 
     live = read_live_presets()
-    rows = list(csv.reader(CSV_PATH.open(encoding="utf-8")))
+    with CSV_PATH.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.reader(handle))
     header, body = rows[0], rows[1:]
 
     kept = [row for row in body if row[1] != PACK or row[0] in live]
@@ -69,7 +78,7 @@ def main() -> None:
         print("Dry run, no files written.")
         return
 
-    CSV_PATH.write_text(format_rows([header] + kept + appended), encoding="utf-8")
+    atomic_write_text(CSV_PATH, format_rows([header] + kept + appended))
     total = len(kept) + len(appended)
     print(f"preset-inventory.csv now has {total} rows plus header.")
 
