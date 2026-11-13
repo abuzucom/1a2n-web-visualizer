@@ -85,13 +85,28 @@ function requireFlagValue(argv, index, flag) {
 }
 
 /**
+ * Return the real path with symlinks followed, or the resolved path when
+ * the file does not exist. The later read reports a missing file itself.
+ */
+function realPathOrResolved(filePath) {
+  const resolved = path.resolve(filePath);
+  try {
+    return fs.realpathSync(resolved);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return resolved;
+  }
+}
+
+/**
  * Warn when a names file resolves outside the repository root.
  *
- * The run still reads the file. Callers that keep a names file elsewhere
- * keep working. The warning makes an unexpected read location visible.
+ * The check follows symlinks. A link inside the repository that points
+ * outside it also warns. The run still reads the file. Callers that keep a
+ * names file elsewhere keep working.
  */
 function warnIfOutsideRoot(filePath) {
-  const relative = path.relative(ROOT, path.resolve(filePath));
+  const relative = path.relative(realPathOrResolved(ROOT), realPathOrResolved(filePath));
   const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
   if (outside) {
     console.error(`WARNING: --names-file ${JSON.stringify(filePath)} is outside the repository.`);
