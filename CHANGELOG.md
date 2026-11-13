@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.19.6] (2026-11-13)
+## [1.19.7] (2026-11-13)
 
 ### Fixed
 - Fail `npm run validate:exp` when an experimental preset carries an
@@ -12,6 +12,22 @@ All notable changes to this project are documented here. Format loosely follows
 - Accept a preset index without a `files` map in both preset validators.
   The chunk validator reads the padded chunk names the runtime falls back
   to.
+
+## [1.19.6] (2026-11-13)
+
+### Fixed
+- Record each appended chunk in the index `files` map in
+  `tools/fetch-cream-of-the-crop-presets.py`. Index readers reject an index
+  whose chunk and file counts differ.
+- Create a new index in `tools/fetch-cream-of-the-crop-presets.py` when none
+  exists.
+- Refuse a full regeneration in `tools/fetch-extra-presets.py` and
+  `tools/fetch-extra-presets-curated.py` when the index has a `files` map. The
+  wipe would delete every experimental chunk.
+- Bound the upstream download in `tools/fetch-extra-presets.py` with a
+  timeout.
+- Close the upstream archive and read the texture name list as UTF-8 in the
+  three fetch tools.
 
 ## [1.19.5] (2026-11-09)
 
