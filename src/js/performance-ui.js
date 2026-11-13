@@ -148,6 +148,9 @@
     startupPending = true;
     startError.textContent = '';
     try {
+      // The device list stays empty until enumeration runs. An empty list
+      // resolves the saved input to the system default.
+      await viz.getDevices();
       await viz.start(audioPrefs.resolve(viz.listDevices(), audioPrefs.read()) || undefined);
       startPrompt.hidden = true;
       help.classList.add('hidden');
