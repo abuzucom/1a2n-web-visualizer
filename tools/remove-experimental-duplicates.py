@@ -121,17 +121,23 @@ def main() -> int:
     for item in targets:
         by_chunk.setdefault(item["logicalChunk"], []).append(item["displayName"])
 
+    # The index goes first and the manifest goes last. The manifest is the
+    # record of pending targets, so a crash leaves them pending. A re-run
+    # treats a name already gone from the index as removed there. Every
+    # later write skips the work a previous run finished.
+    chunk_writes = []
     for cid, names in by_chunk.items():
         path, prefix, chunk = read_chunk(OUT_DIR / files[cid], cid)
         for name in names:
-            if name not in data["chunks"][cid]:
-                raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
-            data["chunks"][cid].remove(name)
-            if name in chunk:
-                del chunk[name]
-            elif not args.allow_invalid:
-                raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
-        atomic_write_text(path, f"{prefix}{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n")
+            if name in data["chunks"][cid]:
+                if name not in chunk and not args.allow_invalid:
+                    raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
+                data["chunks"][cid].remove(name)
+            chunk.pop(name, None)
+        chunk_writes.append((path, f"{prefix}{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n"))
+    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
+    for path, text in chunk_writes:
+        atomic_write_text(path, text)
 
     removed = set(approved)
     csv_lines = CSV_PATH.read_text(encoding="utf-8").splitlines()
@@ -156,24 +162,25 @@ def main() -> int:
     ledger_newline = "\r\n" if b"\r\n" in ledger_bytes else "\n"
     if ledger_bytes and not ledger_bytes.endswith((b"\r", b"\n")):
         ledger += ledger_newline
+    ledger_names = {row[0] for row in csv.reader(ledger.splitlines()) if row}
     ledger += "".join(
         f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
         f"{args.reason}{ledger_newline}"
-        for item in targets
+        for item in targets if item["displayName"] not in ledger_names
     )
     atomic_write_text(REMOVED_CSV_PATH, ledger)
 
-    manifest["presets"] = [item for item in manifest.get("presets", []) if item["displayName"] not in removed]
     exclusions = json.loads(EXCLUSIONS_PATH.read_text(encoding="utf-8")) if EXCLUSIONS_PATH.exists() else []
+    excluded_names = {item["displayName"] for item in exclusions}
     exclusions.extend({
         "displayName": item["displayName"],
         "sourceName": item["sourceName"],
         "mainlineMatches": item["mainlineMatches"],
         "reason": args.reason,
-    } for item in targets)
-    atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
+    } for item in targets if item["displayName"] not in excluded_names)
     atomic_write_text(EXCLUSIONS_PATH, json.dumps(exclusions, indent=2) + "\n")
-    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
+    manifest["presets"] = [item for item in manifest.get("presets", []) if item["displayName"] not in removed]
+    atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
     print(f"removed {len(targets)} experimental presets")
     return 0
 

@@ -480,13 +480,17 @@ def main():  # noqa: C901, PLR0912, PLR0915
     kept = {}
     skipped = []
     seen_hashes = set(existing_exp_hashes)
+    # An import that stopped after the index write but before the manifest
+    # write left indexed names without manifest records. A name in the index
+    # counts as imported, so a re-run never indexes it twice.
+    indexed_names = {name for names in data["chunks"] for name in names}
     for source_name, preset in sorted(converted.items()):
         normalized = source_name[len(EXP_PREFIX):] if source_name.startswith(EXP_PREFIX) else source_name
         if normalized in removed_names:
             skipped.append({"sourceName": source_name, "reason": "curated-out name"})
             continue
         display = exp_prefix + normalized
-        if display in existing_exp_names:
+        if display in existing_exp_names or display in indexed_names:
             skipped.append({"sourceName": source_name, "reason": "already imported"})
             continue
         digest = preset_hash(preset)
@@ -550,6 +554,11 @@ def main():  # noqa: C901, PLR0912, PLR0915
     if args.dry_run:
         return
 
+    # Textures go first. A texture failure then leaves no preset indexed
+    # without the textures it samples.
+    if zip_paths:
+        write_texture_bundle(texture_images, texture_records)
+
     manifest = {
         "version": 1,
         "prefix": exp_prefix,
@@ -600,8 +609,6 @@ def main():  # noqa: C901, PLR0912, PLR0915
         csv_rows.extend(f"{csv_escape(name)},presets-extra,{logical}\n" for name in chunk_names)
     atomic_write_text(CSV_PATH, CSV_PATH.read_text(encoding="utf-8") + "".join(csv_rows))
     atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
-    if zip_paths:
-        write_texture_bundle(texture_images, texture_records)
 
 
 if __name__ == "__main__":

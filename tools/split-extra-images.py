@@ -16,6 +16,7 @@ pixel-for-pixel against the original before accepting it.
 
 import argparse
 import base64
+import importlib.util
 import io
 import json
 import os
@@ -39,6 +40,12 @@ BUNDLE_HEAD = "window.butterchurnExtraImagesExp={getImages:function(){return "
 BUNDLE_TAIL = "}};\n"
 PART_COUNT = 8
 DATA_URI_RE = re.compile(r"^data:image/([a-z]+);base64,(.*)$", re.S)
+
+PRESET_IO_SPEC = importlib.util.spec_from_file_location(
+    "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
+)
+PRESET_IO = importlib.util.module_from_spec(PRESET_IO_SPEC)
+PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
 
 
 def read_images() -> dict:
@@ -150,15 +157,19 @@ def write_parts(images: dict, dry_run: bool) -> None:
             parts.append(current)
             current, filled = {}, 0
     parts.append(current)
+    # Build every part before writing any. Each part names the part total, so
+    # a failure partway must leave the old set whole rather than mixed.
+    texts = {}
     for number, payload in enumerate(parts):
         path = VENDOR / f"butterchurnExtraImagesExp-part-{number}.js"
-        text = "window.__bcExtraImagesExpPart(%d,%d,%s);\n" % (
+        texts[path] = "window.__bcExtraImagesExpPart(%d,%d,%s);\n" % (
             number, len(parts),
             json.dumps(payload, separators=(",", ":"), sort_keys=True))
-        print(f"{path.name}: {len(payload)} images, {len(text) / 1e6:.1f} MB")
-        if not dry_run:
-            path.write_text(text, encoding="utf-8")
+        print(f"{path.name}: {len(payload)} images, {len(texts[path]) / 1e6:.1f} MB")
     if not dry_run:
+        for path, text in texts.items():
+            PRESET_IO.atomic_write_text(path, text)
+        # Stale parts go last, after the new set is complete.
         for stale in sorted(VENDOR.glob(PART_GLOB)):
             number = int(stale.stem.rsplit("-", 1)[-1])
             if number >= len(parts):

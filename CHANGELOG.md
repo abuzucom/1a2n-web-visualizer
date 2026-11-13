@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.1] (2026-11-13)
+
+### Fixed
+- Skip already indexed names in `tools/import-nestdrop-presets.py`. A
+  re-run after a stop past the index write indexed the batch twice.
+- Write the vendored textures first in `tools/import-nestdrop-presets.py`.
+  A texture failure left presets indexed without their textures.
+- Finish an interrupted removal on a re-run in
+  `tools/remove-experimental-duplicates.py`. The index now goes first and
+  the manifest last. Ledger rows and exclusions skip names already
+  recorded.
+- Build every texture part before any write in
+  `tools/split-extra-images.py`. A failure partway left parts that
+  disagreed on the part total.
+- Close the inventory file and replace it atomically in
+  `tools/reconcile_preset_inventory.py`.
+
 ## [1.20.0] (2026-11-13)
 
 ### Changed
