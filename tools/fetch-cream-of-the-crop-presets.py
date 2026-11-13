@@ -37,9 +37,9 @@ native addon built (see tools/convert-milk-presets.js).
 import argparse
 import csv
 import hashlib
+import importlib.util
 import io
 import json
-import os
 import re
 import subprocess
 import sys
@@ -205,14 +205,12 @@ def convert_presets(milk_dir, tmp_dir):
         return json.load(f)
 
 
-def atomic_write_text(path, text):
-    """Write text to path via a same-directory temp file and os.replace.
-
-    A reader or a crash never observes a partially-written file. The path
-    either has the old content or the new content, never a half-written mix."""
-    tmp = path.with_name(f".{path.name}.tmp{os.getpid()}")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+PRESET_IO_SPEC = importlib.util.spec_from_file_location(
+    "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
+)
+PRESET_IO = importlib.util.module_from_spec(PRESET_IO_SPEC)
+PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
+atomic_write_text = PRESET_IO.atomic_write_text
 
 
 def append_chunks(kept, start_chunk_id):

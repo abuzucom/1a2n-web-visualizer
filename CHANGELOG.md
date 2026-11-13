@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.0] (2026-11-13)
+
+### Changed
+- Move the atomic file writer and the preset hash into the shared
+  `tools/preset_io.py` module. Four tools carried their own writer copy.
+  Two tools carried their own hash copy. The duplicate-content report
+  compares against hashes that the importer recorded.
+
+### Fixed
+- Write LF line endings on every platform in
+  `tools/import-nestdrop-presets.py`. Its writer copy wrote CRLF on
+  Windows.
+- Remove the temporary file after a failed write in
+  `tools/fetch-cream-of-the-crop-presets.py`.
+
 ## [1.19.8] (2026-11-13)
 
 ### Fixed
