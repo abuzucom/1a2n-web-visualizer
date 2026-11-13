@@ -130,14 +130,18 @@
       state.workletFailed = true;
       return Promise.resolve(null);
     }
-    state.workletPending = ctx.audioWorklet.addModule(state.workletUrl).then(function () {
+    const pending = ctx.audioWorklet.addModule(state.workletUrl).then(function () {
+      // stop() or a context change retires this load. Building the node then
+      // would leave it connected with no owner to disconnect it.
+      if (state.workletPending !== pending) return null;
       return buildWorkletNode(state, ctx);
     }).catch(function (error) {
       state.workletFailed = true;
       logOnce(state, 'audio worklet tick unavailable, falling back to timers', error);
       return null;
     });
-    return state.workletPending;
+    state.workletPending = pending;
+    return pending;
   }
 
   /* Bridge on timers immediately so hiding never leaves a gap, then upgrade to

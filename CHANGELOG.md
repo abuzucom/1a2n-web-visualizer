@@ -4,12 +4,46 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.19.8] (2026-11-13)
+## [1.19.10] (2026-11-13)
 
 ### Fixed
 - Report counts in `tools/fetch-cream-of-the-crop-presets.py` that add up
   to the converted count. The inventory count ignores case, the way the
   filter does. A name in both ledgers counts once.
+
+## [1.19.9] (2026-11-13)
+
+### Fixed
+- Fail `npm run validate:exp` when an experimental preset carries an
+  invalid equation. The CI step now blocks such a preset.
+- Accept a preset index without a `files` map in both preset validators.
+  The chunk validator reads the padded chunk names the runtime falls back
+  to.
+
+## [1.19.8] (2026-11-13)
+
+### Fixed
+- Disconnect the audio source from the old visualizer before a WebGL
+  rebuild. The old analyser chain stayed connected after every recovery.
+- Reload the experimental textures for a rebuilt visualizer. `[EXP]`
+  presets loaded without textures after a recovery.
+- Rebuild the visualizer on the next watchdog restart after a render
+  failure. A plain driver restart left rendering off while the driver
+  reported healthy ticks.
+- Discard a worklet module load that finishes after the render driver
+  stops. The late load connected a node with no owner.
+- Clear the failed mark for presets in a chunk that arrives after its
+  timeout. Those presets stayed ineligible for the whole session.
+
+## [1.19.7] (2026-11-13)
+
+### Fixed
+- Start the fullscreen and performance pages on the remembered audio
+  input. The pages resolved the saved input against an empty device list.
+  The fullscreen page then replaced the saved choice with the system
+  default.
+- Stop reporting a released input after a failed device switch. The core
+  and the OBS panel named the old input while the visualizer had none.
 
 ## [1.19.6] (2026-11-13)
 

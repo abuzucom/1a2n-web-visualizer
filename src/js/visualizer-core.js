@@ -139,6 +139,10 @@
     Object.keys(chunkPresets).forEach(function (name) {
       if (state.extraChunkOf[name] !== cid) return;
       state.presets[name] = chunkPresets[name];
+      // A chunk that arrives after its timeout clears the failed mark that
+      // the timeout set. A runtime failure also excludes the preset, so this
+      // never revives a broken preset.
+      state.failed.delete(name);
       owned.push(name);
     });
     state.owned[cid] = owned;
@@ -574,6 +578,7 @@
       lastGoodName: '',
       driver: null,
       rendering: false,
+      renderFailed: false,
       pendingChunkLoads: 0,
       nextRandomIndex: null,
       prefetchEnabled: false,
@@ -714,6 +719,8 @@
   }
 
   const NOT_READABLE_RETRY_MS = 250;
+  // Marks a released input. nextDevice() steps from it to the first input.
+  const NO_DEVICE_INDEX = -1;
 
   function delay(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -757,7 +764,16 @@
       return device;
     }
     releaseCurrentStream(audio);
-    const stream = await openStreamWithRetry(device.deviceId);
+    let stream;
+    try {
+      stream = await openStreamWithRetry(device.deviceId);
+    } catch (error) {
+      // The previous stream is already released. Clearing the index keeps
+      // currentDeviceId() from naming an input that no longer feeds the
+      // visualizer. A newer request owns the index when the sequence moved.
+      if (requestSeq === audio.deviceRequestSeq) audio.deviceIdx = NO_DEVICE_INDEX;
+      throw error;
+    }
     if (requestSeq !== audio.deviceRequestSeq) {
       stopStream(stream);
       return null;
@@ -957,7 +973,18 @@
   /**
    * Construct and return the core Butterchurn visualizer instance.
    */
+  /* A rebuild must leave nothing attached to the old instance. Its analyser
+   * chain stays connected to the source until it is disconnected. Its
+   * experimental textures do not carry over to the new instance. */
+  function releaseVisualizer(audio, playback) {
+    if (!audio.visualizer) return;
+    if (audio.sourceNode) audio.visualizer.disconnectAudio(audio.sourceNode);
+    audio.experimentalImagesLoading = null;
+    playback.experimentalImagesReady = false;
+  }
+
   function createVisualizer(audio, playback) {
+    releaseVisualizer(audio, playback);
     audio.visualizer = audio.Butterchurn.createVisualizer(audio.audioCtx, audio.canvas, {
       width: audio.canvas.width, height: audio.canvas.height, pixelRatio: 1, textureRatio: 1,
     });
@@ -1016,6 +1043,7 @@
       audio.visualizer.render();
     } catch (error) {
       console.error('Visualizer render failed:', error);
+      playback.renderFailed = true;
       stopRenderLoop(playback);
       audio.onToast('\u26A0 visualizer render failed');
     }
@@ -1030,6 +1058,7 @@
       if (!playback.lastGoodPreset) throw new Error('no known-good preset available');
       audio.visualizer.loadPreset(playback.lastGoodPreset, playback.lastGoodBlend);
       startRenderLoop(audio, playback, false);
+      playback.renderFailed = false;
       console.info('WebGL context restored:', playback.lastGoodName);
     } catch (error) {
       console.error('WebGL context recovery failed:', error);
@@ -1121,6 +1150,13 @@
    * every recovery restart the countdown to the next preset. */
   function restartDriver(audio, playback) {
     if (!audio.started) return;
+    /* A failed render stops rendering but not the stall. A driver restart
+     * alone brings ticks back while every frame still skips the render. A
+     * rebuild is the only restart that can render again. */
+    if (playback.renderFailed) {
+      recoverVisualizer(audio, playback);
+      return;
+    }
     playback.driver.stop();
     playback.driver.start(audio.audioCtx);
   }
