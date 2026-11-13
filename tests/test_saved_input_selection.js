@@ -302,7 +302,7 @@ test('a failed switch stops reporting the input it released', async function () 
 
   assert.equal(viz.diagnostics().trackState, 'none', 'the released input stays released');
   assert.equal(viz.currentDeviceId(), '', 'no device id is reported for a released input');
-  assert.equal(viz.diagnostics().device, '', 'no device label is reported for a released input');
+  assert.equal(viz.diagnostics().device, 'none', 'diagnostics report no device for a released input');
 });
 
 test('the next device after a failed switch starts from the first input', async function () {
