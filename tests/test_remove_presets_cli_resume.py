@@ -104,6 +104,20 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertIn("chunk-9000.js", result.stderr)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
+    def test_unindexed_unrecorded_name_aborts_before_the_ledger(self):
+        # A presets-extra row with no chunk that neither the index nor the
+        # ledger records must stop the run. No ledger row with an empty
+        # chunk may reach removed-presets.csv.
+        self.write("preset-inventory.csv", INVENTORY_TEXT + "Delta,presets-extra,\n")
+        self.write("names.txt", "Delta\n")
+
+        result = self.run_tool("--names-file", "names.txt")
+
+        self.assertEqual(result.returncode, EXIT_FAILURE)
+        self.assertIn('"Delta" not found in index.js', result.stderr)
+        self.assertEqual(self.read("removed-presets.csv"), LEDGER_HEADER)
+        self.assertEqual(self.read_index(), INDEX_DATA)
+
 
 if __name__ == "__main__":
     unittest.main()
