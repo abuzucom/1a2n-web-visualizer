@@ -19,6 +19,22 @@ All notable changes to this project are documented here. Format loosely follows
 - Remove the temporary file after a failed write in
   `tools/fetch-cream-of-the-crop-presets.py`.
 
+## [1.19.10] (2026-11-13)
+
+### Fixed
+- Report counts in `tools/fetch-cream-of-the-crop-presets.py` that add up
+  to the converted count. The inventory count ignores case, the way the
+  filter does. A name in both ledgers counts once.
+
+## [1.19.9] (2026-11-13)
+
+### Fixed
+- Fail `npm run validate:exp` when an experimental preset carries an
+  invalid equation. The CI step now blocks such a preset.
+- Accept a preset index without a `files` map in both preset validators.
+  The chunk validator reads the padded chunk names the runtime falls back
+  to.
+
 ## [1.19.8] (2026-11-13)
 
 ### Fixed

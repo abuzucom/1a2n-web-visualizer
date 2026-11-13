@@ -11,6 +11,9 @@ const ARGS_OUTPUT = 2;
 const ARGS_NAMES = 3;
 const SUFFIX_LENGTH = -2;
 const JSON_INDENT = 2;
+// Matches the runtime fallback in visualizer-core.js requestChunk for an
+// index without a files map.
+const CHUNK_PAD_LENGTH = 3;
 const outputPath = process.argv[ARGS_OUTPUT] || path.join(ROOT, 'preset-invalid-equations.json');
 const namesPath = process.argv[ARGS_NAMES] || null;
 
@@ -37,12 +40,20 @@ function readChunk(index, cid, filename) {
 }
 
 /**
+ * Return the physical chunk filename for a logical chunk id.
+ */
+function chunkFilename(index, cid) {
+  if (index.files && index.files[cid]) return index.files[cid];
+  return `chunk-${String(cid).padStart(CHUNK_PAD_LENGTH, '0')}.js`;
+}
+
+/**
  * Find and return invalid presets that fail parsing or evaluation.
  */
 function findInvalidPresets(index) {
   const invalid = [];
   index.chunks.forEach(function (_, cid) {
-    const filename = index.files[cid];
+    const filename = chunkFilename(index, cid);
     const chunk = readChunk(index, cid, filename);
     Object.entries(chunk).forEach(function ([name, preset]) {
       try {

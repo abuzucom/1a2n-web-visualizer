@@ -267,6 +267,32 @@ def append_inventory_rows(kept: dict[str, Any], start_chunk_id: int) -> None:
         f.write("\n".join(rows) + "\n")
 
 
+def classify_presets(
+    converted: dict[str, Any], existing: set[str], removed: set[str], allowed: set[str],
+) -> dict[str, Any]:
+    """Sort each converted preset into exactly one bucket and return the buckets.
+
+    The inventory check runs first and ignores case. The removal ledger
+    check runs second. The texture check runs last. A preset leaves at its
+    first match. The reported counts therefore add up to the converted
+    count."""
+    lower_existing = {name.lower() for name in existing}
+    buckets = {"present": set(), "removed": set(), "excluded_texture": {}, "kept": {}}
+    for preset_name, preset in converted.items():
+        if preset_name.lower() in lower_existing:
+            buckets["present"].add(preset_name)
+            continue
+        if preset_name in removed:
+            buckets["removed"].add(preset_name)
+            continue
+        missing = referenced_textures(preset) - allowed
+        if missing:
+            buckets["excluded_texture"][preset_name] = sorted(missing)
+            continue
+        buckets["kept"][preset_name] = preset
+    return buckets
+
+
 def main() -> None:
     """Fetch, convert, and integrate the Cream of the Crop presets."""
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
@@ -279,7 +305,6 @@ def main() -> None:
     allowed.update(json.loads(IMAGE_NAMES_FILE.read_text(encoding="utf-8")))
 
     existing = load_existing_names(CSV_PATH)
-    lower_existing = {name.lower() for name in existing}
     removed = load_existing_names(REMOVED_CSV_PATH)
 
     zip_bytes = get_zip_bytes(args.zip)
@@ -296,22 +321,12 @@ def main() -> None:
 
     print(f"converted: {len(converted)}")
 
-    already_present = {name for name in converted if name in existing}
-    already_removed = {name for name in converted if name in removed}
-    excluded_texture = {}
-    kept = {}
-    for preset_name, preset in converted.items():
-        if preset_name.lower() in lower_existing or preset_name in removed:
-            continue
-        missing = referenced_textures(preset) - allowed
-        if missing:
-            excluded_texture[preset_name] = sorted(missing)
-            continue
-        kept[preset_name] = preset
+    buckets = classify_presets(converted, existing, removed, allowed)
+    kept = buckets["kept"]
 
-    print(f"already in preset-inventory.csv: {len(already_present)}")
-    print(f"already in removed-presets.csv ledger: {len(already_removed)}")
-    print(f"excluded (missing textures): {len(excluded_texture)}")
+    print(f"already in preset-inventory.csv: {len(buckets['present'])}")
+    print(f"already in removed-presets.csv ledger: {len(buckets['removed'])}")
+    print(f"excluded (missing textures): {len(buckets['excluded_texture'])}")
     print(f"net new presets to add: {len(kept)}")
 
     if args.dry_run:
