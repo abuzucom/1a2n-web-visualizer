@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.3] (2026-11-13)
+
+### Fixed
+- Remove only the inventory row of the resolved pack in
+  `tools/remove_presets.js`. A name held by two packs lost both rows, and
+  the run aborted.
+- Count only names gone from every chunk as removals in
+  `tools/analyze_curation_history.js`. A preset that moved to another
+  chunk counted as removed.
+- Remove the temporary directory after a failed write in
+  `tools/remove_presets.js` and `tools/convert-milk-presets.js`.
+
 ## [1.20.2] (2026-11-13)
 
 ### Fixed

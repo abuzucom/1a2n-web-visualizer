@@ -178,17 +178,17 @@ function recordsFromIndexDiff(currentCommit, parentCommit, meta) {
   if (!fileExistsAt(parentCommit, indexPath) || !fileExistsAt(currentCommit, indexPath)) return records;
 
   const before = getIndexChunks(parentCommit);
-  const after = getIndexChunks(currentCommit);
-  for (let i = 0; i < Math.max(before.length, after.length); i++) {
-    const beforeNames = new Set(before[i] || []);
-    const afterNames = new Set(after[i] || []);
-    for (const name of beforeNames) {
+  // A regeneration can move a preset to another chunk. Only a name gone from
+  // every chunk is a removal.
+  const afterNames = new Set(getIndexChunks(currentCommit).flat());
+  before.forEach((chunkNames, chunk) => {
+    for (const name of new Set(chunkNames)) {
       if (afterNames.has(name)) continue;
       records.push({
-        name, pack: 'presets-extra', chunk: i, commit: meta.hash, date: meta.date, subject: meta.subject,
+        name, pack: 'presets-extra', chunk, commit: meta.hash, date: meta.date, subject: meta.subject,
       });
     }
-  }
+  });
   return records;
 }
 
