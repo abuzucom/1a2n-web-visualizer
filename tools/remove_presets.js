@@ -230,8 +230,9 @@ function loadVendorPresetNames(source) {
   // process's file in the shared os.tmpdir().
   const dir = fs.mkdtempSync(path.join(osModule.tmpdir(), 'vendor-check-'));
   const tmp = path.join(dir, 'bundle.js');
-  fs.writeFileSync(tmp, source);
   try {
+    // Inside the try, so a failed write still removes the directory.
+    fs.writeFileSync(tmp, source);
     delete require.cache[require.resolve(tmp)];
     const moduleObj = require(tmp);
     const presets = moduleObj && moduleObj.default && typeof moduleObj.default.getPresets === 'function'
@@ -389,7 +390,7 @@ function chunkChanges(targets, indexData, alreadyRemoved) {
 /**
  * Remove specified presets from a chunk and return the new string content.
  */
-function removeFromChunk(id, chunkNames, indexData) {
+function removeFromChunk(id, chunkNames, indexData, alreadyRemoved) {
   const arr = indexData.chunks[id];
   if (!arr) throw new Error(`index.js has no chunk ${id}`);
   for (const n of chunkNames) {
@@ -400,10 +401,16 @@ function removeFromChunk(id, chunkNames, indexData) {
 
   const chunk = readChunk(id);
   for (const n of chunkNames) {
-    if (!(n in chunk.data)) {
+    if (n in chunk.data) {
+      delete chunk.data[n];
+      continue;
+    }
+    // The ledger is written first and the chunks before index.js. A ledger
+    // entry with the key already gone marks a run that stopped before the
+    // index write. The re-run finishes that removal.
+    if (!alreadyRemoved.has(n)) {
       throw new Error(`"${n}" not found as a key in chunk-${String(id).padStart(CHUNK_PAD_LENGTH, '0')}.js`);
     }
-    delete chunk.data[n];
   }
   return chunk;
 }
@@ -418,7 +425,7 @@ function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alrea
   const byChunk = chunkChanges(targets, indexData, alreadyRemoved);
 
   for (const [id, chunkNames] of byChunk) {
-    const chunk = removeFromChunk(id, chunkNames, indexData);
+    const chunk = removeFromChunk(id, chunkNames, indexData, alreadyRemoved);
     pendingWrites.push({ kind: 'chunk', id, chunk });
     summary.presetsExtra += chunkNames.length;
   }
@@ -482,13 +489,16 @@ function prepareVendorWrites(byPack, pendingWrites, summary, alreadyRemoved) {
 /**
  * Prepare and return the updated preset inventory CSV text.
  */
-function prepareCsvUpdate(csvLines, names, summary) {
+function prepareCsvUpdate(csvLines, names, summary, byName) {
   const removeSet = new Set(names);
   const keptLines = csvLines.filter((line) => {
     if (line === '') return true;
     const parsed = parseCsvLine(line);
     if (!parsed) return true;
     if (!removeSet.has(parsed.name)) return true;
+    // The same name can exist in more than one pack. Only the row of the
+    // pack this run removes the preset from goes.
+    if (parsed.pack !== byName.get(parsed.name).pack) return true;
     summary.csv += 1;
     return false;
   });
@@ -728,7 +738,7 @@ function main() {
   }
   preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alreadyRemoved);
   prepareVendorWrites(byPack, pendingWrites, summary, alreadyRemoved);
-  const keptLines = prepareCsvUpdate(csvLines, csvTargets, summary);
+  const keptLines = prepareCsvUpdate(csvLines, csvTargets, summary, byName);
   prepareCatalogWrites(removedByPack, pendingWrites, summary);
 
   if (dryRun) {

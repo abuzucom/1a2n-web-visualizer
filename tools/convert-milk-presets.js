@@ -79,8 +79,9 @@ function convertShader(shaderBody) {
 
   const dir = fs.mkdtempSync(path.join(osModule.tmpdir(), 'shader-conv-'));
   const inputPath = path.join(dir, 'shader.txt');
-  fs.writeFileSync(inputPath, shaderBody);
   try {
+    // Inside the try, so a failed write still removes the directory.
+    fs.writeFileSync(inputPath, shaderBody);
     const out = execFileSync(process.execPath, [SHADER_WORKER, inputPath], {
       timeout: SHADER_TIMEOUT_MS,
       encoding: 'utf8',
