@@ -85,6 +85,20 @@ function requireFlagValue(argv, index, flag) {
 }
 
 /**
+ * Warn when a names file resolves outside the repository root.
+ *
+ * The run still reads the file. Callers that keep a names file elsewhere
+ * keep working. The warning makes an unexpected read location visible.
+ */
+function warnIfOutsideRoot(filePath) {
+  const relative = path.relative(ROOT, path.resolve(filePath));
+  const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  if (outside) {
+    console.error(`WARNING: --names-file ${JSON.stringify(filePath)} is outside the repository.`);
+  }
+}
+
+/**
  * Parse and return the command-line arguments.
  *
  * An unrecognized argument prints a warning and the run continues. Callers
@@ -99,7 +113,9 @@ function parseArgs(argv) {
     if (a === '--name') {
       names.push(requireFlagValue(argv, ++i, a));
     } else if (a === '--names-file') {
-      names.push(...readNamesFile(requireFlagValue(argv, ++i, a)));
+      const namesFile = requireFlagValue(argv, ++i, a);
+      warnIfOutsideRoot(namesFile);
+      names.push(...readNamesFile(namesFile));
     } else if (a === '--dry-run') {
       dryRun = true;
     } else if (a === '--help' || a === '-h') {
