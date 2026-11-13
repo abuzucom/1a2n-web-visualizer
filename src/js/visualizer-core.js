@@ -714,6 +714,8 @@
   }
 
   const NOT_READABLE_RETRY_MS = 250;
+  // Marks a released input. nextDevice() steps from it to the first input.
+  const NO_DEVICE_INDEX = -1;
 
   function delay(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -757,7 +759,16 @@
       return device;
     }
     releaseCurrentStream(audio);
-    const stream = await openStreamWithRetry(device.deviceId);
+    let stream;
+    try {
+      stream = await openStreamWithRetry(device.deviceId);
+    } catch (error) {
+      // The previous stream is already released. Clearing the index keeps
+      // currentDeviceId() from naming an input that no longer feeds the
+      // visualizer. A newer request owns the index when the sequence moved.
+      if (requestSeq === audio.deviceRequestSeq) audio.deviceIdx = NO_DEVICE_INDEX;
+      throw error;
+    }
     if (requestSeq !== audio.deviceRequestSeq) {
       stopStream(stream);
       return null;

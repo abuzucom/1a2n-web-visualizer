@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.7] (2026-11-13)
+
+### Fixed
+- Start the fullscreen and performance pages on the remembered audio
+  input. The pages resolved the saved input against an empty device list.
+  The fullscreen page then replaced the saved choice with the system
+  default.
+- Stop reporting a released input after a failed device switch. The core
+  and the OBS panel named the old input while the visualizer had none.
+
 ## [1.19.6] (2026-11-13)
 
 ### Fixed
