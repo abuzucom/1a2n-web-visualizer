@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.2] (2026-11-13)
+
+### Fixed
+- Warn on stderr about an unrecognized argument to
+  `tools/remove_presets.js`. A misspelled `--dry-run` no longer passes
+  without notice.
+- Exit with an error when `--name` or `--names-file` has no value.
+- Complete a removal on a re-run after a failed run rewrote a chunk file.
+  The re-run skips a name that the ledger records and the chunk no longer
+  holds.
+- Name the physical chunk file, such as `chunk-9000.js`, in chunk error
+  messages.
+- Describe the tool's write order and checks accurately in its header.
+
 ## [1.20.1] (2026-11-13)
 
 ### Fixed

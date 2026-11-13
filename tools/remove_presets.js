@@ -13,10 +13,16 @@
  * hand (or via an AI session) every time someone wants to curate the
  * library.
  *
- * Matching is exact-name only (no fuzzy/substring matching), and nothing
- * is written to disk unless every requested name was found and every
- * modified file passes a post-edit consistency/syntax check — so a typo
- * in one name aborts the whole run instead of partially applying it.
+ * Matching is exact-name only (no fuzzy/substring matching). Nothing is
+ * written to disk unless every requested name was found. An edited vendor
+ * pack must still load and lose exactly the requested names before any
+ * write. A typo in one name therefore aborts the whole run.
+ *
+ * The ledger row is written first. Each later file is replaced atomically,
+ * one file at a time. A run that fails partway leaves the remaining files
+ * unchanged. Running the same command again completes the removal. A
+ * consistency check after the writes compares the index and inventory
+ * counts and prints a warning on a mismatch.
  *
  * This tool does NOT update README.md/CHANGELOG.md/package.json preset
  * counts — those involve prose, not just data, so that's a manual
@@ -67,7 +73,23 @@ function readNamesFile(path) {
 }
 
 /**
+ * Return the value that follows a flag, or exit when it is missing.
+ */
+function requireFlagValue(argv, index, flag) {
+  const value = argv[index];
+  if (value === undefined) {
+    console.error(`${flag} requires a value. No changes made.`);
+    process.exit(1);
+  }
+  return value;
+}
+
+/**
  * Parse and return the command-line arguments.
+ *
+ * An unrecognized argument prints a warning and the run continues. Callers
+ * that pass extra arguments keep working. The warning makes a misspelled
+ * --dry-run visible before the output reports real removals.
  */
 function parseArgs(argv) {
   const names = [];
@@ -75,14 +97,16 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--name') {
-      names.push(argv[++i]);
+      names.push(requireFlagValue(argv, ++i, a));
     } else if (a === '--names-file') {
-      names.push(...readNamesFile(argv[++i]));
+      names.push(...readNamesFile(requireFlagValue(argv, ++i, a)));
     } else if (a === '--dry-run') {
       dryRun = true;
     } else if (a === '--help' || a === '-h') {
       console.log(__filename);
       process.exit(0);
+    } else {
+      console.error(`WARNING: ignoring unrecognized argument ${JSON.stringify(a)}.`);
     }
   }
   return { names, dryRun };
@@ -150,7 +174,7 @@ function readChunk(id) {
   const suffix = ');';
   const trimmed = raw.trimEnd();
   if (!raw.startsWith(prefix) || !trimmed.endsWith(suffix)) {
-    throw new Error(`unexpected wrapper format in chunk-${String(id).padStart(CHUNK_PAD_LENGTH, '0')}.js`);
+    throw new Error(`unexpected wrapper format in ${path.basename(chunkPath(id))}`);
   }
   const json = trimmed.slice(prefix.length, trimmed.length - suffix.length);
   return { data: JSON.parse(json), prefix, suffix };
@@ -388,8 +412,13 @@ function chunkChanges(targets, indexData, alreadyRemoved) {
 
 /**
  * Remove specified presets from a chunk and return the new string content.
+ *
+ * A name the ledger already records may be missing from the chunk file.
+ * The ledger row comes first. A failed run can stop after the chunk write
+ * and before the index write. The re-run then finishes the index and the
+ * inventory.
  */
-function removeFromChunk(id, chunkNames, indexData) {
+function removeFromChunk(id, chunkNames, indexData, alreadyRemoved) {
   const arr = indexData.chunks[id];
   if (!arr) throw new Error(`index.js has no chunk ${id}`);
   for (const n of chunkNames) {
@@ -400,10 +429,11 @@ function removeFromChunk(id, chunkNames, indexData) {
 
   const chunk = readChunk(id);
   for (const n of chunkNames) {
-    if (!(n in chunk.data)) {
-      throw new Error(`"${n}" not found as a key in chunk-${String(id).padStart(CHUNK_PAD_LENGTH, '0')}.js`);
+    if (n in chunk.data) {
+      delete chunk.data[n];
+    } else if (!alreadyRemoved.has(n)) {
+      throw new Error(`"${n}" not found as a key in ${path.basename(chunkPath(id))}`);
     }
-    delete chunk.data[n];
   }
   return chunk;
 }
@@ -418,7 +448,7 @@ function preparePresetsExtraWrites(byPack, byName, pendingWrites, summary, alrea
   const byChunk = chunkChanges(targets, indexData, alreadyRemoved);
 
   for (const [id, chunkNames] of byChunk) {
-    const chunk = removeFromChunk(id, chunkNames, indexData);
+    const chunk = removeFromChunk(id, chunkNames, indexData, alreadyRemoved);
     pendingWrites.push({ kind: 'chunk', id, chunk });
     summary.presetsExtra += chunkNames.length;
   }
@@ -632,13 +662,12 @@ function appendRemovedPresetsCsv(names, byName, indexData) {
   const today = new Date().toISOString().slice(0, DATE_LENGTH);
   const rows = names.filter((n) => byName.has(n)).map((n) => {
     const { pack, chunk: inventoryChunk } = byName.get(n);
+    // Vendor pack rows carry an empty chunk. A presets-extra name the index
+    // no longer lists keeps the chunk the inventory recorded.
     const indexChunk = indexData.chunks.findIndex((chunkNames) => chunkNames.includes(n));
     const chunk = pack === 'presets-extra' && indexChunk !== -1
       ? indexChunk
       : inventoryChunk;
-    if (chunk === -1 || chunk === undefined) {
-      throw new Error(`"${n}" has no valid chunk assignment`);
-    }
     return [escCsv(n), pack, chunk, '', today, ''].join(',');
   });
 
@@ -720,7 +749,7 @@ function main() {
   const byPack = resolveTargets(names, byName, alreadyRemoved);
   const csvTargets = names.filter((name) => byName.has(name));
 
-  const pendingWrites = []; // [{ path, content }]
+  const pendingWrites = []; // [{ kind, ... }] entries that writeAll applies
   const summary = { presetsExtra: 0, vendor: {}, csv: 0, energyCatalog: 0, performanceCatalog: 0 };
   const removedByPack = new Map();
   for (const [pack, packNames] of byPack) {
