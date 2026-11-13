@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.8] (2026-11-13)
+
+### Fixed
+- Disconnect the audio source from the old visualizer before a WebGL
+  rebuild. The old analyser chain stayed connected after every recovery.
+- Reload the experimental textures for a rebuilt visualizer. `[EXP]`
+  presets loaded without textures after a recovery.
+- Rebuild the visualizer on the next watchdog restart after a render
+  failure. A plain driver restart left rendering off while the driver
+  reported healthy ticks.
+- Discard a worklet module load that finishes after the render driver
+  stops. The late load connected a node with no owner.
+- Clear the failed mark for presets in a chunk that arrives after its
+  timeout. Those presets stayed ineligible for the whole session.
+
 ## [1.19.7] (2026-11-13)
 
 ### Fixed
