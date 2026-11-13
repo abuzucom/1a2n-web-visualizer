@@ -30,6 +30,7 @@ import csv
 import importlib.util
 import io
 import json
+import sys
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -84,16 +85,20 @@ def main() -> None:
     args = parser.parse_args()
 
     fetch = _load_fetch_module()
+    try:
+        fetch.ensure_regeneration_allowed(OUT_DIR)
+    except fetch.RegenerationRefusedError as error:
+        sys.exit(f"error: {error}")
 
     allowed = set(fetch.BUILTIN_TEXTURES)
-    allowed.update(json.loads(fetch.IMAGE_NAMES_FILE.read_text()))
+    allowed.update(json.loads(fetch.IMAGE_NAMES_FILE.read_text(encoding="utf-8")))
 
     # Must read the current tree before write_output() wipes OUT_DIR.
     current_names = load_current_names(INDEX_PATH)
     removed_names = load_removed_names(REMOVED_CSV_PATH)
 
-    zf = ZipFile(io.BytesIO(fetch.get_zip_bytes(args.zip)))
-    fresh_presets, excluded_textures, bad_json = fetch.collect_presets(zf, allowed)
+    with ZipFile(io.BytesIO(fetch.get_zip_bytes(args.zip))) as zf:
+        fresh_presets, excluded_textures, bad_json = fetch.collect_presets(zf, allowed)
 
     snapshot_diff = set(fresh_presets) - current_names if current_names is not None else set()
     ledger_hits = set(fresh_presets) & removed_names
