@@ -368,6 +368,9 @@
     startError.textContent = '';
     window.setTimeout(async function () {
       try {
+        // The device list stays empty until enumeration runs. An empty list
+        // resolves the saved input to the system default.
+        await viz.getDevices();
         await viz.start(audioPrefs.resolve(viz.listDevices(), audioPrefs.read()) || undefined);
         rememberCurrentDevice();
         clearStartupStatus(false);

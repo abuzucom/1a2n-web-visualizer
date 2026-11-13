@@ -140,11 +140,12 @@
     return audioPrefs.resolve(viz.listDevices(), audioPrefs.read()) || undefined;
   }
 
-  /* This runs after viz.start() has already succeeded, so a failure here is
-   * not a failure to start: the visualizer is running on the default input.
-   * Reporting it as an audio error would hide that and prompt a reload that
-   * lands in the same place. Return the reason instead and let start() say
-   * both, since the panel has one line of status to spend. */
+  /* This runs after viz.start() has already succeeded. A failure here is not
+   * a failure to start. The visualizer keeps running without an input,
+   * because the failed switch released the default input. Reporting it as an
+   * audio error would prompt a reload that lands in the same place. Return
+   * the reason instead and let start() say both. The panel has one line of
+   * status to spend. */
   async function reselectSavedDevice(requested) {
     const saved = audioPrefs.read();
     const wanted = audioPrefs.resolve(viz.listDevices(), saved);
@@ -152,7 +153,7 @@
     try {
       await viz.useDeviceById(wanted);
     } catch (error) {
-      return 'Kept the current input: ' + describeDeviceError(error) + '. ';
+      return 'Saved input unavailable. No input connected: ' + describeDeviceError(error) + '. ';
     }
     refreshDeviceList();
     return '';
@@ -172,10 +173,9 @@
         rememberCurrentDevice();
       })
       .catch(function (error) {
-        // deviceIdx is only committed on a successful switch, and the failed
-        // attempt restored the stream that was already playing, so this is
-        // the input actually connected. Reverting the dropdown to it keeps
-        // the UI from claiming a switch that did not happen.
+        // A failed switch releases the previous stream and clears the device
+        // index. The dropdown then shows no input. That keeps the UI from
+        // naming an input that no longer feeds the visualizer.
         deviceEl.value = viz.currentDeviceId();
         reportDeviceError(error);
       });
