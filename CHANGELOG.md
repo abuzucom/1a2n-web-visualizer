@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.8] (2026-11-13)
+
+### Fixed
+- Report counts in `tools/fetch-cream-of-the-crop-presets.py` that add up
+  to the converted count. The inventory count ignores case, the way the
+  filter does. A name in both ledgers counts once.
+
 ## [1.19.6] (2026-11-13)
 
 ### Fixed
