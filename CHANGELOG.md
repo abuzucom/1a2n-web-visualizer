@@ -4,12 +4,9 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.20.2] (2026-11-13)
+## [1.20.3] (2026-11-13)
 
 ### Fixed
-- Finish an interrupted removal on a re-run in `tools/remove_presets.js`.
-  A ledger entry for a key already gone from its chunk now counts as done.
-  The re-run stopped on the missing key.
 - Remove only the inventory row of the resolved pack in
   `tools/remove_presets.js`. A name held by two packs lost both rows, and
   the run aborted.
@@ -18,6 +15,20 @@ All notable changes to this project are documented here. Format loosely follows
   chunk counted as removed.
 - Remove the temporary directory after a failed write in
   `tools/remove_presets.js` and `tools/convert-milk-presets.js`.
+
+## [1.20.2] (2026-11-13)
+
+### Fixed
+- Warn on stderr about an unrecognized argument to
+  `tools/remove_presets.js`. A misspelled `--dry-run` no longer passes
+  without notice.
+- Exit with an error when `--name` or `--names-file` has no value.
+- Complete a removal on a re-run after a failed run rewrote a chunk file.
+  The re-run skips a name that the ledger records and the chunk no longer
+  holds.
+- Name the physical chunk file, such as `chunk-9000.js`, in chunk error
+  messages.
+- Describe the tool's write order and checks accurately in its header.
 
 ## [1.20.1] (2026-11-13)
 
