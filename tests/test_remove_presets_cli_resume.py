@@ -117,6 +117,19 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertIn("Dry run", result.stdout)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
+    def test_symlinked_names_file_outside_the_repository_warns(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        target = Path(outside.name) / "names.txt"
+        target.write_text("Alpha\n", encoding="utf-8")
+        (self.root / "linked-names.txt").symlink_to(target)
+
+        result = self.run_tool("--names-file", "linked-names.txt", "--dry-run")
+
+        self.assertEqual(result.returncode, EXIT_SUCCESS, result.stderr)
+        self.assertIn("outside the repository", result.stderr)
+        self.assertIn("Dry run", result.stdout)
+
     def test_names_file_inside_the_repository_does_not_warn(self):
         result = self.run_tool("--names-file", "names.txt", "--dry-run")
 
