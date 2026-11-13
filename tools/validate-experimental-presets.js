@@ -9,15 +9,19 @@ const root = path.join(__dirname, '..');
 const ARGS_OUTPUT = 2;
 const SUFFIX_LENGTH = -2;
 const JSON_INDENT = 2;
+// Experimental output owns the reserved physical chunk-9000.js namespace.
+// An index without a files map therefore holds no experimental chunk.
+const EXPERIMENTAL_FILE_PREFIX = 'chunk-9';
 const outputPath = process.argv[ARGS_OUTPUT] || path.join(root, 'experimental-invalid-equations.json');
 const indexPath = path.join(root, 'src', 'presets-extra', 'index.js');
 const indexText = fs.readFileSync(indexPath, 'utf8').trim();
 const index = JSON.parse(indexText.slice('window.BCExtraPresetIndex='.length, -1));
+const files = index.files || [];
 const invalid = [];
 
 for (let cid = 0; cid < index.chunks.length; cid += 1) {
-  const filename = index.files[cid];
-  if (!filename.startsWith('chunk-9')) continue;
+  const filename = files[cid];
+  if (!filename || !filename.startsWith(EXPERIMENTAL_FILE_PREFIX)) continue;
   const chunkPath = path.join(root, 'src', 'presets-extra', filename);
   const text = fs.readFileSync(chunkPath, 'utf8').trim();
   const prefix = `window.__bcPresetChunk(${cid},`;
@@ -42,3 +46,5 @@ for (let cid = 0; cid < index.chunks.length; cid += 1) {
 
 fs.writeFileSync(outputPath, `${JSON.stringify({ presets: invalid }, null, JSON_INDENT)}\n`);
 console.log(`invalid experimental presets: ${invalid.length}`);
+// CI runs this script as a gate. A nonzero exit is what blocks the step.
+if (invalid.length) process.exitCode = 1;
