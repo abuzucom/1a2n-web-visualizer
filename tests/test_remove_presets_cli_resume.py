@@ -104,6 +104,25 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertIn("chunk-9000.js", result.stderr)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
+    def test_names_file_outside_the_repository_warns_and_continues(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        names_path = Path(outside.name) / "names.txt"
+        names_path.write_text("Alpha\n", encoding="utf-8")
+
+        result = self.run_tool("--names-file", str(names_path), "--dry-run")
+
+        self.assertEqual(result.returncode, EXIT_SUCCESS, result.stderr)
+        self.assertIn("outside the repository", result.stderr)
+        self.assertIn("Dry run", result.stdout)
+        self.assertEqual(self.read_index(), INDEX_DATA)
+
+    def test_names_file_inside_the_repository_does_not_warn(self):
+        result = self.run_tool("--names-file", "names.txt", "--dry-run")
+
+        self.assertEqual(result.returncode, EXIT_SUCCESS, result.stderr)
+        self.assertNotIn("outside the repository", result.stderr)
+
     def test_unindexed_unrecorded_name_aborts_before_the_ledger(self):
         # A presets-extra row with no chunk that neither the index nor the
         # ledger records must stop the run. No ledger row with an empty
