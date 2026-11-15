@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.0] (2026-11-15)
+
+### Added
+- Expose `describeDeviceError`, `audioPrefs`, and `shouldIgnoreShortcut`
+  on `BCViz`. Each page script carries its own copy of these helpers
+  today. `audioPrefs` returns an inert store when `audio-prefs.js` is
+  absent. `describeDeviceError` keeps its fallback for a missing
+  `device-errors.js`. The existing `create` and `createPlayedSession`
+  properties stay unchanged.
+
 ## [1.20.4] (2026-11-15)
 
 ### Changed
