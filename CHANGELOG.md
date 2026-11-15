@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.4] (2026-11-15)
+
+### Changed
+- Split `main()` in `tools/remove-experimental-duplicates.py` and
+  `main()` and `extract_source()` in `tools/import-nestdrop-presets.py`
+  into focused stage functions. The five ruff suppressions for function
+  complexity and magic values are gone. Behavior stays the same.
+- Name the ZIP mode shift, the JPEG marker byte, and the index version
+  that adds the `files` map in `tools/import-nestdrop-presets.py`. The
+  symlink check uses `stat.S_ISLNK`.
+
+### Added
+- Fail the test suite when a `tools/*.py` file carries a `noqa`
+  suppression.
+
 ## [1.20.3] (2026-11-13)
 
 ### Fixed

@@ -29,9 +29,11 @@ import hashlib
 import importlib.util
 import json
 import re
+import stat
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
@@ -67,6 +69,12 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".dds"}
 MAX_ZIP_ENTRIES = 50_000
 MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 MAX_MEMBER_BYTES = 10 * 1024 * 1024
+# ZIP external attributes keep the Unix st_mode in their high 16 bits.
+ZIP_MODE_SHIFT = 16
+# Every JPEG marker starts with this byte.
+JPEG_MARKER_PREFIX = 0xFF
+# Version 2 of index.js adds the optional "files" map.
+INDEX_VERSION_WITH_FILES = 2
 EXISTING_TEXTURE_NAMES = {
     "cells", "cloudsImage", "lichen", "prayerwheel", "seaweed",
     "smalltiled_lizard_scales",
@@ -166,79 +174,98 @@ def safe_member_path(root, member_name):
     return root.joinpath(*parts)
 
 
-def extract_source(zip_path, destination, offset=0, max_milk=None):  # noqa: C901, PLR0912, PLR0915
+def check_archive_limits(infos):
+    """Reject an archive whose entry count or total size exceeds the limits."""
+    if len(infos) > MAX_ZIP_ENTRIES:
+        raise ValueError(f"ZIP contains more than {MAX_ZIP_ENTRIES} entries")
+    if sum(info.file_size for info in infos) > MAX_ZIP_UNCOMPRESSED_BYTES:
+        raise ValueError("ZIP exceeds the uncompressed-size limit")
+
+
+def member_kind(info):
+    """Return "milk", "texture", or None for a file member after its safety checks."""
+    if info.file_size > MAX_MEMBER_BYTES:
+        raise ValueError(f"ZIP member exceeds {MAX_MEMBER_BYTES} byte limit: {info.filename}")
+    if stat.S_ISLNK(info.external_attr >> ZIP_MODE_SHIFT):
+        raise ValueError(f"ZIP symlink is not allowed: {info.filename}")
+    lower = info.filename.replace("\\", "/").lower()
+    if lower.endswith(".milk"):
+        return "milk"
+    in_textures = lower.startswith("textures/") or "/textures/" in lower
+    if in_textures and Path(lower).suffix in IMAGE_SUFFIXES:
+        return "texture"
+    return None
+
+
+class MilkSelection:
+    """Track which .milk members a run converts and the runtime name of each."""
+
+    def __init__(self, infos, offset, max_milk):
+        self.offset = offset
+        self.max_milk = max_milk
+        self.stem_counts = {}
+        for info in infos:
+            if not info.is_dir() and info.filename.lower().endswith(".milk"):
+                stem = PurePosixPath(info.filename).stem
+                self.stem_counts[stem] = self.stem_counts.get(stem, 0) + 1
+        self.seen = {}
+        self.skipped = 0
+        self.count = 0
+        self.entries = []
+        self.collisions = []
+
+    def accept(self, info):
+        """Return the runtime stem for a member, or None when offset or limit skips it.
+
+        Duplicate basenames get deterministic "[variant N]" suffixes. The
+        ordinal counts every member, including the skipped ones.
+        """
+        stem = PurePosixPath(info.filename).stem
+        ordinal = self.seen.get(stem, 0) + 1
+        self.seen[stem] = ordinal
+        is_variant = self.stem_counts[stem] > 1 and ordinal > 1
+        runtime_stem = f"{stem} [variant {ordinal}]" if is_variant else stem
+        if self.skipped < self.offset:
+            self.skipped += 1
+            return None
+        if self.max_milk is not None and self.count >= self.max_milk:
+            return None
+        self.entries.append({"sourcePath": info.filename, "originalName": stem, "runtimeName": runtime_stem})
+        if is_variant:
+            self.collisions.append({
+                "sourcePath": info.filename,
+                "originalName": stem,
+                "runtimeName": runtime_stem,
+                "variant": ordinal,
+            })
+        self.count += 1
+        return runtime_stem
+
+
+def extract_source(zip_path, destination, offset=0, max_milk=None):
     """Extract authorized preset files from the ZIP archive and return their paths."""
-    milk_count = 0
-    skipped_milk = 0
     texture_files = []
-    collision_counts = {}
-    collision_records = []
-    source_entries = []
     with ZipFile(zip_path) as archive:
         infos = archive.infolist()
-        if len(infos) > MAX_ZIP_ENTRIES:
-            raise ValueError(f"ZIP contains more than {MAX_ZIP_ENTRIES} entries")
-        if sum(info.file_size for info in infos) > MAX_ZIP_UNCOMPRESSED_BYTES:
-            raise ValueError("ZIP exceeds the uncompressed-size limit")
-        milk_members = [
-            info for info in archive.infolist()
-            if not info.is_dir() and info.filename.lower().endswith(".milk")
-        ]
-        for info in milk_members:
-            stem = PurePosixPath(info.filename).stem
-            collision_counts[stem] = collision_counts.get(stem, 0) + 1
-        collision_seen = {}
-        for info in archive.infolist():
+        check_archive_limits(infos)
+        selection = MilkSelection(infos, offset, max_milk)
+        for info in infos:
             if info.is_dir():
                 continue
-            if info.file_size > MAX_MEMBER_BYTES:
-                raise ValueError(f"ZIP member exceeds {MAX_MEMBER_BYTES} byte limit: {info.filename}")
-            mode = (info.external_attr >> 16) & 0o170000
-            if mode == 0o120000:  # noqa: PLR2004
-                raise ValueError(f"ZIP symlink is not allowed: {info.filename}")
-            lower = info.filename.replace("\\", "/").lower()
-            is_milk = lower.endswith(".milk")
-            is_texture = (
-                lower.startswith("textures/") or "/textures/" in lower
-            ) and Path(lower).suffix in IMAGE_SUFFIXES
-            if not is_milk and not is_texture:
+            kind = member_kind(info)
+            if kind is None:
                 continue
-            if is_milk:
-                stem = PurePosixPath(info.filename).stem
-                ordinal = collision_seen.get(stem, 0) + 1
-                collision_seen[stem] = ordinal
-                runtime_stem = stem
-                if collision_counts[stem] > 1 and ordinal > 1:
-                    runtime_stem = f"{stem} [variant {ordinal}]"
-                if skipped_milk < offset:
-                    skipped_milk += 1
-                    continue
-                if max_milk is not None and milk_count >= max_milk:
-                    continue
-                source_entries.append({
-                    "sourcePath": info.filename,
-                    "originalName": stem,
-                    "runtimeName": runtime_stem,
-                })
-                if collision_counts[stem] > 1 and ordinal > 1:
-                    collision_records.append({
-                        "sourcePath": info.filename,
-                        "originalName": stem,
-                        "runtimeName": runtime_stem,
-                        "variant": ordinal,
-                    })
+            runtime_stem = selection.accept(info) if kind == "milk" else None
+            if kind == "milk" and runtime_stem is None:
+                continue
             destination_path = safe_member_path(destination, info.filename)
-            if is_milk and runtime_stem != PurePosixPath(info.filename).stem:
-                destination_path = destination_path.with_name(
-                    runtime_stem + destination_path.suffix
-                )
+            if runtime_stem is not None and runtime_stem != PurePosixPath(info.filename).stem:
+                destination_path = destination_path.with_name(runtime_stem + destination_path.suffix)
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             destination_path.write_bytes(archive.read(info))
-            if is_milk:
-                milk_count += 1
-            else:
+            if kind == "texture":
                 texture_files.append(destination_path)
-    return milk_count, texture_files, collision_records, source_entries
+    return selection.count, texture_files, selection.collisions, selection.entries
 
 
 def run_converter(source_root, output_path):
@@ -262,7 +289,7 @@ def image_dimensions(data, suffix):
     if suffix in {".jpg", ".jpeg"} and data[:2] == b"\xff\xd8":
         pos = 2
         while pos + 9 < len(data):
-            if data[pos] != 0xFF:  # noqa: PLR2004
+            if data[pos] != JPEG_MARKER_PREFIX:
                 pos += 1
                 continue
             marker = data[pos + 1]
@@ -379,8 +406,37 @@ def csv_escape(value):
     return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(csv_char in text for csv_char in '",\n') else text
 
 
-def main():  # noqa: C901, PLR0912, PLR0915
-    """Import and normalize NestDrop presets into the experimental collection."""
+@dataclass
+class ConvertedBatch:
+    """Everything the archives of one run produced, before selection."""
+
+    presets: dict = field(default_factory=dict)
+    source_records: list = field(default_factory=list)
+    collision_records: list = field(default_factory=list)
+    source_metadata: dict = field(default_factory=dict)
+    texture_images: dict = field(default_factory=dict)
+    texture_records: list = field(default_factory=list)
+    unavailable_textures: list = field(default_factory=list)
+
+
+@dataclass
+class SelectionContext:
+    """What a converted preset is checked against before it is kept."""
+
+    exp_prefix: str
+    removed_names: set
+    existing_names: set
+    existing_hashes: set
+    indexed_names: set
+    mainline_hashes: dict
+    mainline_names: dict
+    available_textures: set
+    unavailable_texture_names: set
+    source_metadata: dict
+
+
+def parse_arguments():
+    """Parse and return the command-line options."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--zip", action="append", help="local source ZIP; repeat for multiple archives")
     parser.add_argument("--dry-run", action="store_true")
@@ -398,149 +454,152 @@ def main():  # noqa: C901, PLR0912, PLR0915
     args = parser.parse_args()
     if not args.zip and not args.normalize_existing:
         parser.error("provide --zip or --normalize-existing")
-    exp_prefix = args.exp_prefix
+    return args
 
-    zip_paths = [Path(path).resolve() for path in (args.zip or [])]
+
+def resolve_zip_paths(zip_args):
+    """Return the absolute ZIP paths, or exit when one is not a readable ZIP."""
+    zip_paths = [Path(path).resolve() for path in (zip_args or [])]
     for path in zip_paths:
         if not path.is_file() or path.suffix.lower() != ".zip":
             raise SystemExit(f"not a readable ZIP file: {path}")
+    return zip_paths
 
-    data, files = read_index()
-    normalized_chunks = normalize_experimental_chunks(data, files)
-    mainline_hashes, mainline_names = build_mainline_hashes(data, files)
-    removed_names = read_csv_names(REMOVED_CSV_PATH)
-    existing_manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
-    manifest_by_name = {
-        item["displayName"]: item for item in existing_manifest.get("presets", [])
-    }
+
+def load_existing_manifest(data, files, mainline_names):
+    """Return the manifest with chunk locations and name matches brought up to date."""
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
+    manifest_by_name = {item["displayName"]: item for item in manifest.get("presets", [])}
     for cid, names in enumerate(data["chunks"]):
         if not files[cid].startswith("chunk-9"):
             continue
         for name in names:
             if name in manifest_by_name:
-                manifest_by_name[name].update({
-                    "logicalChunk": cid,
-                    "physicalFile": files[cid],
-                })
-    existing_exp_names = {item["displayName"] for item in existing_manifest.get("presets", [])}
-    existing_exp_hashes = {
-        item["canonicalHash"] for item in existing_manifest.get("presets", [])
-    }
-    for item in existing_manifest.get("presets", []):
-        if "normalizedNameMatches" not in item:
-            normalized = item["sourceName"]
-            if normalized.startswith(EXP_PREFIX):
-                normalized = normalized[len(EXP_PREFIX):]
-            match = mainline_names.get(normalized)
-            item["normalizedNameMatches"] = [] if not match else [{
-                "name": normalized,
-                "chunk": match["chunk"],
-                "canonicalHash": match["hash"],
-            }]
-    converted = {}
-    source_records = []
-    texture_files = []
-    collision_records = []
-    source_metadata = {}
-    texture_images = {}
-    texture_records = []
+                manifest_by_name[name].update({"logicalChunk": cid, "physicalFile": files[cid]})
+    for item in manifest.get("presets", []):
+        if "normalizedNameMatches" in item:
+            continue
+        normalized = item["sourceName"]
+        if normalized.startswith(EXP_PREFIX):
+            normalized = normalized[len(EXP_PREFIX):]
+        match = mainline_names.get(normalized)
+        item["normalizedNameMatches"] = [] if not match else [{
+            "name": normalized,
+            "chunk": match["chunk"],
+            "canonicalHash": match["hash"],
+        }]
+    return manifest
 
+
+def convert_archive(batch, zip_path, source_root, args):
+    """Extract and convert one archive into batch. Return its texture files."""
+    milk_count, textures, source_collisions, source_entries = extract_source(
+        zip_path, source_root, args.offset, args.limit
+    )
+    digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    source_result = run_converter(source_root, source_root.with_name(f"converted-{source_root.name}.json"))
+    batch.source_records.append({
+        "archive": zip_path.name, "sha256": digest,
+        "milk_files": milk_count, "offset": args.offset,
+        "converted": len(source_result),
+    })
+    batch.collision_records.extend(source_collisions)
+    batch.source_metadata.update({entry["runtimeName"]: entry for entry in source_entries})
+    for name, preset in source_result.items():
+        if name in batch.presets:
+            print(f"warning: duplicate source name {name!r}; keeping first", file=sys.stderr)
+            continue
+        batch.presets[name] = preset
+    return textures
+
+
+def convert_archives(zip_paths, args):
+    """Convert every archive and build the texture bundle for the batch."""
+    batch = ConvertedBatch()
+    texture_files = []
     with tempfile.TemporaryDirectory(prefix="nestdrop-import-") as temp:
         temp_root = Path(temp)
         for archive_number, zip_path in enumerate(zip_paths):
             source_root = temp_root / f"source-{archive_number:02d}"
-            milk_count, textures, source_collisions, source_entries = extract_source(
-                zip_path, source_root, args.offset, args.limit
-            )
-            digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
-            output_path = temp_root / f"converted-{archive_number:02d}.json"
-            source_result = run_converter(source_root, output_path)
-            source_records.append({
-                "archive": zip_path.name, "sha256": digest,
-                "milk_files": milk_count, "offset": args.offset,
-                "converted": len(source_result),
-            })
-            texture_files.extend(textures)
-            collision_records.extend(source_collisions)
-            source_metadata.update({
-                entry["runtimeName"]: entry for entry in source_entries
-            })
-            for name, preset in source_result.items():
-                if name in converted:
-                    print(f"warning: duplicate source name {name!r}; keeping first", file=sys.stderr)
-                    continue
-                converted[name] = preset
-        texture_images, texture_records, unavailable_textures = build_texture_bundle(texture_files)
-    previously_vendored = load_texture_splitter().read_images() if zip_paths else {}
-    available_textures = compute_available_textures(texture_images, previously_vendored)
-    unavailable_texture_names = {
-        item["name"].lower() for item in unavailable_textures
-    }
+            texture_files.extend(convert_archive(batch, zip_path, source_root, args))
+        batch.texture_images, batch.texture_records, batch.unavailable_textures = (
+            build_texture_bundle(texture_files)
+        )
+    return batch
 
-    kept = {}
-    skipped = []
-    seen_hashes = set(existing_exp_hashes)
+
+def skip_reason(source_name, preset, digest, context):
+    """Return the skip record for a preset that stays out, or None to keep it."""
+    normalized = source_name[len(EXP_PREFIX):] if source_name.startswith(EXP_PREFIX) else source_name
+    if normalized in context.removed_names:
+        return {"sourceName": source_name, "reason": "curated-out name"}
+    display = context.exp_prefix + normalized
     # An import that stopped after the index write but before the manifest
     # write left indexed names without manifest records. A name in the index
     # counts as imported, so a re-run never indexes it twice.
-    indexed_names = {name for names in data["chunks"] for name in names}
+    if display in context.existing_names or display in context.indexed_names:
+        return {"sourceName": source_name, "reason": "already imported"}
+    if digest in context.existing_hashes:
+        return {"sourceName": source_name, "reason": "duplicate experimental content"}
+    missing = sorted(texture_names(preset) - context.available_textures)
+    if missing:
+        unavailable = sorted(set(missing) & context.unavailable_texture_names)
+        return {
+            "sourceName": source_name,
+            "reason": "unavailable texture" if unavailable else "missing textures",
+            "textures": missing,
+            **({"unavailableTextures": unavailable} if unavailable else {}),
+        }
+    return None
+
+
+def kept_record(source_name, preset, digest, context):
+    """Return the manifest record for a kept preset, with its equations filled."""
+    normalized = source_name[len(EXP_PREFIX):] if source_name.startswith(EXP_PREFIX) else source_name
+    display = context.exp_prefix + normalized
+    name_matches = []
+    if normalized in context.mainline_names:
+        name_matches.append({
+            "name": normalized,
+            "chunk": context.mainline_names[normalized]["chunk"],
+            "canonicalHash": context.mainline_names[normalized]["hash"],
+        })
+    # Fill absent equation fields before the preset is written. Butterchurn
+    # compiles them as "".concat(field, " return a;"), so a missing field
+    # becomes the literal "undefined" and raises SyntaxError at load time;
+    # visualizer-core's own guards skip non-string values and never catch
+    # it. Run after the digest so dedup keeps comparing the same canonical
+    # content earlier imports recorded.
+    normalize_equation_fields(preset)
+    return {
+        "preset": preset, "sourceName": source_name, "displayName": display,
+        "canonicalHash": digest, "mainlineMatches": context.mainline_hashes.get(digest, []),
+        "normalizedNameMatches": name_matches, "missingTextures": [],
+        "sourcePath": context.source_metadata.get(source_name, {}).get("sourcePath", source_name),
+    }
+
+
+def select_presets(converted, context):
+    """Return the kept presets by display name and the skip records."""
+    kept = {}
+    skipped = []
+    seen_hashes = set(context.existing_hashes)
     for source_name, preset in sorted(converted.items()):
-        normalized = source_name[len(EXP_PREFIX):] if source_name.startswith(EXP_PREFIX) else source_name
-        if normalized in removed_names:
-            skipped.append({"sourceName": source_name, "reason": "curated-out name"})
-            continue
-        display = exp_prefix + normalized
-        if display in existing_exp_names or display in indexed_names:
-            skipped.append({"sourceName": source_name, "reason": "already imported"})
-            continue
         digest = preset_hash(preset)
-        if digest in existing_exp_hashes:
-            skipped.append({
-                "sourceName": source_name,
-                "reason": "duplicate experimental content",
-            })
-            continue
-        matches = mainline_hashes.get(digest, [])
-        name_matches = []
-        if normalized in mainline_names:
-            name_matches.append({
-                "name": normalized,
-                "chunk": mainline_names[normalized]["chunk"],
-                "canonicalHash": mainline_names[normalized]["hash"],
-            })
-        missing = sorted(texture_names(preset) - available_textures)
-        if missing:
-            unavailable = sorted(set(missing) & unavailable_texture_names)
-            skipped.append({
-                "sourceName": source_name,
-                "reason": "unavailable texture" if unavailable else "missing textures",
-                "textures": missing,
-                **({"unavailableTextures": unavailable} if unavailable else {}),
-            })
-            continue
-        if digest in seen_hashes:
-            skipped.append({
-                "sourceName": source_name,
-                "reason": "duplicate experimental content",
-            })
+        reason = skip_reason(source_name, preset, digest, context)
+        if reason is None and digest in seen_hashes:
+            reason = {"sourceName": source_name, "reason": "duplicate experimental content"}
+        if reason is not None:
+            skipped.append(reason)
             continue
         seen_hashes.add(digest)
-        # Fill absent equation fields before the preset is written. Butterchurn
-        # compiles them as "".concat(field, " return a;"), so a missing field
-        # becomes the literal "undefined" and raises SyntaxError at load time;
-        # visualizer-core's own guards skip non-string values and never catch
-        # it. Run after the digest above so dedup keeps comparing the same
-        # canonical content earlier imports recorded.
-        normalize_equation_fields(preset)
-        kept[display] = {
-            "preset": preset, "sourceName": source_name, "displayName": display,
-            "canonicalHash": digest, "mainlineMatches": matches,
-            "normalizedNameMatches": name_matches, "missingTextures": missing,
-            "sourcePath": source_metadata.get(source_name, {}).get(
-                "sourcePath", source_name
-            ),
-        }
+        record = kept_record(source_name, preset, digest, context)
+        kept[record["displayName"]] = record
+    return kept, skipped
 
+
+def print_summary(zip_paths, converted, kept, skipped):
+    """Print the counts of one run."""
     print(f"archives: {len(zip_paths)}")
     print(f"converted: {len(converted)}")
     print(f"retained: {len(kept)}")
@@ -551,26 +610,17 @@ def main():  # noqa: C901, PLR0912, PLR0915
         f"{sum(bool(item['missingTextures']) for item in kept.values())}"
     )
 
-    if args.dry_run:
-        return
 
-    # Textures go first. A texture failure then leaves no preset indexed
-    # without the textures it samples.
-    if zip_paths:
-        write_texture_bundle(texture_images, texture_records)
+def chunk_text(cid, chunk):
+    """Return the runtime wrapper text for one chunk file."""
+    return f"window.__bcPresetChunk({cid},{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n"
 
-    manifest = {
-        "version": 1,
-        "prefix": exp_prefix,
-        "physicalChunkBase": PHYSICAL_CHUNK_BASE,
-        "sources": [
-            source for source in existing_manifest.get("sources", [])
-            if source.get("milk_files", 0)
-        ] + [source for source in source_records if source.get("milk_files", 0)],
-        "presets": existing_manifest.get("presets", []),
-        "skipped": existing_manifest.get("skipped", []) + skipped,
-        "collisions": existing_manifest.get("collisions", []) + collision_records,
-    }
+
+def write_new_chunks(data, files, kept, manifest):
+    """Write the kept presets as new chunk files and record them in data and manifest.
+
+    Return the new chunk name lists.
+    """
     start_logical = len(data["chunks"])
     existing_physical = [
         int(Path(name).stem.split("-")[-1])
@@ -581,12 +631,8 @@ def main():  # noqa: C901, PLR0912, PLR0915
     new_chunks = [names[i:i + PRESETS_PER_CHUNK] for i in range(0, len(names), PRESETS_PER_CHUNK)]
     for offset, chunk_names in enumerate(new_chunks):
         logical = start_logical + offset
-        physical = next_physical + offset
-        filename = f"chunk-{physical}.js"
-        payload = {name: kept[name]["preset"] for name in chunk_names}
-        atomic_write_text(OUT_DIR / filename,
-            f"window.__bcPresetChunk({logical},{json.dumps(payload, separators=(',', ':'), sort_keys=True)});\n",
-        )
+        filename = f"chunk-{next_physical + offset}.js"
+        atomic_write_text(OUT_DIR / filename, chunk_text(logical, {name: kept[name]["preset"] for name in chunk_names}))
         data["chunks"].append(chunk_names)
         files.append(filename)
         for name in chunk_names:
@@ -594,20 +640,69 @@ def main():  # noqa: C901, PLR0912, PLR0915
             record.update({"logicalChunk": logical, "physicalFile": filename})
             del record["preset"]
             manifest["presets"].append(record)
+    return new_chunks
 
-    for cid, (path, chunk) in normalized_chunks.items():
-        atomic_write_text(path,
-            f"window.__bcPresetChunk({cid},{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n",
-        )
 
-    data["v"] = max(2, data.get("v", 1))
-    data["files"] = files
-    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
+def append_inventory_rows(new_chunks, start_logical):
+    """Append one presets-extra inventory row per new preset."""
     csv_rows = []
     for offset, chunk_names in enumerate(new_chunks):
-        logical = start_logical + offset
-        csv_rows.extend(f"{csv_escape(name)},presets-extra,{logical}\n" for name in chunk_names)
+        csv_rows.extend(f"{csv_escape(name)},presets-extra,{start_logical + offset}\n" for name in chunk_names)
     atomic_write_text(CSV_PATH, CSV_PATH.read_text(encoding="utf-8") + "".join(csv_rows))
+
+
+def main():
+    """Import and normalize NestDrop presets into the experimental collection."""
+    args = parse_arguments()
+    zip_paths = resolve_zip_paths(args.zip)
+    data, files = read_index()
+    normalized_chunks = normalize_experimental_chunks(data, files)
+    mainline_hashes, mainline_names = build_mainline_hashes(data, files)
+    existing_manifest = load_existing_manifest(data, files, mainline_names)
+    existing_presets = existing_manifest.get("presets", [])
+    batch = convert_archives(zip_paths, args)
+    previously_vendored = load_texture_splitter().read_images() if zip_paths else {}
+    context = SelectionContext(
+        exp_prefix=args.exp_prefix,
+        removed_names=read_csv_names(REMOVED_CSV_PATH),
+        existing_names={item["displayName"] for item in existing_presets},
+        existing_hashes={item["canonicalHash"] for item in existing_presets},
+        indexed_names={name for names in data["chunks"] for name in names},
+        mainline_hashes=mainline_hashes,
+        mainline_names=mainline_names,
+        available_textures=compute_available_textures(batch.texture_images, previously_vendored),
+        unavailable_texture_names={item["name"].lower() for item in batch.unavailable_textures},
+        source_metadata=batch.source_metadata,
+    )
+    kept, skipped = select_presets(batch.presets, context)
+    print_summary(zip_paths, batch.presets, kept, skipped)
+    if args.dry_run:
+        return
+
+    # Textures go first. A texture failure then leaves no preset indexed
+    # without the textures it samples.
+    if zip_paths:
+        write_texture_bundle(batch.texture_images, batch.texture_records)
+    manifest = {
+        "version": 1,
+        "prefix": args.exp_prefix,
+        "physicalChunkBase": PHYSICAL_CHUNK_BASE,
+        "sources": [
+            source for source in existing_manifest.get("sources", []) + batch.source_records
+            if source.get("milk_files", 0)
+        ],
+        "presets": existing_presets,
+        "skipped": existing_manifest.get("skipped", []) + skipped,
+        "collisions": existing_manifest.get("collisions", []) + batch.collision_records,
+    }
+    start_logical = len(data["chunks"])
+    new_chunks = write_new_chunks(data, files, kept, manifest)
+    for cid, (path, chunk) in normalized_chunks.items():
+        atomic_write_text(path, chunk_text(cid, chunk))
+    data["v"] = max(INDEX_VERSION_WITH_FILES, data.get("v", 1))
+    data["files"] = files
+    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
+    append_inventory_rows(new_chunks, start_logical)
     atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
 
 

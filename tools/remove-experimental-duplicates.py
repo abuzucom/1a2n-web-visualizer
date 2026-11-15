@@ -54,9 +54,11 @@ PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
 atomic_write_text = PRESET_IO.atomic_write_text
 
 
-def main() -> int:
-    # ruff: noqa: C901, PLR0912, PLR0915
-    """Analyze and remove duplicate presets from the experimental collection."""
+LEDGER_HEADER = "name,pack,chunk,commit,date,subject\n"
+
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse and return the command-line options."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decisions", required=True, help="JSON report or list of approved experimental names")
     parser.add_argument("--dry-run", action="store_true")
@@ -72,27 +74,29 @@ def main() -> int:
         "--reason", default="experimental duplicate approved",
         help="ledger and exclusion reason for the removal",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    decision_data = json.loads(Path(args.decisions).read_text(encoding="utf-8"))
+
+def load_decisions(path: Path) -> dict[str, Any]:
+    """Return the approved decisions keyed by experimental runtime name."""
+    decision_data = json.loads(path.read_text(encoding="utf-8"))
     decisions = decision_data.get("presets", decision_data) if isinstance(decision_data, dict) else decision_data
     decision_by_name = {
         item if isinstance(item, str) else item["experimentalName"]: item
         for item in decisions
     }
-    approved = set(decision_by_name)
-    if not approved or any(not EXPERIMENTAL_NAME_PATTERN.fullmatch(name) for name in approved):
+    if not decision_by_name or any(not EXPERIMENTAL_NAME_PATTERN.fullmatch(name) for name in decision_by_name):
         raise SystemExit("every target must use an [EXP], [EXP2], or later runtime prefix")
+    return decision_by_name
 
-    data, files = read_index(INDEX_PATH)
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    records = {item["displayName"]: item for item in manifest.get("presets", [])}
-    missing = sorted(approved - records.keys())
+
+def build_targets(decision_by_name: dict[str, Any], records: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return one removal target per approved name, with decision matches applied."""
+    missing = sorted(decision_by_name.keys() - records.keys())
     if missing:
         raise SystemExit(f"not found in experimental manifest: {missing}")
-
     targets = []
-    for name in sorted(approved):
+    for name in sorted(decision_by_name):
         target = dict(records[name])
         decision = decision_by_name[name]
         if isinstance(decision, dict):
@@ -103,6 +107,11 @@ def main() -> int:
                 "normalizedNameMatches", target.get("normalizedNameMatches", [])
             )
         targets.append(target)
+    return targets
+
+
+def check_matches(targets: list[dict[str, Any]], args: argparse.Namespace) -> None:
+    """Refuse targets without mainline matches unless an override allows them."""
     invalid = [
         item["displayName"] for item in targets
         if not (item.get("mainlineMatches") or item.get("normalizedNameMatches"))
@@ -112,25 +121,22 @@ def main() -> int:
             f"refusing experimental-only targets without mainline matches: {invalid}"
         )
 
-    if args.dry_run:
-        for item in targets:
-            print(f"would remove {item['displayName']} (mainline matches: {len(item['mainlineMatches'])})")
-        return 0
 
+def remove_from_index_and_chunks(targets: list[dict[str, Any]], allow_invalid: bool) -> None:
+    """Remove the targets from index.js first and their chunk files second.
+
+    A re-run treats a name already gone from the index as removed there.
+    """
+    data, files = read_index(INDEX_PATH)
     by_chunk = {}
     for item in targets:
         by_chunk.setdefault(item["logicalChunk"], []).append(item["displayName"])
-
-    # The index goes first and the manifest goes last. The manifest is the
-    # record of pending targets, so a crash leaves them pending. A re-run
-    # treats a name already gone from the index as removed there. Every
-    # later write skips the work a previous run finished.
     chunk_writes = []
     for cid, names in by_chunk.items():
         path, prefix, chunk = read_chunk(OUT_DIR / files[cid], cid)
         for name in names:
             if name in data["chunks"][cid]:
-                if name not in chunk and not args.allow_invalid:
+                if name not in chunk and not allow_invalid:
                     raise SystemExit(f"index/chunk mismatch for {name!r} in logical chunk {cid}")
                 data["chunks"][cid].remove(name)
             chunk.pop(name, None)
@@ -139,46 +145,72 @@ def main() -> int:
     for path, text in chunk_writes:
         atomic_write_text(path, text)
 
-    removed = set(approved)
-    csv_lines = CSV_PATH.read_text(encoding="utf-8").splitlines()
+
+def remove_inventory_rows(removed: set[str]) -> None:
+    """Drop the removed names from preset-inventory.csv."""
     kept_lines = []
-    for line in csv_lines:
-        if not line:
-            kept_lines.append(line)
-            continue
-        row = next(csv.reader([line]))
+    for line in CSV_PATH.read_text(encoding="utf-8").splitlines():
+        row = next(csv.reader([line])) if line else []
         if row and row[0].strip('"') in removed:
             continue
         kept_lines.append(line)
     atomic_write_text(CSV_PATH, "\n".join(kept_lines).rstrip("\n") + "\n")
 
+
+def append_ledger_rows(targets: list[dict[str, Any]], reason: str) -> None:
+    """Record each target in removed-presets.csv once, in the ledger's line ending."""
     ledger_exists = REMOVED_CSV_PATH.exists()
     ledger_bytes = REMOVED_CSV_PATH.read_bytes() if ledger_exists else b""
-    ledger = (
-        ledger_bytes.decode("utf-8")
-        if ledger_exists
-        else "name,pack,chunk,commit,date,subject\n"
-    )
+    ledger = ledger_bytes.decode("utf-8") if ledger_exists else LEDGER_HEADER
     ledger_newline = "\r\n" if b"\r\n" in ledger_bytes else "\n"
     if ledger_bytes and not ledger_bytes.endswith((b"\r", b"\n")):
         ledger += ledger_newline
     ledger_names = {row[0] for row in csv.reader(ledger.splitlines()) if row}
     ledger += "".join(
         f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
-        f"{args.reason}{ledger_newline}"
+        f"{reason}{ledger_newline}"
         for item in targets if item["displayName"] not in ledger_names
     )
     atomic_write_text(REMOVED_CSV_PATH, ledger)
 
+
+def record_exclusions(targets: list[dict[str, Any]], reason: str) -> None:
+    """Record each target in experimental-exclusions.json once."""
     exclusions = json.loads(EXCLUSIONS_PATH.read_text(encoding="utf-8")) if EXCLUSIONS_PATH.exists() else []
     excluded_names = {item["displayName"] for item in exclusions}
     exclusions.extend({
         "displayName": item["displayName"],
         "sourceName": item["sourceName"],
         "mainlineMatches": item["mainlineMatches"],
-        "reason": args.reason,
+        "reason": reason,
     } for item in targets if item["displayName"] not in excluded_names)
     atomic_write_text(EXCLUSIONS_PATH, json.dumps(exclusions, indent=2) + "\n")
+
+
+def main() -> int:
+    """Analyze and remove duplicate presets from the experimental collection.
+
+    The index goes first and the manifest goes last. The manifest is the
+    record of pending targets, so a crash leaves them pending. Every later
+    write skips the work a previous run finished.
+    """
+    args = parse_arguments()
+    decision_by_name = load_decisions(Path(args.decisions))
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    records = {item["displayName"]: item for item in manifest.get("presets", [])}
+    targets = build_targets(decision_by_name, records)
+    check_matches(targets, args)
+
+    if args.dry_run:
+        for item in targets:
+            print(f"would remove {item['displayName']} (mainline matches: {len(item['mainlineMatches'])})")
+        return 0
+
+    removed = set(decision_by_name)
+    remove_from_index_and_chunks(targets, args.allow_invalid)
+    remove_inventory_rows(removed)
+    append_ledger_rows(targets, args.reason)
+    record_exclusions(targets, args.reason)
     manifest["presets"] = [item for item in manifest.get("presets", []) if item["displayName"] not in removed]
     atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
     print(f"removed {len(targets)} experimental presets")
