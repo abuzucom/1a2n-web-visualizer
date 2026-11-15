@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.2] (2026-11-15)
+
+### Changed
+- Use the shared `BCViz` helpers in `obs-ui.js`, `fullscreen-ui.js`,
+  and `performance-ui.js`. The page scripts no longer carry their own
+  `describeDeviceError`, audio-prefs fallback, or shortcut filter.
+  Behavior stays the same.
+
+### Added
+- Fail the test suite when a page script defines its own copy of a
+  shared `BCViz` helper. The check covers declarations, function
+  expressions, and arrow functions.
+
 ## [1.21.1] (2026-11-15)
 
 ### Changed

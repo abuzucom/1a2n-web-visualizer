@@ -11,23 +11,10 @@
   const secsEl   = document.getElementById('cycleSecs');
   const guardEl  = document.getElementById('audioGuard');
 
-  /* Both globals arrive as separate deferred scripts, so the pages' script
-   * order is what makes them present. visualizer-core.js guards the same way:
-   * a reorder or a missing file must degrade the message, not turn every
-   * device-error path into a TypeError. */
-  function describeDeviceError(error) {
-    const errors = window.BCDeviceErrors;
-    if (errors && typeof errors.describe === 'function') return errors.describe(error);
-    return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
-  }
-
-  const NO_PREFS = {
-    read: function () { return null; },
-    write: function () { return false; },
-    clear: function () {},
-    resolve: function () { return ''; },
-  };
-  const audioPrefs = window.BCAudioPrefs || NO_PREFS;
+  /* BCViz guards both optional globals, so a missing device-errors.js or
+   * audio-prefs.js degrades the wording or the memory, never throws. */
+  const describeDeviceError = BCViz.describeDeviceError;
+  const audioPrefs = BCViz.audioPrefs();
 
   function setStatus(msg) { statusEl.textContent = msg; }
 
