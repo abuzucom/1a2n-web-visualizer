@@ -4,12 +4,37 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.20.3] (2026-11-13)
+## [1.20.5] (2026-11-15)
 
 ### Fixed
 - Warn on stderr when the `--names-file` path of
-  `tools/remove_presets.js` resolves outside the repository. The run
-  continues. Callers that keep a names file elsewhere keep working.
+  `tools/remove_presets.js` resolves outside the repository. The check
+  follows symlinks. The run continues. Callers that keep a names file
+  elsewhere keep working.
+
+## [1.20.4] (2026-11-15)
+
+### Fixed
+- Escape the `--reason` text in the ledger row that
+  `tools/remove-experimental-duplicates.py` writes. A reason with a comma
+  split the row into extra columns.
+- Clear the energy and performance catalog entries of removed experimental
+  presets, and rewrite both runtime bundles. A removed preset left its
+  catalog entries behind.
+- Split the removal tool's `main` into stages and drop its file-wide lint
+  suppression.
+
+## [1.20.3] (2026-11-13)
+
+### Fixed
+- Remove only the inventory row of the resolved pack in
+  `tools/remove_presets.js`. A name held by two packs lost both rows, and
+  the run aborted.
+- Count only names gone from every chunk as removals in
+  `tools/analyze_curation_history.js`. A preset that moved to another
+  chunk counted as removed.
+- Remove the temporary directory after a failed write in
+  `tools/remove_presets.js` and `tools/convert-milk-presets.js`.
 
 ## [1.20.2] (2026-11-13)
 
