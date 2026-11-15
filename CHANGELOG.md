@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.1] (2026-11-15)
+
+### Changed
+- Give the page-script unit tests the real shared `BCViz` helpers. The
+  new `tests/support/bcviz-stub.js` loads them from `visualizer-core.js`
+  beside each test's own `create()`. No assertion changes.
+
 ## [1.21.0] (2026-11-15)
 
 ### Added

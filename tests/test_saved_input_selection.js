@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 const vm = require('node:vm');
+const { createBCVizStub } = require('./support/bcviz-stub.js');
 
 const STORAGE_KEY = 'bcviz.audioInput.v1';
 const SETTLE_MS = 10;
@@ -166,7 +167,7 @@ function loadPage(path, ids, storage) {
     document: document,
     navigator: {},
     location: { search: '' },
-    BCViz: { create: function () { return viz; } },
+    BCViz: createBCVizStub(window, function () { return viz; }),
     setTimeout: unrefTimeout,
     clearTimeout: clearTimeout,
     console: console,
