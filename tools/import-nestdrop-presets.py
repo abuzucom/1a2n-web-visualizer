@@ -33,7 +33,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, field
+import dataclasses
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
@@ -406,20 +406,20 @@ def csv_escape(value):
     return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(csv_char in text for csv_char in '",\n') else text
 
 
-@dataclass
+@dataclasses.dataclass
 class ConvertedBatch:
     """Everything the archives of one run produced, before selection."""
 
-    presets: dict = field(default_factory=dict)
-    source_records: list = field(default_factory=list)
-    collision_records: list = field(default_factory=list)
-    source_metadata: dict = field(default_factory=dict)
-    texture_images: dict = field(default_factory=dict)
-    texture_records: list = field(default_factory=list)
-    unavailable_textures: list = field(default_factory=list)
+    presets: dict = dataclasses.field(default_factory=dict)
+    source_records: list = dataclasses.field(default_factory=list)
+    collision_records: list = dataclasses.field(default_factory=list)
+    source_metadata: dict = dataclasses.field(default_factory=dict)
+    texture_images: dict = dataclasses.field(default_factory=dict)
+    texture_records: list = dataclasses.field(default_factory=list)
+    unavailable_textures: list = dataclasses.field(default_factory=list)
 
 
-@dataclass
+@dataclasses.dataclass
 class SelectionContext:
     """What a converted preset is checked against before it is kept."""
 
