@@ -144,6 +144,12 @@ class SafeMemberPathTests(unittest.TestCase):
         root = Path("destination")
         self.assertEqual(TOOL.safe_member_path(root, "Textures/x.png"), root / "Textures" / "x.png")
 
+    def test_collapses_a_leading_dot_segment(self):
+        # PurePosixPath drops "." segments, so "./foo.milk" splits into
+        # ("foo.milk",) and stays inside the destination root.
+        root = Path("destination")
+        self.assertEqual(TOOL.safe_member_path(root, "./foo.milk"), root / "foo.milk")
+
 
 if __name__ == "__main__":
     unittest.main()
