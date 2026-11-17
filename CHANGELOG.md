@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.3] (2026-11-17)
+
+### Changed
+- Share one bracket matcher and one `index.js` reader between
+  `tools/remove_presets.js` and `tools/analyze_curation_history.js`
+  through the new `tools/preset_source.js`. The chunk reader moves there
+  too. `analyze_curation_history.js` now rejects an `index.js` with an
+  unexpected wrapper instead of slicing it blindly.
+- The removal and history tool test fixtures copy
+  `tools/preset_source.js` beside the tool under test.
+
+### Added
+- Cover the shared matcher and wrapper readers in
+  `tests/test_preset_source.js`.
+
 ## [1.21.2] (2026-11-15)
 
 ### Changed
