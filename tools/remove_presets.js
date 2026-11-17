@@ -40,6 +40,7 @@
 const fs = require('fs');
 const osModule = require('os');
 const path = require('path');
+const { findMatchingCloser, parseIndexSource, parseChunkSource } = require('./preset_source.js');
 
 const ROOT = path.join(__dirname, '..');
 const INDEX_PATH = path.join(ROOT, 'src/presets-extra/index.js');
@@ -132,19 +133,12 @@ function parseCsvLine(line) {
  * Read and return the index.js mappings.
  */
 function readIndex() {
-  const raw = fs.readFileSync(INDEX_PATH, 'utf8');
-  const prefix = 'window.BCExtraPresetIndex=';
-  const suffix = ';';
-  const trimmed = raw.trimEnd();
-  if (!raw.startsWith(prefix) || !trimmed.endsWith(suffix)) {
-    throw new Error('unexpected index.js wrapper format');
-  }
-  const json = trimmed.slice(prefix.length, trimmed.length - suffix.length);
-  const data = JSON.parse(json);
+  const index = parseIndexSource(fs.readFileSync(INDEX_PATH, 'utf8'));
+  const data = index.data;
   if (data.files && data.files.length !== data.chunks.length) {
     throw new Error('index.js chunks/files mapping has different lengths');
   }
-  return { data, prefix, suffix };
+  return index;
 }
 
 /**
@@ -169,15 +163,8 @@ function chunkPath(id) {
  * Read and return a chunk file's content and parsed JSON.
  */
 function readChunk(id) {
-  const raw = fs.readFileSync(chunkPath(id), 'utf8');
-  const prefix = `window.__bcPresetChunk(${id},`;
-  const suffix = ');';
-  const trimmed = raw.trimEnd();
-  if (!raw.startsWith(prefix) || !trimmed.endsWith(suffix)) {
-    throw new Error(`unexpected wrapper format in ${path.basename(chunkPath(id))}`);
-  }
-  const json = trimmed.slice(prefix.length, trimmed.length - suffix.length);
-  return { data: JSON.parse(json), prefix, suffix };
+  const filePath = chunkPath(id);
+  return parseChunkSource(fs.readFileSync(filePath, 'utf8'), id, path.basename(filePath));
 }
 
 /**
@@ -211,38 +198,6 @@ function atomicWrite(filePath, content) {
 }
 
 // --- src/vendor/*.min.js (minified UMD bundles) ---
-
-/**
- * Find and return the index of the matching closing bracket in a Javascript string.
- */
-function findMatchingCloser(s, openIdx) {
-  const open = s[openIdx];
-  const close = open === '{' ? '}' : ']';
-  let depth = 0;
-  let inStr = false;
-  let strCh = null;
-  let esc = false;
-  for (let i = openIdx; i < s.length; i++) {
-    const char = s[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (char === '\\') esc = true;
-      else if (char === strCh) inStr = false;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      inStr = true;
-      strCh = char;
-      continue;
-    }
-    if (char === open) depth++;
-    else if (char === close) {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
 
 /**
  * Read and return the keys of presets inside a vendor pack.

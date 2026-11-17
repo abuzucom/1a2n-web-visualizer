@@ -38,6 +38,7 @@ class RemovalFixture(unittest.TestCase):
         (self.root / "tools").mkdir()
         (self.root / "src" / "presets-extra").mkdir(parents=True)
         shutil.copy(REPO_ROOT / "tools" / "remove_presets.js", self.root / "tools" / "remove_presets.js")
+        shutil.copy(REPO_ROOT / "tools" / "preset_source.js", self.root / "tools" / "preset_source.js")
         self.write("names.txt", "Alpha\n")
 
     def write(self, relative, text):
@@ -114,6 +115,7 @@ class CurationHistoryTests(unittest.TestCase):
                 REPO_ROOT / "tools" / "analyze_curation_history.js",
                 self.root / "tools" / "analyze_curation_history.js",
             )
+            shutil.copy(REPO_ROOT / "tools" / "preset_source.js", self.root / "tools" / "preset_source.js")
             self.git("init", "-q")
             self.commit_index([["Moved", "Removed", "Kept"]], "add presets")
             self.commit_index([["Kept"], ["Moved"]], "regenerate chunks")
