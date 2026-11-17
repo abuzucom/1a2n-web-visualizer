@@ -4,13 +4,38 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.20.5] (2026-11-15)
+## [1.21.1] (2026-11-17)
 
 ### Fixed
 - Warn on stderr when the `--names-file` path of
   `tools/remove_presets.js` resolves outside the repository. The check
   follows symlinks. The run continues. Callers that keep a names file
   elsewhere keep working.
+
+## [1.21.0] (2026-11-17)
+
+### Changed
+- Pin the `lodash` override to the locked version, 4.18.1.
+- Pull the Caddy base image by digest instead of the moving
+  `caddy:2-alpine` tag.
+- Install ruff 0.16.9 in CI from `requirements-ruff.txt` with
+  `--require-hashes`. The unversioned `astral-sh/ruff-action` step is gone.
+  The lint rules in `pyproject.toml` stay the same.
+
+### Added
+- A report-only CI step that runs the organization ruff baseline from
+  `.github/ruff-baseline/` and prints finding counts. It never fails the
+  build.
+
+## [1.20.5] (2026-11-15)
+
+### Fixed
+- Stop `tools/import-nestdrop-presets.py` from appending duplicate
+  `skipped` and `collisions` records to `experimental-presets.json` on
+  every re-run over the same archive. Existing records stay unchanged.
+- Split the importer's `extract_source` and `main` into stages, name its
+  file-mode and marker constants, remove an unreachable path check, and
+  drop its inline lint suppressions.
 
 ## [1.20.4] (2026-11-15)
 
