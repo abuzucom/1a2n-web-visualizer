@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.0] (2026-11-17)
+
+### Changed
+- Pin the `lodash` override to the locked version, 4.18.1.
+- Pull the Caddy base image by digest instead of the moving
+  `caddy:2-alpine` tag.
+- Install ruff 0.16.9 in CI from `requirements-ruff.txt` with
+  `--require-hashes`. The unversioned `astral-sh/ruff-action` step is gone.
+  The lint rules in `pyproject.toml` stay the same.
+
+### Added
+- A report-only CI step that runs the organization ruff baseline from
+  `.github/ruff-baseline/` and prints finding counts. It never fails the
+  build.
+
 ## [1.20.5] (2026-11-15)
 
 ### Fixed
