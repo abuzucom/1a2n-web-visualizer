@@ -20,20 +20,29 @@ All notable changes to this project are documented here. Format loosely follows
   absent. `describeDeviceError` keeps its fallback for a missing
   `device-errors.js`. The existing `create` and `createPlayedSession`
   properties stay unchanged.
+- Fail the test suite when a `tools/*.py` file carries a `noqa`
+  suppression.
+
+## [1.20.5] (2026-11-15)
+
+### Fixed
+- Stop `tools/import-nestdrop-presets.py` from appending duplicate
+  `skipped` and `collisions` records to `experimental-presets.json` on
+  every re-run over the same archive. Existing records stay unchanged.
+- Split the importer's `extract_source` and `main` into stages, name its
+  file-mode and marker constants, remove an unreachable path check, and
+  drop its inline lint suppressions.
 
 ## [1.20.4] (2026-11-15)
 
-### Changed
-- Split `main()` in `tools/remove-experimental-duplicates.py` and
-  `main()` and `extract_source()` in `tools/import-nestdrop-presets.py`
-  into focused stage functions. The five ruff suppressions for function
-  complexity and magic values are gone. Behavior stays the same.
-- Name the ZIP mode shift, the JPEG marker byte, and the index version
-  that adds the `files` map in `tools/import-nestdrop-presets.py`. The
-  symlink check uses `stat.S_ISLNK`.
-
-### Added
-- Fail the test suite when a `tools/*.py` file carries a `noqa`
+### Fixed
+- Escape the `--reason` text in the ledger row that
+  `tools/remove-experimental-duplicates.py` writes. A reason with a comma
+  split the row into extra columns.
+- Clear the energy and performance catalog entries of removed experimental
+  presets, and rewrite both runtime bundles. A removed preset left its
+  catalog entries behind.
+- Split the removal tool's `main` into stages and drop its file-wide lint
   suppression.
 
 ## [1.20.3] (2026-11-13)

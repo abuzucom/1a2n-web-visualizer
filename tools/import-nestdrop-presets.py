@@ -29,11 +29,9 @@ import hashlib
 import importlib.util
 import json
 import re
-import stat
 import subprocess
 import sys
 import tempfile
-import dataclasses
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
@@ -49,6 +47,8 @@ INDEX_PREFIX = "window.BCExtraPresetIndex="
 EXP_PREFIX = "[EXP] "
 PHYSICAL_CHUNK_BASE = 9000
 PRESETS_PER_CHUNK = 128
+# index.js format 2 adds the "files" map that experimental chunks need.
+MIN_INDEX_FORMAT_VERSION = 2
 
 PRESET_IO_SPEC = importlib.util.spec_from_file_location(
     "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
@@ -69,16 +69,22 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".dds"}
 MAX_ZIP_ENTRIES = 50_000
 MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 MAX_MEMBER_BYTES = 10 * 1024 * 1024
-# ZIP external attributes keep the Unix st_mode in their high 16 bits.
-ZIP_MODE_SHIFT = 16
-# Every JPEG marker starts with this byte.
+# ZIP archives made on Unix store st_mode in the high 16 bits of
+# external_attr. The file-type bits identify symlink members.
+ZIP_UNIX_MODE_SHIFT = 16
+ZIP_FILE_TYPE_MASK = 0o170000
+ZIP_SYMLINK_MODE = 0o120000
+# Every JPEG segment marker starts with this byte.
 JPEG_MARKER_PREFIX = 0xFF
-# Version 2 of index.js adds the optional "files" map.
-INDEX_VERSION_WITH_FILES = 2
 EXISTING_TEXTURE_NAMES = {
     "cells", "cloudsImage", "lichen", "prayerwheel", "seaweed",
     "smalltiled_lizard_scales",
 }
+DUPLICATE_CONTENT_REASON = "duplicate experimental content"
+# Re-running over the same archive reproduces these records. The key fields
+# identify a record that the manifest already holds.
+SKIP_RECORD_KEY = ("sourceName", "reason")
+COLLISION_RECORD_KEY = ("sourcePath", "runtimeName")
 
 
 def read_csv_names(path):
@@ -111,6 +117,11 @@ def read_chunk(cid, filename):
     if not text.startswith(prefix) or not text.endswith(");"):
         raise ValueError(f"unexpected chunk wrapper in {path}")
     return json.loads(text[len(prefix):-2])
+
+
+def format_chunk_text(cid, payload):
+    """Return the chunk file text for one logical chunk."""
+    return f"window.__bcPresetChunk({cid},{json.dumps(payload, separators=(',', ':'), sort_keys=True)});\n"
 
 
 def normalize_equation_fields(preset):
@@ -169,77 +180,89 @@ def safe_member_path(root, member_name):
     normalized = member_name.replace("\\", "/")
     member_path = PurePosixPath(normalized)
     parts = member_path.parts
-    if not parts or member_path.is_absolute() or parts[0] in ("", ".") or ".." in parts:
+    if not parts or member_path.is_absolute() or ".." in parts:
         raise ValueError(f"unsafe ZIP member path: {member_name}")
     return root.joinpath(*parts)
 
 
 def check_archive_limits(infos):
-    """Reject an archive whose entry count or total size exceeds the limits."""
+    """Reject an archive with too many entries or too many uncompressed bytes."""
     if len(infos) > MAX_ZIP_ENTRIES:
         raise ValueError(f"ZIP contains more than {MAX_ZIP_ENTRIES} entries")
     if sum(info.file_size for info in infos) > MAX_ZIP_UNCOMPRESSED_BYTES:
         raise ValueError("ZIP exceeds the uncompressed-size limit")
 
 
-def member_kind(info):
-    """Return "milk", "texture", or None for a file member after its safety checks."""
+def count_milk_stems(infos):
+    """Return how many .milk members share each basename stem."""
+    counts = {}
+    for info in infos:
+        if not info.is_dir() and info.filename.lower().endswith(".milk"):
+            stem = PurePosixPath(info.filename).stem
+            counts[stem] = counts.get(stem, 0) + 1
+    return counts
+
+
+def check_member_safety(info):
+    """Reject an oversized member or a symlink member."""
     if info.file_size > MAX_MEMBER_BYTES:
         raise ValueError(f"ZIP member exceeds {MAX_MEMBER_BYTES} byte limit: {info.filename}")
-    if stat.S_ISLNK(info.external_attr >> ZIP_MODE_SHIFT):
+    mode = (info.external_attr >> ZIP_UNIX_MODE_SHIFT) & ZIP_FILE_TYPE_MASK
+    if mode == ZIP_SYMLINK_MODE:
         raise ValueError(f"ZIP symlink is not allowed: {info.filename}")
+
+
+def classify_member(info):
+    """Return whether a member is a .milk preset and whether it is a texture."""
     lower = info.filename.replace("\\", "/").lower()
-    if lower.endswith(".milk"):
-        return "milk"
+    is_milk = lower.endswith(".milk")
     in_textures = lower.startswith("textures/") or "/textures/" in lower
-    if in_textures and Path(lower).suffix in IMAGE_SUFFIXES:
-        return "texture"
-    return None
+    is_texture = in_textures and Path(lower).suffix in IMAGE_SUFFIXES
+    return is_milk, is_texture
 
 
-class MilkSelection:
-    """Track which .milk members a run converts and the runtime name of each."""
+class MilkSelector:
+    """Assign runtime names to .milk members and apply --offset and --limit."""
 
-    def __init__(self, infos, offset, max_milk):
-        self.offset = offset
+    def __init__(self, collision_counts, offset, max_milk):
+        self.collision_counts = collision_counts
+        self.offset_remaining = offset
         self.max_milk = max_milk
-        self.stem_counts = {}
-        for info in infos:
-            if not info.is_dir() and info.filename.lower().endswith(".milk"):
-                stem = PurePosixPath(info.filename).stem
-                self.stem_counts[stem] = self.stem_counts.get(stem, 0) + 1
         self.seen = {}
-        self.skipped = 0
-        self.count = 0
-        self.entries = []
-        self.collisions = []
+        self.source_entries = []
+        self.collision_records = []
 
-    def accept(self, info):
-        """Return the runtime stem for a member, or None when offset or limit skips it.
-
-        Duplicate basenames get deterministic "[variant N]" suffixes. The
-        ordinal counts every member, including the skipped ones.
-        """
+    def select(self, info):
+        """Return the runtime stem of a selected member, or None for a skipped one."""
         stem = PurePosixPath(info.filename).stem
         ordinal = self.seen.get(stem, 0) + 1
         self.seen[stem] = ordinal
-        is_variant = self.stem_counts[stem] > 1 and ordinal > 1
+        is_variant = self.collision_counts[stem] > 1 and ordinal > 1
         runtime_stem = f"{stem} [variant {ordinal}]" if is_variant else stem
-        if self.skipped < self.offset:
-            self.skipped += 1
+        if self.offset_remaining > 0:
+            self.offset_remaining -= 1
             return None
-        if self.max_milk is not None and self.count >= self.max_milk:
+        if self.max_milk is not None and len(self.source_entries) >= self.max_milk:
             return None
-        self.entries.append({"sourcePath": info.filename, "originalName": stem, "runtimeName": runtime_stem})
+        entry = {"sourcePath": info.filename, "originalName": stem, "runtimeName": runtime_stem}
+        self.source_entries.append(entry)
         if is_variant:
-            self.collisions.append({
-                "sourcePath": info.filename,
-                "originalName": stem,
-                "runtimeName": runtime_stem,
-                "variant": ordinal,
-            })
-        self.count += 1
+            self.collision_records.append({**entry, "variant": ordinal})
         return runtime_stem
+
+
+def member_destination(destination, info, runtime_stem):
+    """Return the extraction path of a member, renamed for a variant preset."""
+    path = safe_member_path(destination, info.filename)
+    if runtime_stem is None or runtime_stem == PurePosixPath(info.filename).stem:
+        return path
+    return path.with_name(runtime_stem + path.suffix)
+
+
+def write_member(archive, info, path):
+    """Write one archive member to its extraction path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(archive.read(info))
 
 
 def extract_source(zip_path, destination, offset=0, max_milk=None):
@@ -248,24 +271,22 @@ def extract_source(zip_path, destination, offset=0, max_milk=None):
     with ZipFile(zip_path) as archive:
         infos = archive.infolist()
         check_archive_limits(infos)
-        selection = MilkSelection(infos, offset, max_milk)
+        selector = MilkSelector(count_milk_stems(infos), offset, max_milk)
         for info in infos:
             if info.is_dir():
                 continue
-            kind = member_kind(info)
-            if kind is None:
+            check_member_safety(info)
+            is_milk, is_texture = classify_member(info)
+            if not is_milk and not is_texture:
                 continue
-            runtime_stem = selection.accept(info) if kind == "milk" else None
-            if kind == "milk" and runtime_stem is None:
+            runtime_stem = selector.select(info) if is_milk else None
+            if is_milk and runtime_stem is None:
                 continue
-            destination_path = safe_member_path(destination, info.filename)
-            if runtime_stem is not None and runtime_stem != PurePosixPath(info.filename).stem:
-                destination_path = destination_path.with_name(runtime_stem + destination_path.suffix)
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-            destination_path.write_bytes(archive.read(info))
-            if kind == "texture":
-                texture_files.append(destination_path)
-    return selection.count, texture_files, selection.collisions, selection.entries
+            path = member_destination(destination, info, runtime_stem)
+            write_member(archive, info, path)
+            if not is_milk:
+                texture_files.append(path)
+    return len(selector.source_entries), texture_files, selector.collision_records, selector.source_entries
 
 
 def run_converter(source_root, output_path):
@@ -406,37 +427,36 @@ def csv_escape(value):
     return f'"{text.replace(chr(34), chr(34) * 2)}"' if any(csv_char in text for csv_char in '",\n') else text
 
 
-@dataclasses.dataclass
-class ConvertedBatch:
-    """Everything the archives of one run produced, before selection."""
+def append_new_records(existing, new, key_fields):
+    """Return the existing records plus each new record whose key is absent.
 
-    presets: dict = dataclasses.field(default_factory=dict)
-    source_records: list = dataclasses.field(default_factory=list)
-    collision_records: list = dataclasses.field(default_factory=list)
-    source_metadata: dict = dataclasses.field(default_factory=dict)
-    texture_images: dict = dataclasses.field(default_factory=dict)
-    texture_records: list = dataclasses.field(default_factory=list)
-    unavailable_textures: list = dataclasses.field(default_factory=list)
+    Existing records stay unchanged and in order. A re-run over the same
+    archive reproduces its skip and collision records, and the key fields
+    keep those copies out of the manifest.
+    """
+    seen = {tuple(record.get(field) for field in key_fields) for record in existing}
+    merged = list(existing)
+    for record in new:
+        key = tuple(record.get(field) for field in key_fields)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(record)
+    return merged
 
 
-@dataclasses.dataclass
-class SelectionContext:
-    """What a converted preset is checked against before it is kept."""
+def strip_exp_prefix(name):
+    """Return a source name without the reserved experimental prefix."""
+    return name[len(EXP_PREFIX):] if name.startswith(EXP_PREFIX) else name
 
-    exp_prefix: str
-    removed_names: set
-    existing_names: set
-    existing_hashes: set
-    indexed_names: set
-    mainline_hashes: dict
-    mainline_names: dict
-    available_textures: set
-    unavailable_texture_names: set
-    source_metadata: dict
+
+def build_name_match(name, match):
+    """Return the manifest record of a mainline preset with the same name."""
+    return {"name": name, "chunk": match["chunk"], "canonicalHash": match["hash"]}
 
 
 def parse_arguments():
-    """Parse and return the command-line options."""
+    """Parse and validate the command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--zip", action="append", help="local source ZIP; repeat for multiple archives")
     parser.add_argument("--dry-run", action="store_true")
@@ -457,151 +477,194 @@ def parse_arguments():
     return args
 
 
-def resolve_zip_paths(zip_args):
-    """Return the absolute ZIP paths, or exit when one is not a readable ZIP."""
-    zip_paths = [Path(path).resolve() for path in (zip_args or [])]
+def validate_zip_paths(zip_arguments):
+    """Resolve the --zip arguments and reject anything but readable ZIP files."""
+    zip_paths = [Path(path).resolve() for path in (zip_arguments or [])]
     for path in zip_paths:
         if not path.is_file() or path.suffix.lower() != ".zip":
             raise SystemExit(f"not a readable ZIP file: {path}")
     return zip_paths
 
 
-def load_existing_manifest(data, files, mainline_names):
-    """Return the manifest with chunk locations and name matches brought up to date."""
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
-    manifest_by_name = {item["displayName"]: item for item in manifest.get("presets", [])}
+def refresh_manifest_locations(data, files, manifest_by_name):
+    """Record the current chunk location of every indexed experimental preset."""
     for cid, names in enumerate(data["chunks"]):
         if not files[cid].startswith("chunk-9"):
             continue
         for name in names:
             if name in manifest_by_name:
                 manifest_by_name[name].update({"logicalChunk": cid, "physicalFile": files[cid]})
-    for item in manifest.get("presets", []):
+
+
+def backfill_name_matches(manifest_presets, mainline_names):
+    """Add normalizedNameMatches to manifest records that predate the field."""
+    for item in manifest_presets:
         if "normalizedNameMatches" in item:
             continue
-        normalized = item["sourceName"]
-        if normalized.startswith(EXP_PREFIX):
-            normalized = normalized[len(EXP_PREFIX):]
+        normalized = strip_exp_prefix(item["sourceName"])
         match = mainline_names.get(normalized)
-        item["normalizedNameMatches"] = [] if not match else [{
-            "name": normalized,
-            "chunk": match["chunk"],
-            "canonicalHash": match["hash"],
-        }]
+        item["normalizedNameMatches"] = [build_name_match(normalized, match)] if match else []
+
+
+def load_existing_manifest(data, files, mainline_names):
+    """Read the experimental manifest and refresh its derived fields."""
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
+    presets = manifest.get("presets", [])
+    refresh_manifest_locations(data, files, {item["displayName"]: item for item in presets})
+    backfill_name_matches(presets, mainline_names)
     return manifest
 
 
-def convert_archive(batch, zip_path, source_root, args):
-    """Extract and convert one archive into batch. Return its texture files."""
-    milk_count, textures, source_collisions, source_entries = extract_source(
-        zip_path, source_root, args.offset, args.limit
-    )
+def convert_archive(zip_path, temp_root, archive_number, offset, limit):
+    """Extract and convert one archive and return its source record and presets."""
+    source_root = temp_root / f"source-{archive_number:02d}"
+    milk_count, textures, collisions, entries = extract_source(zip_path, source_root, offset, limit)
     digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
-    source_result = run_converter(source_root, source_root.with_name(f"converted-{source_root.name}.json"))
-    batch.source_records.append({
+    presets = run_converter(source_root, temp_root / f"converted-{archive_number:02d}.json")
+    record = {
         "archive": zip_path.name, "sha256": digest,
-        "milk_files": milk_count, "offset": args.offset,
-        "converted": len(source_result),
-    })
-    batch.collision_records.extend(source_collisions)
-    batch.source_metadata.update({entry["runtimeName"]: entry for entry in source_entries})
-    for name, preset in source_result.items():
-        if name in batch.presets:
+        "milk_files": milk_count, "offset": offset,
+        "converted": len(presets),
+    }
+    return {"record": record, "textures": textures, "collisions": collisions, "entries": entries, "presets": presets}
+
+
+def merge_converted(converted, presets):
+    """Add one archive's presets and keep the first preset of a repeated name."""
+    for name, preset in presets.items():
+        if name in converted:
             print(f"warning: duplicate source name {name!r}; keeping first", file=sys.stderr)
             continue
-        batch.presets[name] = preset
-    return textures
+        converted[name] = preset
 
 
-def convert_archives(zip_paths, args):
-    """Convert every archive and build the texture bundle for the batch."""
-    batch = ConvertedBatch()
+def convert_archives(zip_paths, offset, limit):
+    """Convert every archive and pack its textures into one import batch."""
+    batch = {"converted": {}, "sources": [], "collisions": [], "metadata": {}}
     texture_files = []
     with tempfile.TemporaryDirectory(prefix="nestdrop-import-") as temp:
         temp_root = Path(temp)
         for archive_number, zip_path in enumerate(zip_paths):
-            source_root = temp_root / f"source-{archive_number:02d}"
-            texture_files.extend(convert_archive(batch, zip_path, source_root, args))
-        batch.texture_images, batch.texture_records, batch.unavailable_textures = (
-            build_texture_bundle(texture_files)
-        )
+            result = convert_archive(zip_path, temp_root, archive_number, offset, limit)
+            batch["sources"].append(result["record"])
+            texture_files.extend(result["textures"])
+            batch["collisions"].extend(result["collisions"])
+            batch["metadata"].update({entry["runtimeName"]: entry for entry in result["entries"]})
+            merge_converted(batch["converted"], result["presets"])
+        images, records, unavailable = build_texture_bundle(texture_files)
+    batch.update({"texture_images": images, "texture_records": records, "unavailable_textures": unavailable})
     return batch
 
 
-def skip_reason(source_name, preset, digest, context):
-    """Return the skip record for a preset that stays out, or None to keep it."""
-    normalized = source_name[len(EXP_PREFIX):] if source_name.startswith(EXP_PREFIX) else source_name
-    if normalized in context.removed_names:
-        return {"sourceName": source_name, "reason": "curated-out name"}
-    display = context.exp_prefix + normalized
+def build_selection_context(existing_manifest, indexed_chunks, batch, zip_paths):
+    """Collect the names, hashes, and textures that decide which presets stay."""
+    presets = existing_manifest.get("presets", [])
+    previously_vendored = load_texture_splitter().read_images() if zip_paths else {}
     # An import that stopped after the index write but before the manifest
     # write left indexed names without manifest records. A name in the index
     # counts as imported, so a re-run never indexes it twice.
-    if display in context.existing_names or display in context.indexed_names:
-        return {"sourceName": source_name, "reason": "already imported"}
-    if digest in context.existing_hashes:
-        return {"sourceName": source_name, "reason": "duplicate experimental content"}
-    missing = sorted(texture_names(preset) - context.available_textures)
-    if missing:
-        unavailable = sorted(set(missing) & context.unavailable_texture_names)
-        return {
-            "sourceName": source_name,
-            "reason": "unavailable texture" if unavailable else "missing textures",
-            "textures": missing,
-            **({"unavailableTextures": unavailable} if unavailable else {}),
-        }
-    return None
+    indexed_names = {name for names in indexed_chunks for name in names}
+    return {
+        "removed_names": read_csv_names(REMOVED_CSV_PATH),
+        "existing_names": {item["displayName"] for item in presets} | indexed_names,
+        "existing_hashes": {item["canonicalHash"] for item in presets},
+        "seen_hashes": {item["canonicalHash"] for item in presets},
+        "available_textures": compute_available_textures(batch["texture_images"], previously_vendored),
+        "unavailable_textures": {item["name"].lower() for item in batch["unavailable_textures"]},
+        "source_metadata": batch["metadata"],
+    }
 
 
-def kept_record(source_name, preset, digest, context):
-    """Return the manifest record for a kept preset, with its equations filled."""
-    normalized = source_name[len(EXP_PREFIX):] if source_name.startswith(EXP_PREFIX) else source_name
-    display = context.exp_prefix + normalized
+def build_skip_record(source_name, reason):
+    """Return the manifest record of a skipped preset."""
+    return {"sourceName": source_name, "reason": reason}
+
+
+def build_texture_skip_record(source_name, missing, unavailable_names):
+    """Return the manifest record of a preset skipped for its textures."""
+    unavailable = sorted(set(missing) & unavailable_names)
+    record = {
+        "sourceName": source_name,
+        "reason": "unavailable texture" if unavailable else "missing textures",
+        "textures": missing,
+    }
+    if unavailable:
+        record["unavailableTextures"] = unavailable
+    return record
+
+
+def build_kept_record(source_name, normalized, preset, digest, context):
+    """Return the import record of a retained preset."""
+    mainline_names = context["mainline_names"]
     name_matches = []
-    if normalized in context.mainline_names:
-        name_matches.append({
-            "name": normalized,
-            "chunk": context.mainline_names[normalized]["chunk"],
-            "canonicalHash": context.mainline_names[normalized]["hash"],
-        })
+    if normalized in mainline_names:
+        name_matches.append(build_name_match(normalized, mainline_names[normalized]))
+    return {
+        "preset": preset, "sourceName": source_name, "displayName": context["exp_prefix"] + normalized,
+        "canonicalHash": digest, "mainlineMatches": context["mainline_hashes"].get(digest, []),
+        "normalizedNameMatches": name_matches, "missingTextures": [],
+        "sourcePath": context["source_metadata"].get(source_name, {}).get("sourcePath", source_name),
+    }
+
+
+def classify_converted_preset(source_name, preset, context):
+    """Return (skip record, None) for a skipped preset or (None, kept record)."""
+    normalized = strip_exp_prefix(source_name)
+    if normalized in context["removed_names"]:
+        return build_skip_record(source_name, "curated-out name"), None
+    if context["exp_prefix"] + normalized in context["existing_names"]:
+        return build_skip_record(source_name, "already imported"), None
+    digest = preset_hash(preset)
+    if digest in context["existing_hashes"]:
+        return build_skip_record(source_name, DUPLICATE_CONTENT_REASON), None
+    missing = sorted(texture_names(preset) - context["available_textures"])
+    if missing:
+        return build_texture_skip_record(source_name, missing, context["unavailable_textures"]), None
+    if digest in context["seen_hashes"]:
+        return build_skip_record(source_name, DUPLICATE_CONTENT_REASON), None
+    context["seen_hashes"].add(digest)
     # Fill absent equation fields before the preset is written. Butterchurn
     # compiles them as "".concat(field, " return a;"), so a missing field
     # becomes the literal "undefined" and raises SyntaxError at load time;
     # visualizer-core's own guards skip non-string values and never catch
-    # it. Run after the digest so dedup keeps comparing the same canonical
-    # content earlier imports recorded.
+    # it. Run after the digest above so dedup keeps comparing the same
+    # canonical content earlier imports recorded.
     normalize_equation_fields(preset)
-    return {
-        "preset": preset, "sourceName": source_name, "displayName": display,
-        "canonicalHash": digest, "mainlineMatches": context.mainline_hashes.get(digest, []),
-        "normalizedNameMatches": name_matches, "missingTextures": [],
-        "sourcePath": context.source_metadata.get(source_name, {}).get("sourcePath", source_name),
-    }
+    return None, build_kept_record(source_name, normalized, preset, digest, context)
 
 
 def select_presets(converted, context):
-    """Return the kept presets by display name and the skip records."""
+    """Split converted presets into retained records and skip records."""
     kept = {}
     skipped = []
-    seen_hashes = set(context.existing_hashes)
     for source_name, preset in sorted(converted.items()):
-        digest = preset_hash(preset)
-        reason = skip_reason(source_name, preset, digest, context)
-        if reason is None and digest in seen_hashes:
-            reason = {"sourceName": source_name, "reason": "duplicate experimental content"}
-        if reason is not None:
-            skipped.append(reason)
+        skip, record = classify_converted_preset(source_name, preset, context)
+        if skip is not None:
+            skipped.append(skip)
             continue
-        seen_hashes.add(digest)
-        record = kept_record(source_name, preset, digest, context)
         kept[record["displayName"]] = record
     return kept, skipped
 
 
-def print_summary(zip_paths, converted, kept, skipped):
-    """Print the counts of one run."""
-    print(f"archives: {len(zip_paths)}")
-    print(f"converted: {len(converted)}")
+def prepare_import(args, zip_paths, data, files):
+    """Read the existing state, convert the archives, and select presets."""
+    mainline_hashes, mainline_names = build_mainline_hashes(data, files)
+    existing_manifest = load_existing_manifest(data, files, mainline_names)
+    batch = convert_archives(zip_paths, args.offset, args.limit)
+    context = build_selection_context(existing_manifest, data["chunks"], batch, zip_paths)
+    context.update({
+        "exp_prefix": args.exp_prefix,
+        "mainline_hashes": mainline_hashes,
+        "mainline_names": mainline_names,
+    })
+    kept, skipped = select_presets(batch["converted"], context)
+    return existing_manifest, batch, kept, skipped
+
+
+def print_summary(archive_count, converted_count, kept, skipped):
+    """Print the import counts."""
+    print(f"archives: {archive_count}")
+    print(f"converted: {converted_count}")
     print(f"retained: {len(kept)}")
     print(f"skipped: {len(skipped)}")
     print(f"exact mainline hash matches: {sum(bool(item['mainlineMatches']) for item in kept.values())}")
@@ -611,98 +674,94 @@ def print_summary(zip_paths, converted, kept, skipped):
     )
 
 
-def chunk_text(cid, chunk):
-    """Return the runtime wrapper text for one chunk file."""
-    return f"window.__bcPresetChunk({cid},{json.dumps(chunk, separators=(',', ':'), sort_keys=True)});\n"
+def build_manifest(existing_manifest, exp_prefix, batch, skipped):
+    """Return the updated manifest before this run's presets are appended."""
+    return {
+        "version": 1,
+        "prefix": exp_prefix,
+        "physicalChunkBase": PHYSICAL_CHUNK_BASE,
+        "sources": [
+            source for source in existing_manifest.get("sources", [])
+            if source.get("milk_files", 0)
+        ] + [source for source in batch["sources"] if source.get("milk_files", 0)],
+        "presets": existing_manifest.get("presets", []),
+        "skipped": append_new_records(existing_manifest.get("skipped", []), skipped, SKIP_RECORD_KEY),
+        "collisions": append_new_records(
+            existing_manifest.get("collisions", []), batch["collisions"], COLLISION_RECORD_KEY,
+        ),
+    }
 
 
-def write_new_chunks(data, files, kept, manifest):
-    """Write the kept presets as new chunk files and record them in data and manifest.
-
-    Return the new chunk name lists.
-    """
-    start_logical = len(data["chunks"])
+def next_physical_chunk(files):
+    """Return the first free physical experimental chunk number."""
     existing_physical = [
         int(Path(name).stem.split("-")[-1])
         for name in files if Path(name).stem.split("-")[-1].isdigit()
     ]
-    next_physical = max([PHYSICAL_CHUNK_BASE - 1, *existing_physical]) + 1
+    return max([PHYSICAL_CHUNK_BASE - 1, *existing_physical]) + 1
+
+
+def build_manifest_record(kept_record, logical, filename):
+    """Return the manifest record of a retained preset at its chunk location."""
+    record = {key: value for key, value in kept_record.items() if key != "preset"}
+    record.update({"logicalChunk": logical, "physicalFile": filename})
+    return record
+
+
+def write_new_chunks(data, files, kept, manifest):
+    """Write retained presets to new chunks and return (logical ID, names) pairs."""
+    start_logical = len(data["chunks"])
+    next_physical = next_physical_chunk(files)
     names = sorted(kept)
     new_chunks = [names[i:i + PRESETS_PER_CHUNK] for i in range(0, len(names), PRESETS_PER_CHUNK)]
     for offset, chunk_names in enumerate(new_chunks):
         logical = start_logical + offset
         filename = f"chunk-{next_physical + offset}.js"
-        atomic_write_text(OUT_DIR / filename, chunk_text(logical, {name: kept[name]["preset"] for name in chunk_names}))
+        payload = {name: kept[name]["preset"] for name in chunk_names}
+        atomic_write_text(OUT_DIR / filename, format_chunk_text(logical, payload))
         data["chunks"].append(chunk_names)
         files.append(filename)
-        for name in chunk_names:
-            record = dict(kept[name])
-            record.update({"logicalChunk": logical, "physicalFile": filename})
-            del record["preset"]
-            manifest["presets"].append(record)
-    return new_chunks
+        manifest["presets"].extend(build_manifest_record(kept[name], logical, filename) for name in chunk_names)
+    return [(start_logical + offset, chunk_names) for offset, chunk_names in enumerate(new_chunks)]
 
 
-def append_inventory_rows(new_chunks, start_logical):
-    """Append one presets-extra inventory row per new preset."""
-    csv_rows = []
-    for offset, chunk_names in enumerate(new_chunks):
-        csv_rows.extend(f"{csv_escape(name)},presets-extra,{start_logical + offset}\n" for name in chunk_names)
+def write_index_and_inventory(data, files, new_chunks):
+    """Write index.js and append the new presets to the inventory."""
+    data["v"] = max(MIN_INDEX_FORMAT_VERSION, data.get("v", 1))
+    data["files"] = files
+    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
+    csv_rows = [
+        f"{csv_escape(name)},presets-extra,{logical}\n"
+        for logical, chunk_names in new_chunks for name in chunk_names
+    ]
     atomic_write_text(CSV_PATH, CSV_PATH.read_text(encoding="utf-8") + "".join(csv_rows))
+
+
+def write_presets(data, files, kept, manifest, normalized_chunks):
+    """Write new chunks, normalized chunks, the index, and the inventory."""
+    new_chunks = write_new_chunks(data, files, kept, manifest)
+    for cid, (path, chunk) in normalized_chunks.items():
+        atomic_write_text(path, format_chunk_text(cid, chunk))
+    write_index_and_inventory(data, files, new_chunks)
 
 
 def main():
     """Import and normalize NestDrop presets into the experimental collection."""
     args = parse_arguments()
-    zip_paths = resolve_zip_paths(args.zip)
+    zip_paths = validate_zip_paths(args.zip)
     data, files = read_index()
     normalized_chunks = normalize_experimental_chunks(data, files)
-    mainline_hashes, mainline_names = build_mainline_hashes(data, files)
-    existing_manifest = load_existing_manifest(data, files, mainline_names)
-    existing_presets = existing_manifest.get("presets", [])
-    batch = convert_archives(zip_paths, args)
-    previously_vendored = load_texture_splitter().read_images() if zip_paths else {}
-    context = SelectionContext(
-        exp_prefix=args.exp_prefix,
-        removed_names=read_csv_names(REMOVED_CSV_PATH),
-        existing_names={item["displayName"] for item in existing_presets},
-        existing_hashes={item["canonicalHash"] for item in existing_presets},
-        indexed_names={name for names in data["chunks"] for name in names},
-        mainline_hashes=mainline_hashes,
-        mainline_names=mainline_names,
-        available_textures=compute_available_textures(batch.texture_images, previously_vendored),
-        unavailable_texture_names={item["name"].lower() for item in batch.unavailable_textures},
-        source_metadata=batch.source_metadata,
-    )
-    kept, skipped = select_presets(batch.presets, context)
-    print_summary(zip_paths, batch.presets, kept, skipped)
+    existing_manifest, batch, kept, skipped = prepare_import(args, zip_paths, data, files)
+    print_summary(len(zip_paths), len(batch["converted"]), kept, skipped)
     if args.dry_run:
         return
 
     # Textures go first. A texture failure then leaves no preset indexed
-    # without the textures it samples.
+    # without the textures it samples. The manifest goes last.
     if zip_paths:
-        write_texture_bundle(batch.texture_images, batch.texture_records)
-    manifest = {
-        "version": 1,
-        "prefix": args.exp_prefix,
-        "physicalChunkBase": PHYSICAL_CHUNK_BASE,
-        "sources": [
-            source for source in existing_manifest.get("sources", []) + batch.source_records
-            if source.get("milk_files", 0)
-        ],
-        "presets": existing_presets,
-        "skipped": existing_manifest.get("skipped", []) + skipped,
-        "collisions": existing_manifest.get("collisions", []) + batch.collision_records,
-    }
-    start_logical = len(data["chunks"])
-    new_chunks = write_new_chunks(data, files, kept, manifest)
-    for cid, (path, chunk) in normalized_chunks.items():
-        atomic_write_text(path, chunk_text(cid, chunk))
-    data["v"] = max(INDEX_VERSION_WITH_FILES, data.get("v", 1))
-    data["files"] = files
-    atomic_write_text(INDEX_PATH, INDEX_PREFIX + json.dumps(data, separators=(",", ":")) + ";\n")
-    append_inventory_rows(new_chunks, start_logical)
+        write_texture_bundle(batch["texture_images"], batch["texture_records"])
+    manifest = build_manifest(existing_manifest, args.exp_prefix, batch, skipped)
+    write_presets(data, files, kept, manifest, normalized_chunks)
     atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
 
 
