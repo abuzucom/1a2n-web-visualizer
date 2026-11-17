@@ -17,9 +17,28 @@ CSV_PATH = ROOT / "preset-inventory.csv"
 REMOVED_CSV_PATH = ROOT / "removed-presets.csv"
 MANIFEST_PATH = ROOT / "experimental-presets.json"
 EXCLUSIONS_PATH = ROOT / "experimental-exclusions.json"
+ENERGY_CATALOG_PATH = ROOT / "energy-catalog.json"
+PERFORMANCE_CATALOG_PATH = ROOT / "performance-catalog.json"
+ENERGY_BUNDLE_PATH = ROOT / "src" / "catalogs" / "energy-catalog.js"
+PERFORMANCE_BUNDLE_PATH = ROOT / "src" / "catalogs" / "performance-catalog.js"
 INDEX_PREFIX = "window.BCExtraPresetIndex="
 EXPERIMENTAL_NAME_PATTERN = re.compile(r"^\[EXP(?:[2-9]|[1-9][0-9]+)?\] .+$")
 BASELINE_PHYSICAL_LIMIT = 9000
+EXPERIMENTAL_PACK = "presets-extra"
+LEDGER_HEADER = "name,pack,chunk,commit,date,subject\n"
+
+
+def load_sibling_module(module_name: str, filename: str) -> Any:
+    """Load and return a module that lives next to this script."""
+    spec = importlib.util.spec_from_file_location(module_name, Path(__file__).resolve().with_name(filename))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+PRESET_IO = load_sibling_module("preset_io", "preset_io.py")
+CATALOGS = load_sibling_module("curate_catalogs", "curate_catalogs.py")
+atomic_write_text = PRESET_IO.atomic_write_text
 
 
 def read_index(path: Path) -> tuple[dict[str, Any], list[str]]:
@@ -46,19 +65,8 @@ def csv_escape(string_val: str) -> str:
     return string_val
 
 
-PRESET_IO_SPEC = importlib.util.spec_from_file_location(
-    "preset_io", Path(__file__).resolve().with_name("preset_io.py"),
-)
-PRESET_IO = importlib.util.module_from_spec(PRESET_IO_SPEC)
-PRESET_IO_SPEC.loader.exec_module(PRESET_IO)
-atomic_write_text = PRESET_IO.atomic_write_text
-
-
-LEDGER_HEADER = "name,pack,chunk,commit,date,subject\n"
-
-
 def parse_arguments() -> argparse.Namespace:
-    """Parse and return the command-line options."""
+    """Parse and return the command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decisions", required=True, help="JSON report or list of approved experimental names")
     parser.add_argument("--dry-run", action="store_true")
@@ -90,8 +98,9 @@ def load_decisions(path: Path) -> dict[str, Any]:
     return decision_by_name
 
 
-def build_targets(decision_by_name: dict[str, Any], records: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return one removal target per approved name, with decision matches applied."""
+def resolve_targets(decision_by_name: dict[str, Any], manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the manifest records for the approved names with decision matches applied."""
+    records = {item["displayName"]: item for item in manifest.get("presets", [])}
     missing = sorted(decision_by_name.keys() - records.keys())
     if missing:
         raise SystemExit(f"not found in experimental manifest: {missing}")
@@ -110,8 +119,8 @@ def build_targets(decision_by_name: dict[str, Any], records: dict[str, Any]) -> 
     return targets
 
 
-def check_matches(targets: list[dict[str, Any]], args: argparse.Namespace) -> None:
-    """Refuse targets without mainline matches unless an override allows them."""
+def refuse_unmatched_targets(targets: list[dict[str, Any]], args: argparse.Namespace) -> None:
+    """Stop when a target has no mainline match and no override flag allows it."""
     invalid = [
         item["displayName"] for item in targets
         if not (item.get("mainlineMatches") or item.get("normalizedNameMatches"))
@@ -123,9 +132,13 @@ def check_matches(targets: list[dict[str, Any]], args: argparse.Namespace) -> No
 
 
 def remove_from_index_and_chunks(targets: list[dict[str, Any]], allow_invalid: bool) -> None:
-    """Remove the targets from index.js first and their chunk files second.
+    """Drop the targets from index.js and their chunk files.
 
-    A re-run treats a name already gone from the index as removed there.
+    Every chunk is read and checked before the first write. The index goes
+    first and the manifest goes last. The manifest is the record of pending
+    targets, so a crash leaves them pending. A re-run treats a name already
+    gone from the index as removed there. Every later write skips the work a
+    previous run finished.
     """
     data, files = read_index(INDEX_PATH)
     by_chunk = {}
@@ -150,7 +163,10 @@ def remove_inventory_rows(removed: set[str]) -> None:
     """Drop the removed names from preset-inventory.csv."""
     kept_lines = []
     for line in CSV_PATH.read_text(encoding="utf-8").splitlines():
-        row = next(csv.reader([line])) if line else []
+        if not line:
+            kept_lines.append(line)
+            continue
+        row = next(csv.reader([line]))
         if row and row[0].strip('"') in removed:
             continue
         kept_lines.append(line)
@@ -158,7 +174,7 @@ def remove_inventory_rows(removed: set[str]) -> None:
 
 
 def append_ledger_rows(targets: list[dict[str, Any]], reason: str) -> None:
-    """Record each target in removed-presets.csv once, in the ledger's line ending."""
+    """Append one removed-presets.csv row per target the ledger lacks."""
     ledger_exists = REMOVED_CSV_PATH.exists()
     ledger_bytes = REMOVED_CSV_PATH.read_bytes() if ledger_exists else b""
     ledger = ledger_bytes.decode("utf-8") if ledger_exists else LEDGER_HEADER
@@ -166,15 +182,40 @@ def append_ledger_rows(targets: list[dict[str, Any]], reason: str) -> None:
     if ledger_bytes and not ledger_bytes.endswith((b"\r", b"\n")):
         ledger += ledger_newline
     ledger_names = {row[0] for row in csv.reader(ledger.splitlines()) if row}
+    today = date.today().isoformat()
     ledger += "".join(
-        f"{csv_escape(item['displayName'])},presets-extra,{item['logicalChunk']},,{date.today().isoformat()},"
-        f"{reason}{ledger_newline}"
+        f"{csv_escape(item['displayName'])},{EXPERIMENTAL_PACK},{item['logicalChunk']},,{today},"
+        f"{csv_escape(reason)}{ledger_newline}"
         for item in targets if item["displayName"] not in ledger_names
     )
     atomic_write_text(REMOVED_CSV_PATH, ledger)
 
 
-def record_exclusions(targets: list[dict[str, Any]], reason: str) -> None:
+def clear_catalog_entries(removed: set[str]) -> None:
+    """Drop catalog entries that name a removed preset and rewrite the bundles.
+
+    Each catalog entry names its preset as ``pack:name``. Only entries of the
+    experimental pack refer to the removed presets. A catalog without a
+    matching entry stays untouched.
+    """
+    removed_ids = {CATALOGS.catalog_id(EXPERIMENTAL_PACK, name) for name in removed}
+    energy = CATALOGS.read_catalog(ENERGY_CATALOG_PATH)
+    kept_energy = {key: value for key, value in energy["presets"].items() if key not in removed_ids}
+    if len(kept_energy) != len(energy["presets"]):
+        energy["presets"] = kept_energy
+        atomic_write_text(ENERGY_CATALOG_PATH, CATALOGS.catalog_text(energy))
+        atomic_write_text(ENERGY_BUNDLE_PATH, CATALOGS.bundle_text(CATALOGS.ENERGY_GLOBAL, energy))
+    performance = CATALOGS.read_catalog(PERFORMANCE_CATALOG_PATH, [])
+    kept_performance = [entry for entry in performance["presets"] if entry not in removed_ids]
+    if len(kept_performance) != len(performance["presets"]):
+        performance["presets"] = kept_performance
+        atomic_write_text(PERFORMANCE_CATALOG_PATH, CATALOGS.catalog_text(performance))
+        atomic_write_text(
+            PERFORMANCE_BUNDLE_PATH, CATALOGS.bundle_text(CATALOGS.PERFORMANCE_GLOBAL, performance),
+        )
+
+
+def append_exclusions(targets: list[dict[str, Any]], reason: str) -> None:
     """Record each target in experimental-exclusions.json once."""
     exclusions = json.loads(EXCLUSIONS_PATH.read_text(encoding="utf-8")) if EXCLUSIONS_PATH.exists() else []
     excluded_names = {item["displayName"] for item in exclusions}
@@ -188,18 +229,12 @@ def record_exclusions(targets: list[dict[str, Any]], reason: str) -> None:
 
 
 def main() -> int:
-    """Analyze and remove duplicate presets from the experimental collection.
-
-    The index goes first and the manifest goes last. The manifest is the
-    record of pending targets, so a crash leaves them pending. Every later
-    write skips the work a previous run finished.
-    """
+    """Remove the approved presets from the experimental collection."""
     args = parse_arguments()
     decision_by_name = load_decisions(Path(args.decisions))
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    records = {item["displayName"]: item for item in manifest.get("presets", [])}
-    targets = build_targets(decision_by_name, records)
-    check_matches(targets, args)
+    targets = resolve_targets(decision_by_name, manifest)
+    refuse_unmatched_targets(targets, args)
 
     if args.dry_run:
         for item in targets:
@@ -210,7 +245,8 @@ def main() -> int:
     remove_from_index_and_chunks(targets, args.allow_invalid)
     remove_inventory_rows(removed)
     append_ledger_rows(targets, args.reason)
-    record_exclusions(targets, args.reason)
+    clear_catalog_entries(removed)
+    append_exclusions(targets, args.reason)
     manifest["presets"] = [item for item in manifest.get("presets", []) if item["displayName"] not in removed]
     atomic_write_text(MANIFEST_PATH, json.dumps(manifest, indent=2) + "\n")
     print(f"removed {len(targets)} experimental presets")
