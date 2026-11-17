@@ -104,7 +104,7 @@ jobs:
   review:
     needs: resolve-pr
     if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@06d74fba4d9013654cdaf9896bb7535724385186
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@ae8a60036681ce8e865eee256fc685585c3f290d
     with:
       # Foucault 3.3.14 policy revision.
       audit_ref: "06d74fba4d9013654cdaf9896bb7535724385186"
