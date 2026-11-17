@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 const vm = require('node:vm');
+const { createBCVizStub } = require('./support/bcviz-stub.js');
 
 const MIN_TEXT_CONTRAST = 4.5;
 
@@ -276,7 +277,7 @@ function createFullscreenHarness(vizOverrides) {
     document: document,
     navigator: {},
     location: { search: '' },
-    BCViz: { create: function () { return viz; } },
+    BCViz: createBCVizStub(window, function () { return viz; }),
     setTimeout: timers.setTimeout,
     clearTimeout: timers.clearTimeout,
     console: console,
@@ -404,7 +405,7 @@ test('hiding the OBS panel removes it from the tab order', function () {
     document: document,
     navigator: {},
     location: { search: '' },
-    BCViz: { create: function () { return viz; } },
+    BCViz: createBCVizStub(window, function () { return viz; }),
     setTimeout: setTimeout,
     clearTimeout: clearTimeout,
     console: console,
