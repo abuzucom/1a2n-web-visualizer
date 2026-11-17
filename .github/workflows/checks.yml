@@ -177,11 +177,35 @@ jobs:
         run: npx eslint .
 
       - name: Install ruff
-        # Pinned to a commit rather than a mutable release tag.
-        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        # requirements-ruff.txt pins one ruff version with the SHA-256 of
+        # every file PyPI publishes for it, so pip rejects any other build.
+        run: python3 -m pip install --require-hashes --requirement requirements-ruff.txt
 
       - name: ruff check
         run: ruff check tools/
+
+      - name: Survey ruff baseline (report only)
+        # .github/ruff-baseline/ holds byte-identical copies of the
+        # organization baseline configs from abuzucom/rough at c872ec0. The
+        # survey prints finding counts to size a later adoption. It must
+        # never fail the build: every check uses --exit-zero, and
+        # continue-on-error covers the format check, which has no such flag.
+        continue-on-error: true
+        run: |
+          for directory in tools scripts hooks tests; do
+            echo "::group::block tier: ${directory}"
+            ruff check --config .github/ruff-baseline/ruff.toml --ignore-noqa \
+              --no-respect-gitignore --exit-zero --statistics "${directory}"
+            echo "::endgroup::"
+          done
+          echo "::group::warn tier: whole repository"
+          ruff check --config .github/ruff-baseline/ruff.warn.toml --ignore-noqa \
+            --no-respect-gitignore --exit-zero --statistics .
+          echo "::endgroup::"
+          echo "::group::format check: whole repository"
+          ruff format --config .github/ruff-baseline/ruff.toml --check \
+            --no-respect-gitignore .
+          echo "::endgroup::"
 
   unit-tests:
     runs-on: ubuntu-latest

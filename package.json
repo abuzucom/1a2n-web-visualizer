@@ -26,7 +26,7 @@
   ],
   "license": "MIT",
   "overrides": {
-    "lodash": ">=4.17.12"
+    "lodash": "4.18.1"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

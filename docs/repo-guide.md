@@ -14,7 +14,9 @@ guide stays outside the injected policy. Read it before any change.
   (see the header of `tools/convert-milk-presets.js`).
 - `npm run dev`: alternative dev server via `python3 -m http.server --directory src 8000`.
 - `npm run lint`: ESLint (`src/js/`, `tools/*.js`) plus ruff (`tools/*.py`). Run
-  before presenting work as finished; fix everything it flags.
+  before presenting work as finished; fix everything it flags. Install the CI
+  ruff version first with
+  `python3 -m pip install --require-hashes --requirement requirements-ruff.txt`.
 - Tests: `npm test` runs both Node (`npm run test:js`) and Python (`npm run test:py`) unit test suites.
 - Preset validation: `npm run validate:presets` (`node tools/validate-preset-chunks.js`) and `npm run validate:exp` (`node tools/validate-experimental-presets.js`).
 - Equation allowlist: `npm run validate:equations` (`tools/check_preset_equations.py`).
