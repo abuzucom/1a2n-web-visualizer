@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.5] (2026-11-15)
+
+### Fixed
+- Stop `tools/import-nestdrop-presets.py` from appending duplicate
+  `skipped` and `collisions` records to `experimental-presets.json` on
+  every re-run over the same archive. Existing records stay unchanged.
+- Split the importer's `extract_source` and `main` into stages, name its
+  file-mode and marker constants, remove an unreachable path check, and
+  drop its inline lint suppressions.
+
 ## [1.20.4] (2026-11-15)
 
 ### Fixed
