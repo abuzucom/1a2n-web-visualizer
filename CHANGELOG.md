@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.1] (2026-11-17)
+
+### Fixed
+- Warn on stderr when the `--names-file` path of
+  `tools/remove_presets.js` resolves outside the repository. The check
+  follows symlinks. The run continues. Callers that keep a names file
+  elsewhere keep working.
+
 ## [1.21.0] (2026-11-17)
 
 ### Changed
