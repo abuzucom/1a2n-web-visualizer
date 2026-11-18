@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 const vm = require('node:vm');
+const { createBCVizStub } = require('./support/bcviz-stub.js');
 
 function loadScript(path, window) {
   const source = fs.readFileSync(path, 'utf8');
@@ -235,12 +236,10 @@ function createFullscreenHarness(vizOverrides, options) {
     document: document,
     navigator: {},
     location: { search: opts.search || '' },
-    BCViz: {
-      create: function (canvas, createOpts) {
-        captured.opts = createOpts;
-        return viz;
-      },
-    },
+    BCViz: createBCVizStub(window, function (canvas, createOpts) {
+      captured.opts = createOpts;
+      return viz;
+    }),
     setTimeout: window.setTimeout,
     clearTimeout: window.clearTimeout,
     setInterval: window.setInterval,

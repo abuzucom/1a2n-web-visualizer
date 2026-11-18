@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 const vm = require('node:vm');
+const { createBCVizStub } = require('./support/bcviz-stub.js');
 
 const SUPPORT_SCRIPTS = ['src/js/diagnostics.js', 'src/js/device-errors.js', 'src/js/audio-prefs.js'];
 const ELEMENT_IDS = [
@@ -135,7 +136,7 @@ function createHarness(vizOverrides, options) {
     document: document,
     navigator: { mediaDevices: {} },
     location: { search: '' },
-    BCViz: { create: function () { return viz; } },
+    BCViz: createBCVizStub(window, function () { return viz; }),
     setTimeout: setTimeout,
     clearTimeout: clearTimeout,
     console: console,

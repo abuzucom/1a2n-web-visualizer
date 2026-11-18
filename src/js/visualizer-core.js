@@ -877,6 +877,45 @@
     return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
   }
 
+  /* demo.html loads no audio-prefs.js, so its pages need a store that
+   * remembers nothing instead of a TypeError on every device change. */
+  const NO_AUDIO_PREFS = Object.freeze({
+    read: function () { return null; },
+    write: function () { return false; },
+    clear: function () {},
+    resolve: function () { return ''; },
+  });
+
+  /**
+   * Return the saved-input store, or an inert store when audio-prefs.js is
+   * absent. Reads the global at call time, since page scripts load deferred.
+   */
+  function audioPrefs() {
+    return global.BCAudioPrefs || NO_AUDIO_PREFS;
+  }
+
+  const TEXT_ENTRY_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
+  const ACTIVATION_TAGS = ['BUTTON', 'A', 'SUMMARY'];
+
+  /**
+   * Report whether a page shortcut must yield a key press to the focused
+   * element. Text fields keep typing and buttons keep Space and Enter.
+   * Ctrl, Cmd, and Alt combinations belong to the browser and system.
+   * Shift stays allowed because ?, <, >, _ and + need it.
+   */
+  function shouldIgnoreShortcut(event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return true;
+    const target = event.target;
+    if (!target || !target.tagName) return false;
+    if (TEXT_ENTRY_TAGS.indexOf(target.tagName) !== -1 || target.isContentEditable) {
+      return event.key !== 'Escape';
+    }
+    if (ACTIVATION_TAGS.indexOf(target.tagName) !== -1) {
+      return event.key === ' ' || event.key === 'Enter';
+    }
+    return false;
+  }
+
   function matchDeviceIndex(devices, deviceId) {
     return devices.findIndex(function (device) { return device.deviceId === deviceId; });
   }
@@ -1318,5 +1357,11 @@
     }, createDemoApi(audio));
   }
 
-  global.BCViz = { create: create, createPlayedSession: createPlayedSession };
+  global.BCViz = {
+    create: create,
+    createPlayedSession: createPlayedSession,
+    describeDeviceError: describeDeviceError,
+    audioPrefs: audioPrefs,
+    shouldIgnoreShortcut: shouldIgnoreShortcut,
+  };
 })(window);

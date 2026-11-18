@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 const vm = require('node:vm');
+const { createBCVizStub } = require('./support/bcviz-stub.js');
 
 function readSource(path) {
   return fs.readFileSync(path, 'utf8');
@@ -187,7 +188,7 @@ function createHarness(options) {
     document: document,
     navigator: navigator,
     location: { search: '' },
-    BCViz: { create: function () { return viz; } },
+    BCViz: createBCVizStub(window, function () { return viz; }),
     setTimeout: timers.setTimeout,
     clearTimeout: timers.clearTimeout,
     console: console,
