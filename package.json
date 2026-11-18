@@ -31,11 +31,11 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "acorn": "8.19.0",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "milkdrop-eel-parser": "0.0.4",
     "milkdrop-preset-utils": "0.2.1",
     "milkdrop-shader-converter": "0.0.8",
     "patch-package": "8.0.1",
-    "serve": "14.2.6"
+    "serve": "14.2.8"
   }
 }
