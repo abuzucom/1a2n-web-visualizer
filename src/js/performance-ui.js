@@ -124,9 +124,9 @@
     }
     const name = cycle.order[cycle.position];
     cycle.position += 1;
-    const index = runtimeIndex.get(name);
-    if (index === undefined) return;
-    viz.goto(index);
+    // eligibleNames admits only names in runtimeIndex, and both maps are fixed
+    // at load, so every name in a cycle has an index.
+    viz.goto(runtimeIndex.get(name));
     say(category + ': ' + name);
   }
 

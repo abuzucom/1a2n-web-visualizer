@@ -1,6 +1,7 @@
 /*
  * visualizer-core.js
- * Shared butterchurn controller used by both obs.html and fullscreen.html.
+ * Shared butterchurn controller for every visualizer page: obs.html,
+ * fullscreen.html, demo.html, mobile.html, and performance.html.
  *
  * Loaded as a classic script so it works from file:// without CORS issues.
  * Exposes a single global: window.BCViz.
@@ -330,7 +331,8 @@
     };
   }
 
-  /** Presets that are neither excluded, nor failed, nor already played. */
+  /** Presets that are neither excluded nor failed. The played session's
+   * pickUnplayed then skips the ones this session already played. */
   function unplayedNames(controller) {
     const names = [];
     for (let index = 0; index < controller.store.keys.length; index++) {
@@ -529,7 +531,8 @@
   }
 
   /**
-   * Remove the current preset by triggering the removal script, if available.
+   * Exclude the current preset for this session, move on, and return its name.
+   * Nothing leaves the library. tools/remove_presets.js does that offline.
    */
   function removeCurrent(controller) {
     if (!controller.store.keys.length) return null;
@@ -542,7 +545,7 @@
   }
 
   /**
-   * Mark the current preset as a favorite and print its name to the console.
+   * Add the current preset to this session's favorites and return its name.
    */
   function favoriteCurrent(controller) {
     if (!controller.store.keys.length) return null;
@@ -552,7 +555,8 @@
   }
 
   /**
-   * Create and attach the keyboard controller for preset playback.
+   * Create the playback state: the current index, the cycle timer, and the
+   * session's excluded and favorite sets. Key handling lives in the page scripts.
    */
   function createPlaybackController(store, opts, onToast, onPreset, canvas) {
     return {
@@ -805,7 +809,8 @@
   }
 
   /**
-   * Coordinate the loading of all experimental texture parts.
+   * Apply the base butterchurnExtraImages textures. The experimental
+   * texture parts load separately through ensureExperimentalImages.
    */
   function loadExtraImages(audio) {
     const library = getLib('butterchurnExtraImages');
@@ -1143,7 +1148,8 @@
   }
 
   /**
-   * Build and return an API interface for external code to manage the visualizer.
+   * Build and return the internal audio and render state for one visualizer.
+   * create() wraps it in the public controller API.
    */
   function createAudioController(canvas, opts, onToast) {
     return {

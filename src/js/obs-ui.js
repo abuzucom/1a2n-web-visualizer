@@ -68,13 +68,15 @@
   // Populate preset dropdown. With the extra collection this is 15k+
   // entries, so build the options off-DOM and offer a text filter.
   const keys = viz.keys();
+  // Lowercased once. The filter rebuilds on every keystroke over 15k+ names.
+  const lowerKeys = keys.map(function (name) { return name.toLowerCase(); });
   const filterEl = document.getElementById('presetFilter');
 
   function rebuildPresetList() {
     const needle = (filterEl.value || '').toLowerCase();
     const frag = document.createDocumentFragment();
     keys.forEach(function (name, i) {
-      if (needle && name.toLowerCase().indexOf(needle) === -1) return;
+      if (needle && lowerKeys[i].indexOf(needle) === -1) return;
       const o = document.createElement('option');
       o.value = i; o.textContent = name;
       frag.appendChild(o);

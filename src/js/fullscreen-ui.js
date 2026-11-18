@@ -346,7 +346,7 @@
     copyText(text, assignmentText, 'Copied the energy assignment block');
   }
 
-  async function start() {
+  function start() {
     if (viz.isStarted() || startupPending) return;
     startupPending = true;
     showStartupStatus();
