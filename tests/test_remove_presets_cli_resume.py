@@ -33,6 +33,7 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         (self.root / "tools").mkdir()
         (self.root / "src" / "presets-extra").mkdir(parents=True)
         shutil.copy(TOOL_PATH, self.root / "tools" / "remove_presets.js")
+        shutil.copy(TOOL_PATH.with_name("preset_source.js"), self.root / "tools" / "preset_source.js")
         self.write("src/presets-extra/index.js", INDEX_PREFIX + json.dumps(INDEX_DATA, separators=(",", ":")) + ";")
         self.write("src/presets-extra/chunk-000.js", chunk_text(0, {"Alpha": {"a": 1}, "Beta": {"b": 2}}))
         self.write("src/presets-extra/chunk-9000.js", chunk_text(1, {"Gamma": {"g": 3}}))

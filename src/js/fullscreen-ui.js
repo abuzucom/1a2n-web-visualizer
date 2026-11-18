@@ -29,8 +29,6 @@
   const copyAssignmentsBtn = document.getElementById('copyAssignmentsBtn');
   const closeAssignedBtn  = document.getElementById('closeAssignedBtn');
   const cornerButtons = [removeBtn, excludedBtn, favoriteBtn, favoritesBtn];
-  const TEXT_ENTRY_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
-  const ACTIVATION_TAGS = ['BUTTON', 'A', 'SUMMARY'];
   let panelOpener = null;
 
   /* The curation keys and the assigned-presets panel belong to the
@@ -64,23 +62,10 @@
     toastTimer = setTimeout(function () { toast.classList.remove('show'); }, TOAST_DURATION_MS);
   }
 
-  /* Both globals arrive as separate deferred scripts, so the pages' script
-   * order is what makes them present. visualizer-core.js guards the same way:
-   * a reorder or a missing file must degrade the message, not turn every
-   * device-error path into a TypeError. */
-  function describeDeviceError(error) {
-    const errors = window.BCDeviceErrors;
-    if (errors && typeof errors.describe === 'function') return errors.describe(error);
-    return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
-  }
-
-  const NO_PREFS = {
-    read: function () { return null; },
-    write: function () { return false; },
-    clear: function () {},
-    resolve: function () { return ''; },
-  };
-  const audioPrefs = window.BCAudioPrefs || NO_PREFS;
+  /* BCViz guards both optional globals. demo.html loads neither
+   * device-errors.js nor audio-prefs.js, and still starts. */
+  const describeDeviceError = BCViz.describeDeviceError;
+  const audioPrefs = BCViz.audioPrefs();
 
   function labelFor(deviceId) {
     const match = viz.listDevices().find(function (d) { return d.deviceId === deviceId; });
@@ -389,25 +374,8 @@
     }, 0);
   }
 
-  /* Shortcuts must not steal keys that the focused element handles natively:
-   * typing in a text field, or Space and Enter activating a button or link.
-   * Browser and system combinations with Ctrl, Cmd, or Alt pass through.
-   * Shift stays allowed because ?, <, >, _ and + need it. */
-  function shouldIgnoreShortcut(e) {
-    if (e.ctrlKey || e.metaKey || e.altKey) return true;
-    const target = e.target;
-    if (!target || !target.tagName) return false;
-    if (TEXT_ENTRY_TAGS.indexOf(target.tagName) !== -1 || target.isContentEditable) {
-      return e.key !== 'Escape';
-    }
-    if (ACTIVATION_TAGS.indexOf(target.tagName) !== -1) {
-      return e.key === ' ' || e.key === 'Enter';
-    }
-    return false;
-  }
-
   document.addEventListener('keydown', function (e) {
-    if (shouldIgnoreShortcut(e)) return;
+    if (BCViz.shouldIgnoreShortcut(e)) return;
     if (!viz.isStarted()) {
       if (e.key.length === 1 || e.key === 'Enter') start();  // ignore bare modifier presses
       return;

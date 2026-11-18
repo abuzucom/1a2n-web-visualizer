@@ -4,6 +4,53 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.3] (2026-11-18)
+
+### Changed
+- Share one bracket matcher and one `index.js` reader between
+  `tools/remove_presets.js` and `tools/analyze_curation_history.js`
+  through the new `tools/preset_source.js`. The chunk reader moves there
+  too. `analyze_curation_history.js` now rejects an `index.js` with an
+  unexpected wrapper instead of slicing it blindly.
+- The removal and history tool test fixtures copy
+  `tools/preset_source.js` beside the tool under test.
+
+### Added
+- Cover the shared matcher and wrapper readers in
+  `tests/test_preset_source.js`.
+
+## [1.22.2] (2026-11-18)
+
+### Changed
+- Use the shared `BCViz` helpers in `obs-ui.js`, `fullscreen-ui.js`,
+  and `performance-ui.js`. The page scripts no longer carry their own
+  `describeDeviceError`, audio-prefs fallback, or shortcut filter.
+  Behavior stays the same.
+
+### Added
+- Fail the test suite when a page script defines its own copy of a
+  shared `BCViz` helper. The check covers declarations, function
+  expressions, and arrow functions.
+
+## [1.22.1] (2026-11-18)
+
+### Changed
+- Give the page-script unit tests the real shared `BCViz` helpers. The
+  new `tests/support/bcviz-stub.js` loads them from `visualizer-core.js`
+  beside each test's own `create()`. No assertion changes.
+
+## [1.22.0] (2026-11-18)
+
+### Added
+- Expose `describeDeviceError`, `audioPrefs`, and `shouldIgnoreShortcut`
+  on `BCViz`. Each page script carries its own copy of these helpers
+  today. `audioPrefs` returns an inert store when `audio-prefs.js` is
+  absent. `describeDeviceError` keeps its fallback for a missing
+  `device-errors.js`. The existing `create` and `createPlayedSession`
+  properties stay unchanged.
+- Fail the test suite when a `tools/*.py` file carries a `noqa`
+  suppression.
+
 ## [1.21.1] (2026-11-17)
 
 ### Fixed

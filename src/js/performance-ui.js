@@ -11,8 +11,6 @@
   const MAX_TOAST_LENGTH = 60;
   const TRUNCATED_TOAST_LENGTH = 57;
   const TOAST_DURATION_MS = 2400;
-  const TEXT_ENTRY_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
-  const ACTIVATION_TAGS = ['BUTTON', 'A', 'SUMMARY'];
 
   let toastTimer = null;
   let startupPending = false;
@@ -25,21 +23,10 @@
     toastTimer = setTimeout(function () { toast.classList.remove('show'); }, TOAST_DURATION_MS);
   }
 
-  /* Both globals arrive as separate deferred scripts, so the pages' script
-   * order is what makes them present. */
-  function describeDeviceError(error) {
-    const errors = window.BCDeviceErrors;
-    if (errors && typeof errors.describe === 'function') return errors.describe(error);
-    return (error && error.name ? error.name + ': ' : '') + ((error && error.message) || String(error));
-  }
-
-  const NO_PREFS = {
-    read: function () { return null; },
-    write: function () { return false; },
-    clear: function () {},
-    resolve: function () { return ''; },
-  };
-  const audioPrefs = window.BCAudioPrefs || NO_PREFS;
+  /* BCViz guards both optional globals, so a missing device-errors.js or
+   * audio-prefs.js degrades the wording or the memory, never throws. */
+  const describeDeviceError = BCViz.describeDeviceError;
+  const audioPrefs = BCViz.audioPrefs();
 
   const viz = BCViz.create(canvas, {
     onToast: say, cycleSecs: 20, cycleOn: false, shuffle: false, randomFirst: true,
@@ -164,22 +151,8 @@
     }
   }
 
-  /* Shortcuts must not steal keys that the focused element handles natively. */
-  function shouldIgnoreShortcut(e) {
-    if (e.ctrlKey || e.metaKey || e.altKey) return true;
-    const target = e.target;
-    if (!target || !target.tagName) return false;
-    if (TEXT_ENTRY_TAGS.indexOf(target.tagName) !== -1 || target.isContentEditable) {
-      return e.key !== 'Escape';
-    }
-    if (ACTIVATION_TAGS.indexOf(target.tagName) !== -1) {
-      return e.key === ' ' || e.key === 'Enter';
-    }
-    return false;
-  }
-
   document.addEventListener('keydown', function (e) {
-    if (shouldIgnoreShortcut(e)) return;
+    if (BCViz.shouldIgnoreShortcut(e)) return;
     if (!viz.isStarted()) {
       if (e.key.length === 1 || e.key === 'Enter') start();
       return;
