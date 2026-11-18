@@ -51,7 +51,7 @@ function validateCompiledShader(source) {
 }
 
 /**
- * Listen for messages from the parent process and convert presets.
+ * Convert the one shader body named on the command line and print the GLSL.
  */
 function main() {
   const [, , inputPath] = process.argv;

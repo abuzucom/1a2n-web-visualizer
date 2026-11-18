@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.5] (2026-11-18)
+
+### Changed
+- `docs/repo-guide.md` states that both preset validators parse every
+  converted equation with acorn and catch a JS `SyntaxError`. They still
+  miss shader link failures and errors that appear only at run time.
+- Correct the docstrings of `runBatch` and `main` in
+  `tools/convert-milk-presets.js`, `main` in
+  `tools/convert-shader-worker.js`, and `readChunk` and
+  `findInvalidPresets` in `tools/validate-preset-chunks.js`.
+- `main` in `tools/convert-milk-presets.js` is no longer `async`. It
+  awaits nothing.
+- Drop the unused `index` parameter from `readChunk` in
+  `tools/validate-preset-chunks.js`.
+
 ## [1.22.4] (2026-11-18)
 
 ### Changed

@@ -27,9 +27,10 @@ function readIndex() {
 }
 
 /**
- * Read and return the presets from the specified experimental chunk file.
+ * Read and return the presets from one chunk file. The callback in the file
+ * must name the given logical chunk id.
  */
-function readChunk(index, cid, filename) {
+function readChunk(cid, filename) {
   const chunkPath = path.join(ROOT, 'src', 'presets-extra', filename);
   const text = fs.readFileSync(chunkPath, 'utf8').trim();
   const prefix = `window.__bcPresetChunk(${cid},`;
@@ -48,13 +49,14 @@ function chunkFilename(index, cid) {
 }
 
 /**
- * Find and return invalid presets that fail parsing or evaluation.
+ * Find and return the presets whose equations fail to parse. Parsing uses
+ * acorn and never executes preset text.
  */
 function findInvalidPresets(index) {
   const invalid = [];
   index.chunks.forEach(function (_, cid) {
     const filename = chunkFilename(index, cid);
-    const chunk = readChunk(index, cid, filename);
+    const chunk = readChunk(cid, filename);
     Object.entries(chunk).forEach(function ([name, preset]) {
       try {
         validatePresetEquations(preset);

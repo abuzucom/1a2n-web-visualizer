@@ -242,7 +242,9 @@ function findMilkFiles(dir) {
 }
 
 /**
- * Distribute conversion tasks across worker processes and return a promise array.
+ * Convert every .milk file under rootDir in this process, one after another,
+ * and print the {name: preset} map as JSON to stdout. Progress, warnings, and
+ * failures go to stderr.
  */
 function runBatch(rootDir) {
   const files = findMilkFiles(rootDir);
@@ -281,9 +283,9 @@ function runBatch(rootDir) {
 }
 
 /**
- * Prepare paths and start the conversion pipeline for presets.
+ * Convert one .milk file, or every file under a directory with --dir.
  */
-async function main() {
+function main() {
   const args = process.argv.slice(ARGS_START);
   if (args[0] === '--dir') {
     if (!args[1]) {

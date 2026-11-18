@@ -204,12 +204,12 @@ assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
   `tests/test_preset_equation_allowlist.py` runs it over the whole corpus.
   Never widen the allowlist to admit an imported preset. Exclude the preset
   instead.
-- `validate-experimental-presets.js` and `validate-preset-chunks.js` only
-  check JSON shape. Neither one catches a WebGL shader link failure or a
-  JS `SyntaxError` in a converted equation, since both only surface when
-  butterchurn actually compiles and runs the preset; a batch can pass both
-  validators, lint, and `npm test` while a large fraction of it is broken
-  at runtime. Before treating an import batch as done, load
+- `validate-experimental-presets.js` and `validate-preset-chunks.js` parse
+  every converted equation with acorn, so they catch a JS `SyntaxError`.
+  Neither one catches a WebGL shader link failure or an error that only
+  appears when an equation runs. Both surface only when butterchurn
+  compiles and runs the preset. A batch can pass both validators, lint,
+  and `npm test` while a large fraction of it is broken at runtime. Before treating an import batch as done, load
   `src/demo.html` in a real browser (`data-demo="1"` gives synthetic
   audio, so no microphone is needed) or force `BCViz.create()`'s
   `opts.demo = true` when driving `obs.html`/`fullscreen.html` instead,
