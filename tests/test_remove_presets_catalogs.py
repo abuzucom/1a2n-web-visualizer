@@ -43,6 +43,7 @@ class RemovePresetsCatalogTest(unittest.TestCase):
         (self.root / "src" / "presets-extra").mkdir(parents=True)
         (self.root / "src" / "catalogs").mkdir(parents=True)
         shutil.copy(TOOL_PATH, self.root / "tools" / "remove_presets.js")
+        shutil.copy(TOOL_PATH.with_name("preset_source.js"), self.root / "tools" / "preset_source.js")
         self.write("src/presets-extra/index.js", INDEX_TEXT)
         self.write("src/presets-extra/chunk-000.js", CHUNK_ZERO)
         self.write("src/presets-extra/chunk-001.js", CHUNK_ONE)

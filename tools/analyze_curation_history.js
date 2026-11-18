@@ -28,6 +28,7 @@
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
+const { findMatchingCloser, parseIndexSource } = require('./preset_source.js');
 
 const ROOT = require('path').join(__dirname, '..');
 
@@ -105,10 +106,7 @@ function fileExistsAt(hash, path) {
  */
 function getIndexChunks(hash) {
   const raw = git(['show', `${validateCommit(hash)}:src/presets-extra/index.js`]);
-  const prefix = 'window.BCExtraPresetIndex=';
-  const trimmed = raw.trimEnd();
-  const json = trimmed.slice(prefix.length, trimmed.length - 1);
-  return JSON.parse(json).chunks;
+  return parseIndexSource(raw).data.chunks;
 }
 
 /**
@@ -133,32 +131,6 @@ function getVendorKeys(hash, vendorPath) {
   for (const match of raw.matchAll(assignment)) names.add(match[1]);
   if (!names.size) throw new Error(`unrecognized vendor map in ${vendorPath}`);
   return names;
-}
-
-/**
- * Find and return the matching closing bracket in a Javascript source string.
- */
-function findMatchingCloser(text, startIndex, opener = '{', closer = '}') {
-  let depth = 0;
-  let inString = null;
-  let escaped = false;
-  for (let i = startIndex; i < text.length; i++) {
-    const character = text[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (character === '\\') escaped = true;
-      else if (character === inString) inString = null;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      inString = character;
-    } else if (character === opener) {
-      depth++;
-    } else if (character === closer && --depth === 0) {
-      return i;
-    }
-  }
-  return -1;
 }
 
 /**
