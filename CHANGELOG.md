@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.21.3] (2026-11-17)
+## [1.22.3] (2026-11-18)
 
 ### Changed
 - Share one bracket matcher and one `index.js` reader between
@@ -19,7 +19,7 @@ All notable changes to this project are documented here. Format loosely follows
 - Cover the shared matcher and wrapper readers in
   `tests/test_preset_source.js`.
 
-## [1.21.2] (2026-11-15)
+## [1.22.2] (2026-11-18)
 
 ### Changed
 - Use the shared `BCViz` helpers in `obs-ui.js`, `fullscreen-ui.js`,
@@ -32,14 +32,14 @@ All notable changes to this project are documented here. Format loosely follows
   shared `BCViz` helper. The check covers declarations, function
   expressions, and arrow functions.
 
-## [1.21.1] (2026-11-15)
+## [1.22.1] (2026-11-18)
 
 ### Changed
 - Give the page-script unit tests the real shared `BCViz` helpers. The
   new `tests/support/bcviz-stub.js` loads them from `visualizer-core.js`
   beside each test's own `create()`. No assertion changes.
 
-## [1.21.0] (2026-11-15)
+## [1.22.0] (2026-11-18)
 
 ### Added
 - Expose `describeDeviceError`, `audioPrefs`, and `shouldIgnoreShortcut`
@@ -50,6 +50,29 @@ All notable changes to this project are documented here. Format loosely follows
   properties stay unchanged.
 - Fail the test suite when a `tools/*.py` file carries a `noqa`
   suppression.
+
+## [1.21.1] (2026-11-17)
+
+### Fixed
+- Warn on stderr when the `--names-file` path of
+  `tools/remove_presets.js` resolves outside the repository. The check
+  follows symlinks. The run continues. Callers that keep a names file
+  elsewhere keep working.
+
+## [1.21.0] (2026-11-17)
+
+### Changed
+- Pin the `lodash` override to the locked version, 4.18.1.
+- Pull the Caddy base image by digest instead of the moving
+  `caddy:2-alpine` tag.
+- Install ruff 0.16.9 in CI from `requirements-ruff.txt` with
+  `--require-hashes`. The unversioned `astral-sh/ruff-action` step is gone.
+  The lint rules in `pyproject.toml` stay the same.
+
+### Added
+- A report-only CI step that runs the organization ruff baseline from
+  `.github/ruff-baseline/` and prints finding counts. It never fails the
+  build.
 
 ## [1.20.5] (2026-11-15)
 
