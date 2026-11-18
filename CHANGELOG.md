@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.4] (2026-11-18)
+
+### Changed
+- Correct seven comments in `src/js/visualizer-core.js` that contradicted
+  the code: the file header, `unplayedNames`, `removeCurrent`,
+  `favoriteCurrent`, `createPlaybackController`, `loadExtraImages`, and
+  `createAudioController`.
+- `start()` in `src/js/fullscreen-ui.js` is no longer `async`. It awaits
+  nothing, and no caller awaits it.
+- Drop a check in `src/js/performance-ui.js` that can never fail. Every
+  name in a category cycle already has a runtime index.
+- `src/js/obs-ui.js` lowercases the preset names once at load instead of
+  on every filter rebuild.
+
+### Added
+- Cover the case-insensitive OBS preset filter in
+  `tests/test_obs_preset_filter.js`.
+
 ## [1.22.3] (2026-11-18)
 
 ### Changed
