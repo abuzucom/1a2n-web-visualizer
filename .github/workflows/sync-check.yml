@@ -2,9 +2,9 @@ name: Convention Sync Check
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ develop, main ]
   pull_request:
-    branches: [ develop ]
+    branches: [ develop, main ]
     types: [opened, synchronize, reopened, ready_for_review, edited]
 
 concurrency:

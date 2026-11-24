@@ -9,8 +9,8 @@ loads `AUDIT.md` as the model's system prompt and returns a verdict of
 
 1. A pull request event starts the `Checks` workflow.
 2. `Checks` completes and starts `security-review-pr.yml` through
-   `workflow_run`. That event runs the caller from `develop`. A pull request
-   therefore cannot edit the reviewer that judges it.
+   `workflow_run`. That event runs the caller from the default branch. A pull
+   request therefore cannot edit the reviewer that judges it.
 3. The `resolve-pr` job maps the run's head commit to exactly one pull
    request. It skips a head that already carries a `security-review` check
    run with a verdict.
@@ -55,6 +55,6 @@ uses `secrets: inherit`, since the job sends an untrusted diff to a provider.
 - Add the `OLLAMA_API_KEY` repository secret. The review fails until it
   exists.
 - After the first successful run, optionally require the `security-review`
-  check in branch protection for `develop`.
-- `workflow_run` runs appear under `develop` in the Actions tab, not on the
-  pull request branch.
+  check in branch protection for `main` and `develop`.
+- `workflow_run` runs appear under the default branch in the Actions tab, not
+  on the pull request branch.

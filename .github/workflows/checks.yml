@@ -1,8 +1,8 @@
 name: Checks
 
 # Keeps AGENTS.md-derived docs and code quality enforced on every change.
-# Separate from deploy.yml (Pages publishing has different
-# triggers/permissions and isn't relevant here).
+# The Vercel deployment runs outside GitHub Actions, so no publishing
+# workflow runs here.
 on:
   pull_request:
   push:
@@ -10,7 +10,7 @@ on:
     # default-branch baseline report that coverage comparison needs. Job-level
     # `if: github.event_name == 'pull_request'` gates keep unrelated jobs from
     # running here.
-    branches: [develop]
+    branches: [develop, main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

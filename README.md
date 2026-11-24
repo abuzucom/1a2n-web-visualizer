@@ -5,7 +5,8 @@ MilkDrop-style audio visualizer pages built with [butterchurn](https://github.co
 
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
 `/fullscreen.html`, `/demo.html`, `/mobile.html`, and `/performance.html`).
-GitHub Actions deploys it from the `develop` branch.
+Vercel deploys it from the `main` branch. The `develop` branch deploys to
+<https://test.visualizer.1a2n.net/>.
 
 All entry points share one controller module:
 
@@ -34,7 +35,9 @@ butterchurn-visualizer/
 +-- docker-compose.yml      # Docker Compose deployment configuration
 +-- .dockerignore
 +-- .github/
-|   +-- workflows/          # Deployment, lint, security, and pin checks
+|   +-- workflows/          # Lint, security, and pin checks
++-- vercel.json             # Vercel deployment configuration
++-- .vercelignore           # Limits the deployment payload to src/
 +-- patches/                # Native converter compatibility patch
 +-- scripts/                # CI checks and instruction synchronization
 +-- tests/                  # CI check tests
@@ -205,9 +208,9 @@ you are not watching. Serve over HTTP for the full behavior; a `file://` origin
 cannot use the AudioWorklet frame clock and falls back to about 1 fps while
 hidden.
 
-## Hosted Deployment (GitHub Pages)
+## Hosted Deployment (Vercel)
 
-GitHub Pages hosts the production environment at **`visualizer.1a2n.net`**:
+Vercel hosts the production environment at **`visualizer.1a2n.net`**:
 
 ```text
 https://visualizer.1a2n.net/obs.html
@@ -217,15 +220,25 @@ https://visualizer.1a2n.net/mobile.html
 https://visualizer.1a2n.net/performance.html
 ```
 
-On every push to `develop`, `.github/workflows/deploy.yml` publishes `src/`.
+The staging environment at **`test.visualizer.1a2n.net`** serves the `develop`
+branch. Every other branch gets its own preview URL.
 
-To deploy from a fork or new clone, select **Settings -> Pages -> Source -> GitHub Actions**. The site will be available at `https://<user>.github.io/<repo>/`.
+The Vercel project publishes `src/` and nothing else. `vercel.json` sets the
+framework to none, the output directory to `src`, and skips the install and
+build commands, because the site ships as committed static files. `.vercelignore`
+keeps the rest of the repository out of the deployment payload.
 
-GitHub Pages serves content over HTTPS, so browser audio capture needs no local workaround. In OBS, create a Browser Source in URL mode and use the `obs.html` URL.
+Vercel deploys through its Git integration. A push to `main` publishes the
+production environment, and a push to `develop` publishes the staging
+environment. No GitHub Actions workflow deploys the site.
+
+The deployment serves content over HTTPS, so browser audio capture needs no
+local workaround. In OBS, create a Browser Source in URL mode and use the
+`obs.html` URL.
 
 ## Local Hosting
 
-Run without GitHub Pages in one of three ways: open `src/fullscreen.html` from the filesystem (`file://`), use a local development server, or run Docker:
+Run without the hosted deployment in one of three ways: open `src/fullscreen.html` from the filesystem (`file://`), use a local development server, or run Docker:
 
 ```bash
 docker compose up -d --build

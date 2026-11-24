@@ -11,7 +11,6 @@ import check_action_pins
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-DEPLOY_WORKFLOW = WORKFLOW_DIR / "deploy.yml"
 DEPLOY_PAGES_ACTION = "actions/deploy-pages@"
 
 
@@ -39,7 +38,7 @@ class RepositoryWorkflowPinTest(unittest.TestCase):
 
 
 class DeployRetryPinTest(unittest.TestCase):
-    """The deploy retry must run the same action revision as the first attempt."""
+    """The repository holds no Pages deploy action that could drift."""
 
     def test_detector_flags_a_partial_bump(self) -> None:
         workflow = {"jobs": {"deploy": {"steps": [
@@ -48,13 +47,12 @@ class DeployRetryPinTest(unittest.TestCase):
         ]}}}
         self.assertEqual(len(set(deploy_pages_references(workflow))), 2)
 
-    def test_first_attempt_and_retry_share_one_revision(self) -> None:
-        workflow = yaml.safe_load(DEPLOY_WORKFLOW.read_text(encoding="utf-8"))
-        references = deploy_pages_references(workflow)
-        # deploy.yml tolerates one Pages failure, then retries. Both steps
-        # must move together or the retry runs a different action version.
-        self.assertGreaterEqual(len(references), 2)
-        self.assertEqual(len(set(references)), 1, references)
+    def test_no_workflow_references_a_pages_deploy_action(self) -> None:
+        paths = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(WORKFLOW_DIR.glob("*.yaml"))
+        for path in paths:
+            workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+            with self.subTest(workflow=path.name):
+                self.assertEqual(deploy_pages_references(workflow), [])
 
 
 if __name__ == "__main__":

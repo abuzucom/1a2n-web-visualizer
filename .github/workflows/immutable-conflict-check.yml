@@ -2,7 +2,7 @@ name: Immutable Compliance
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     types: [opened, synchronize, reopened, ready_for_review, edited]
 
 concurrency:
