@@ -2,7 +2,7 @@ name: AGENTS.md Compliance
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ develop, main ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

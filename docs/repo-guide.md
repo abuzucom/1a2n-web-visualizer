@@ -123,8 +123,10 @@ assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
   `check_action_pins.py` enforces
   commit-pinned GitHub Actions, `check_protected_files.py` backs the
   protected-file review gate.
-- Deployed via `.github/workflows/deploy.yml` to GitHub Pages on push to
-  `develop`; alternatively self-hosted via the included Docker/Caddy config.
+- Deployed to Vercel through its Git integration: `main` publishes the
+  production environment and `develop` publishes the staging environment.
+  `vercel.json` and `.vercelignore` define the deployment payload, which is
+  `src/`. Alternatively self-hosted via the included Docker/Caddy config.
   Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff,
   HTML/CSS validation via the Nu Html Checker), `protected-files.yml`
   (code-owner approval gate, see `docs/protected-file-review.md`),
@@ -280,7 +282,7 @@ The 1.15.0 security review recorded these findings without a code change.
   The job holds a read-only token. `docs/agent-policy/enforcement.md`
   documents the fallback as template behavior. Any change belongs upstream
   in `abuzucom/agents`.
-- GitHub Pages sends no `X-Frame-Options` header. A `<meta>` CSP cannot set
+- Vercel sends no `X-Frame-Options` header. A `<meta>` CSP cannot set
   `frame-ancestors`. Another site can therefore frame the hosted pages.
   Microphone audio never leaves the browser. The Caddy deployment sends
   `X-Frame-Options: DENY`.

@@ -1,6 +1,6 @@
 # Local Usage and Internal Hosting
 
-The primary deployment uses GitHub Pages (<https://visualizer.1a2n.net/>), but
+The primary deployment uses Vercel (<https://visualizer.1a2n.net/>), but
 the site does not depend on it. The repository includes every library and
 preset, including about 60,000 presets, so the site runs offline the same way.
 Use one of three local modes:
@@ -86,6 +86,7 @@ internet.
 
 - The image contains only `src/` and the Caddyfile (see `.dockerignore`).
   Rebuild after pulling new commits with `docker compose up -d --build`.
-- The public deployment is at <https://visualizer.1a2n.net/>. Do not expose
-  this container to the internet; it provides neither authentication nor rate
+- The public deployment is at <https://visualizer.1a2n.net/>. The staging
+  deployment is at <https://test.visualizer.1a2n.net/>. Do not expose this
+  container to the internet; it provides neither authentication nor rate
   limiting.

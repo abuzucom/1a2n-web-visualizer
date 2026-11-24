@@ -4,6 +4,31 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.23.0] (2026-11-24)
+
+### Changed
+- Deploy the site through Vercel instead of GitHub Pages. `vercel.json`
+  publishes `src/` as a static site, and `.vercelignore` keeps the rest of
+  the repository out of the deployment payload.
+- `main` publishes the production environment at `visualizer.1a2n.net`.
+  `develop` publishes the staging environment at `test.visualizer.1a2n.net`.
+  Every other branch receives a preview deployment.
+- Run the `Checks`, `Convention Sync Check`, `AGENTS.md Compliance`, `Gate
+  Integrity`, and `Immutable Compliance` workflows on `main` as well as on
+  `develop`.
+- Target `develop` in `.github/dependabot.yml`. Dependency pull requests land
+  on the staging branch.
+- Describe the Vercel deployment in `README.md`, `SECURITY.md`,
+  `docs/local-hosting.md`, `docs/repo-guide.md`, `docs/protected-file-review.md`,
+  and `docs/pr-security-review.md`.
+
+### Removed
+- Delete `.github/workflows/deploy.yml`. Vercel deploys through its Git
+  integration. No GitHub Actions workflow publishes the site.
+- Delete `tests/test_pages_deployment_boundary.py`. Add
+  `tests/test_vercel_deployment_boundary.py` to assert the Vercel deployment
+  boundary.
+
 ## [1.22.5] (2026-11-18)
 
 ### Changed

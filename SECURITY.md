@@ -56,13 +56,14 @@ itself, and a maintainer will follow up with an alternative channel.
 - Findings that require physical access to a machine already running the
   visualizer, or that assume the operator has ignored this document's
   deployment guidance (e.g. exposing the Docker port beyond `127.0.0.1`).
-- Vulnerabilities in GitHub Pages, Docker, Caddy, or Node/npm/Python
+- Vulnerabilities in Vercel, Docker, Caddy, or Node/npm/Python
   themselves; report those upstream.
 
 ## Supported versions
 
 This project does not maintain multiple release branches. Only the code
-currently on `develop` (what GitHub Pages deploys, and what
+currently on `main` (what the Vercel production environment deploys) and on
+`develop` (what the Vercel staging environment deploys, and what
 `docker compose up -d --build` builds from `HEAD` of your checkout) is
 supported. There is no backport policy for older tags.
 

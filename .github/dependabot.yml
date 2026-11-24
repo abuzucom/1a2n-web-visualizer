@@ -9,6 +9,9 @@ updates:
   # JavaScript / TypeScript dependencies (npm).
   - package-ecosystem: "npm"
     directory: "/"
+    # Dependency updates land on the staging branch. The production branch
+    # receives them through the develop to main promotion.
+    target-branch: "develop"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -29,6 +32,9 @@ updates:
   # GitHub Actions used across .github/workflows/*.
   - package-ecosystem: "github-actions"
     directory: "/"
+    # Dependency updates land on the staging branch. The production branch
+    # receives them through the develop to main promotion.
+    target-branch: "develop"
     schedule:
       interval: "weekly"
       day: "monday"

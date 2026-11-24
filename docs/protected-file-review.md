@@ -36,6 +36,7 @@ branch, and never executes code from the pull request branch.
 
 ## Branch Settings
 
-Require pull requests and the protected-file status check on `develop`. Do not
-enable GitHub's global code-owner approval requirement for this single-owner
-repository, because it would make owner-authored pull requests unmergeable.
+Require pull requests and the protected-file status check on `main` and on
+`develop`. Do not enable GitHub's global code-owner approval requirement for
+this single-owner repository, because it would make owner-authored pull
+requests unmergeable.

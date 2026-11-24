@@ -1,0 +1,5 @@
+# Publish only the site tree. The deployment payload is src/, and every
+# other path in the repository is repository data rather than site content.
+*
+!src/
+!src/**
