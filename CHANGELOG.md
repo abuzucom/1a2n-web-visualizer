@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.23.1] (2026-11-24)
+
+### Changed
+- Correct the staging hostname. The staging environment serves the `develop`
+  branch at `develop.visualizer.1a2n.net`.
+
 ## [1.23.0] (2026-11-24)
 
 ### Changed
