@@ -6,7 +6,7 @@ MilkDrop-style audio visualizer pages built with [butterchurn](https://github.co
 **Production Deployment:** <https://visualizer.1a2n.net/> (`/obs.html`,
 `/fullscreen.html`, `/demo.html`, `/mobile.html`, and `/performance.html`).
 Vercel deploys it from the `main` branch. The `develop` branch deploys to
-<https://test.visualizer.1a2n.net/>.
+<https://develop.visualizer.1a2n.net/>.
 
 All entry points share one controller module:
 
@@ -220,7 +220,7 @@ https://visualizer.1a2n.net/mobile.html
 https://visualizer.1a2n.net/performance.html
 ```
 
-The staging environment at **`test.visualizer.1a2n.net`** serves the `develop`
+The staging environment at **`develop.visualizer.1a2n.net`** serves the `develop`
 branch. Every other branch gets its own preview URL.
 
 The Vercel project publishes `src/` and nothing else. `vercel.json` sets the
