@@ -18,7 +18,8 @@ def load_tool(name):
 
 
 class RemediationTests(unittest.TestCase):
-    def test_history_analyzer_runs_without_bundle_execution(self):
+    def test_history_analyzer_skips_bundle_execution(self):
+        """History analyzer runs without bundle execution."""
         result = subprocess.run(
             ["node", "tools/analyze_curation_history.js"],
             cwd=ROOT,
@@ -59,7 +60,8 @@ class RemediationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tool.extract_source(archive_path, Path(directory) / "out")
 
-    def test_curation_tool_reads_three_column_inventory(self):
+    def test_curation_reads_three_column_inventory(self):
+        """Curation tool reads three column inventory."""
         result = subprocess.run(
             [
                 "node", "tools/remove_presets.js", "--dry-run",

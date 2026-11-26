@@ -55,7 +55,8 @@ class CurationToolTest(unittest.TestCase):
         """Return the performance catalog payload."""
         return json.loads(self.performance.read_text(encoding="utf-8"))
 
-    def test_adding_a_preset_resolves_its_pack_and_writes_the_bundle(self):
+    def test_add_resolves_pack_writes_bundle(self):
+        """Adding a preset resolves its pack and writes the bundle."""
         self.assertEqual(TOOL.main(["--add", "Alpha"]), 0)
 
         self.assertEqual(self.read_performance()["presets"], ["presets-extra:Alpha"])
@@ -63,13 +64,15 @@ class CurationToolTest(unittest.TestCase):
         self.assertTrue(bundle.startswith("window.BCEnergyCatalog = "))
         self.assertTrue(bundle.endswith(";\n"))
 
-    def test_adding_an_unknown_preset_fails_and_changes_nothing(self):
+    def test_add_unknown_preset_changes_nothing(self):
+        """Adding an unknown preset fails and changes nothing."""
         self.assertEqual(TOOL.main(["--add", "Missing Preset"]), 1)
 
         self.assertEqual(self.read_performance()["presets"], [])
         self.assertFalse(self.performance_bundle.exists())
 
-    def test_an_assignment_replaces_the_prior_category(self):
+    def test_assignment_replaces_prior_category(self):
+        """An assignment replaces the prior category."""
         block = self.root / "block.json"
         block.write_text(json.dumps({"presets": {"Alpha": "low"}}), encoding="utf-8")
         self.assertEqual(TOOL.main(["--apply-assignments", str(block)]), 0)
@@ -86,21 +89,24 @@ class CurationToolTest(unittest.TestCase):
         self.assertEqual(TOOL.main(["--apply-assignments", str(block)]), 1)
         self.assertEqual(self.read_energy()["presets"], {})
 
-    def test_an_assignment_for_an_unknown_preset_is_rejected(self):
+    def test_unknown_preset_assignment_rejected(self):
+        """An assignment for an unknown preset is rejected."""
         block = self.root / "block.json"
         block.write_text(json.dumps({"presets": {"Missing Preset": "low"}}), encoding="utf-8")
 
         self.assertEqual(TOOL.main(["--apply-assignments", str(block)]), 1)
         self.assertEqual(self.read_energy()["presets"], {})
 
-    def test_removing_a_preset_drops_it_from_the_performance_catalog(self):
+    def test_remove_drops_performance_entry(self):
+        """Removing a preset drops it from the performance catalog."""
         TOOL.main(["--add", "Alpha"])
         TOOL.main(["--add", "Beta"])
 
         self.assertEqual(TOOL.main(["--remove", "Alpha"]), 0)
         self.assertEqual(self.read_performance()["presets"], ["presets-extra:Beta"])
 
-    def test_two_removals_in_one_run_drop_both_presets(self):
+    def test_two_removals_drop_both_presets(self):
+        """Two removals in one run drop both presets."""
         TOOL.main(["--add", "Alpha"])
         TOOL.main(["--add", "Beta"])
 
@@ -110,7 +116,8 @@ class CurationToolTest(unittest.TestCase):
         self.assertNotIn("Alpha", bundle)
         self.assertNotIn("Beta", bundle)
 
-    def test_a_preset_in_two_packs_uses_the_pack_the_runtime_plays(self):
+    def test_shared_preset_uses_runtime_pack(self):
+        """A preset in two packs uses the pack the runtime plays."""
         self.assertEqual(TOOL.main(["--add", "Shared"]), 0)
 
         self.assertEqual(
@@ -118,7 +125,8 @@ class CurationToolTest(unittest.TestCase):
             ["butterchurnPresetsExtra:Shared"],
         )
 
-    def test_an_assignment_replaces_the_category_of_the_same_preset(self):
+    def test_assignment_replaces_same_preset_category(self):
+        """An assignment replaces the category of the same preset."""
         first = self.root / "first.json"
         first.write_text(json.dumps({"presets": {"butterchurnPresetsExtra:Shared": "low"}}),
                          encoding="utf-8")
@@ -134,7 +142,8 @@ class CurationToolTest(unittest.TestCase):
             {"presets-extra:Shared": "high"},
         )
 
-    def test_an_assignment_for_a_pack_that_holds_no_preset_is_rejected(self):
+    def test_empty_pack_assignment_rejected(self):
+        """An assignment for a pack that holds no preset is rejected."""
         block = self.root / "block.json"
         block.write_text(json.dumps({"presets": {"butterchurnPresets:Alpha": "low"}}),
                          encoding="utf-8")
@@ -142,7 +151,8 @@ class CurationToolTest(unittest.TestCase):
         self.assertEqual(TOOL.main(["--apply-assignments", str(block)]), 1)
         self.assertEqual(self.read_energy()["presets"], {})
 
-    def test_a_missing_performance_catalog_starts_empty(self):
+    def test_missing_performance_catalog_starts_empty(self):
+        """A missing performance catalog starts empty."""
         self.performance.unlink()
 
         self.assertEqual(TOOL.main(["--add", "Alpha"]), 0)

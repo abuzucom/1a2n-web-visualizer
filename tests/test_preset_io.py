@@ -44,7 +44,8 @@ class AtomicWriteTests(unittest.TestCase):
 
         self.assertEqual(self.path.read_bytes(), b"a\nb\n")
 
-    def test_failed_write_keeps_old_content_and_leaves_no_temporary_file(self):
+    def test_failed_write_keeps_old_content(self):
+        """Failed write keeps old content and leaves no temporary file."""
         self.path.write_text("old\n", encoding="utf-8")
 
         with self.assertRaises(TypeError):
@@ -57,7 +58,8 @@ class AtomicWriteTests(unittest.TestCase):
 class PresetHashTests(unittest.TestCase):
     """preset_hash keeps the digest recorded in experimental-presets.json."""
 
-    def test_hash_normalizes_line_endings_and_zero(self):
+    def test_hash_normalizes_endings_and_zero(self):
+        """Hash normalizes line endings and zero."""
         preset_io = load_tool("preset_io.py")
         preset = {"frame_eqs_str": "a=1;\r\nb=2;\r", "baseVals": {"zoom": 0.0, "rot": 1.5}}
         canonical = {"baseVals": {"rot": 1.5, "zoom": 0}, "frame_eqs_str": "a=1;\nb=2;\n"}
@@ -71,12 +73,14 @@ class PresetHashTests(unittest.TestCase):
 class SharedHelperTests(unittest.TestCase):
     """Every tool reaches the one shared implementation."""
 
-    def test_tools_write_through_the_shared_helper(self):
+    def test_tools_write_through_shared_helper(self):
+        """Tools write through the shared helper."""
         for name in TOOLS_WITH_WRITER:
             with self.subTest(tool=name):
                 self.assertTrue(defined_in_preset_io(load_tool(name).atomic_write_text))
 
-    def test_tools_hash_through_the_shared_helper(self):
+    def test_tools_hash_through_shared_helper(self):
+        """Tools hash through the shared helper."""
         self.assertTrue(defined_in_preset_io(load_tool("import-nestdrop-presets.py").preset_hash))
         self.assertTrue(defined_in_preset_io(load_tool("compare-experimental-presets.py").digest))
 

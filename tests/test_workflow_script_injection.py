@@ -10,8 +10,8 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
 # Contexts a pull request author controls. GitHub expands `${{ }}` into the
 # script text before bash parses it, so any of these inside `run:` executes
-# shell metacharacters from a branch name, title, or body. Pass them through
-# `env:` instead, where bash sees them as data.
+# shell metacharacters from a branch name, title, or body. Pass each value
+# through `env:` instead. Bash reads an environment value as data.
 EXPRESSION = re.compile(r"\$\{\{[^}]*\}\}")
 UNTRUSTED_CONTEXT = re.compile(
     r"\b(?:"
@@ -45,7 +45,8 @@ def find_untrusted_run_expressions(workflow: dict) -> list:
 class WorkflowScriptInjectionTest(unittest.TestCase):
     """Reject PR-controlled expressions expanded into shell scripts."""
 
-    def test_detector_flags_head_ref_in_run(self) -> None:
+    def test_detector_flags_run_head_ref(self) -> None:
+        """Detector flags head ref in run."""
         workflow = {"jobs": {"j": {"steps": [
             {"name": "s", "run": 'python3 check.py "${{ github.head_ref }}"'},
         ]}}}
@@ -61,7 +62,8 @@ class WorkflowScriptInjectionTest(unittest.TestCase):
         ]}}}
         self.assertEqual(find_untrusted_run_expressions(workflow), [])
 
-    def test_workflows_do_not_interpolate_untrusted_context(self) -> None:
+    def test_workflows_skip_untrusted_interpolation(self) -> None:
+        """Workflows do not interpolate untrusted context."""
         paths = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(WORKFLOW_DIR.glob("*.yaml"))
         self.assertTrue(paths, "no workflow files found")
         for path in paths:

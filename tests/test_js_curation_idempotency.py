@@ -57,7 +57,8 @@ class RemovalFixture(unittest.TestCase):
 class RemovalRerunTests(RemovalFixture):
     """A removal that stopped after the chunk write finishes on a re-run."""
 
-    def test_rerun_after_the_chunk_write_completes_the_removal(self):
+    def test_rerun_after_chunk_write_completes(self):
+        """Rerun after the chunk write completes the removal."""
         # The ledger and the chunk record the first run. The index and the
         # inventory still name the preset, because the run stopped there.
         self.write("src/presets-extra/index.js", index_text([["Alpha", "Beta"]], ["chunk-000.js"]))
@@ -76,7 +77,8 @@ class RemovalRerunTests(RemovalFixture):
 class RemovalPackTests(RemovalFixture):
     """A name held by two packs leaves the other pack's inventory row."""
 
-    def test_removal_keeps_the_row_of_the_pack_it_does_not_touch(self):
+    def test_removal_keeps_untouched_pack_row(self):
+        """Removal keeps the row of the pack it does not touch."""
         self.write("src/presets-extra/index.js", index_text([["Alpha"]], ["chunk-000.js"]))
         self.write("src/presets-extra/chunk-000.js", chunk_text(0, {"Alpha": {"a": 1}}))
         self.write(
@@ -106,7 +108,8 @@ class CurationHistoryTests(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-q", "-m", message)
 
-    def test_a_preset_moved_to_another_chunk_is_not_a_removal(self):
+    def test_chunk_move_is_not_removal(self):
+        """A preset moved to another chunk is not a removal."""
         with tempfile.TemporaryDirectory() as directory:
             self.root = Path(directory)
             (self.root / "tools").mkdir()

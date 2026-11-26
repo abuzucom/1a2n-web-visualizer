@@ -11,7 +11,8 @@ from scripts.check_protected_files import is_protected
 
 
 class ProtectedPresetChunkTests(unittest.TestCase):
-    def test_protects_preset_index_and_chunk_files(self) -> None:
+    def test_protects_preset_index_and_chunks(self) -> None:
+        """Protects preset index and chunk files."""
         for path in (
             "src/presets-extra/index.js",
             "src/presets-extra/chunk-000.js",
