@@ -9,6 +9,8 @@ from pathlib import Path
 
 from hooks import _gate_core
 
+BLOCKING_EXIT_CODE = 2
+
 
 class CloudflarePagesPathSecurityTest(unittest.TestCase):
     """Reject repository and credential paths from Pages deployment."""
@@ -30,7 +32,7 @@ class CloudflarePagesPathSecurityTest(unittest.TestCase):
             str(self.root),
         )
 
-    def test_rejects_workspace_root_and_hidden_directories(self) -> None:
+    def test_rejects_root_hidden_directories(self) -> None:
         for path in (".", ".git", ".agents"):
             with self.subTest(path=path):
                 self.assertEqual(self.verdict(path)[0], "deny")
@@ -105,7 +107,7 @@ class CloudflarePagesPathSecurityTest(unittest.TestCase):
                 check=False,
             )
             with self.subTest(command=command):
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         protected_file.unlink()
 
     def test_rejects_protected_target_and_contents(self) -> None:

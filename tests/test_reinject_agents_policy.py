@@ -19,6 +19,9 @@ CLAUDE_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 CODEX_HOOKS = REPO_ROOT / ".codex" / "hooks.json"
 GEMINI_SETTINGS = REPO_ROOT / ".gemini" / "settings.json"
 ANTIGRAVITY_HOOKS = REPO_ROOT / ".agents" / "hooks.json"
+BLOCKING_EXIT_CODE = 2
+CHUNK_FILLING_LINE_LENGTH = 5000
+CHUNK_FILLING_LINE_COUNT = 2
 
 
 def load_hook_module():
@@ -83,7 +86,7 @@ class PolicyContentTest(unittest.TestCase):
         context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertTrue(context.endswith(self.complete_policy))
 
-    def test_gemini_preserves_request_and_adds_policy(self):
+    def test_gemini_preserves_request(self):
         payload = {
             "hook_event_name": "BeforeModel",
             "cwd": str(REPO_ROOT),
@@ -110,7 +113,7 @@ class PolicyContentTest(unittest.TestCase):
         message = json.loads(result.stdout)["injectSteps"][0]["ephemeralMessage"]
         self.assertTrue(message.endswith(self.complete_policy))
 
-    def test_antigravity_pre_tool_use_output_is_schema_safe(self):
+    def test_antigravity_pre_tool_schema(self):
         payload = {
             "hook_event_name": "PreToolUse",
             "workspacePaths": [str(REPO_ROOT)],
@@ -121,7 +124,7 @@ class PolicyContentTest(unittest.TestCase):
         self.assertEqual(output, {})
         self.assertNotIn("injectSteps", output)
 
-    def test_claude_emits_session_context_and_numbered_chunks(self):
+    def test_claude_session_context_chunks(self):
         session = run_hook("claude", {"hook_event_name": "SessionStart"})
         self.assertEqual(session.returncode, 0, session.stderr)
         session_output = json.loads(session.stdout)["hookSpecificOutput"]
@@ -164,7 +167,7 @@ class PolicyValidationTest(unittest.TestCase):
             path.write_text("detail\n", encoding="utf-8")
         return root
 
-    def test_root_search_rejects_files_and_missing_projects(self):
+    def test_root_search_rejects_invalid(self):
         root = self.make_project()
         nested = root / "nested"
         nested.mkdir()
@@ -177,13 +180,13 @@ class PolicyValidationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.hook.find_project_root(directory.name)
 
-    def test_client_root_validation_rejects_missing_locations(self):
+    def test_client_root_missing_location(self):
         with self.assertRaises(ValueError):
             self.hook.project_root("antigravity", {"workspacePaths": []})
         with self.assertRaises(ValueError):
             self.hook.project_root("codex", {"cwd": ""})
 
-    def test_policy_validation_rejects_size_and_encoding(self):
+    def test_policy_size_encoding(self):
         oversized = self.make_project(
             b"x" * (self.hook.MAX_POLICY_BYTES + 1))
         with self.assertRaises(ValueError):
@@ -192,20 +195,20 @@ class PolicyValidationTest(unittest.TestCase):
         with self.assertRaises(UnicodeEncodeError):
             self.hook.load_policy(non_ascii)
 
-    def test_installed_root_rejects_an_incomplete_install(self):
+    def test_incomplete_install_rejected(self):
         with patch.object(self.hook.Path, "is_file", return_value=False):
             with self.assertRaisesRegex(ValueError, "installed policy root"):
                 self.hook.installed_root()
 
-    def test_chunk_validation_rejects_invalid_policy_shapes(self):
+    def test_chunk_validation_shapes(self):
         long_line = "x" * (self.hook.MAX_CHUNK_CHARS + 1)
         with self.assertRaises(ValueError):
             self.hook.split_policy(long_line, self.hook.CLAUDE_CHUNK_COUNT)
-        two_chunks = ("x" * 5000 + "\n") * 2
+        two_chunks = ("x" * CHUNK_FILLING_LINE_LENGTH + "\n") * CHUNK_FILLING_LINE_COUNT
         with self.assertRaises(ValueError):
             self.hook.split_policy(two_chunks, 1)
 
-    def test_claude_rejects_an_unsynchronized_policy_copy(self):
+    def test_unsynchronized_copy_rejected(self):
         root = self.make_project()
         (root / "CLAUDE.md").write_text("different\n", encoding="utf-8")
         args = Namespace(client="claude", chunk_index=0)
@@ -214,7 +217,7 @@ class PolicyValidationTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "not synchronized"):
                     self.hook.run_hook(args, {"cwd": str(root)})
 
-    def test_client_root_rejects_a_different_repository(self):
+    def test_foreign_repository_rejected(self):
         root = self.make_project()
         other = self.make_project()
         with patch.object(self.hook, "installed_root", return_value=root):
@@ -225,20 +228,20 @@ class PolicyValidationTest(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(HOOK_PATH), "--client", "codex"],
             input="{", capture_output=True, text=True, check=False)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("Restore readable AGENTS.md", result.stderr)
 
     def test_cli_rejects_non_object_payload(self):
         result = subprocess.run(
             [sys.executable, str(HOOK_PATH), "--client", "codex"],
             input="[]", capture_output=True, text=True, check=False)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("payload is not an object", result.stderr)
 
-    def test_claude_rejects_an_invalid_chunk_index(self):
+    def test_invalid_chunk_index(self):
         payload = {"hook_event_name": "SubagentStart"}
         result = run_hook("claude", payload, "--chunk-index", "8")
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("chunk index is outside", result.stderr)
 
     def test_gemini_rejects_malformed_model_messages(self):
@@ -248,14 +251,14 @@ class PolicyValidationTest(unittest.TestCase):
             "llm_request": {"messages": "invalid"},
         }
         result = run_hook("gemini", payload)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("malformed messages", result.stderr)
 
 
 class LifecycleWiringTest(unittest.TestCase):
     """Committed client settings must activate every lifecycle adapter."""
 
-    def test_claude_registers_compact_and_subagent_chunks(self):
+    def test_claude_compact_subagent_chunks(self):
         settings = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
         starts = settings["hooks"]["SessionStart"]
         self.assertIn("compact", starts[0]["matcher"])
@@ -280,7 +283,7 @@ class LifecycleWiringTest(unittest.TestCase):
         self.assertIn("PreInvocation", policy)
         self.assertIn("PreToolUse", policy)
 
-    def test_antigravity_commands_launch_from_config_directory(self):
+    def test_antigravity_launch_directory(self):
         settings = json.loads(ANTIGRAVITY_HOOKS.read_text(encoding="utf-8"))
         policy = settings["agents-policy"]
         cases = (

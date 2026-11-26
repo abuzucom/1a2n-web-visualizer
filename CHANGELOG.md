@@ -4,7 +4,16 @@ This file records all notable changes to this project. The format loosely
 follows [Keep a Changelog](https://keepachangelog.com/). This project aims to
 use [Semantic Versioning](https://semver.org/).
 
-## [1.24.1] (2026-11-27)
+## [1.25.0] (2026-11-27)
+
+### Added
+- Adopt the `abuzucom/agents` template at `e05985f` (v2.50.0). The upgrade
+  adds the new hooks, checkers, tests, and skills, the template issue and
+  pull request templates, `persona-review-labels.yml`,
+  `policy-size-report.yml`, and `.compliance-tree-exemptions.json`.
+  `docs/template-drift.md` lists each difference.
+- Add `hooks/workflow-scripts.local.txt` for this repository's checker
+  scripts and trust `abuzucom` in `hooks/trusted-owners.txt`.
 
 ### Changed
 - Reword `README.md`, `SECURITY.md`, `docs/repo-guide.md`, and
@@ -12,8 +21,37 @@ use [Semantic Versioning](https://semver.org/).
   scans each file whole on every pull request with agent trailers. Facts
   stay the same. The README handoff paragraph keeps its wording. A current
   test pins that wording until the template upgrade replaces the test.
+- Reword the README handoff paragraph. The adopted template test pins the
+  new wording.
 - Merge same-day `CHANGELOG.md` entries under the newest version of each
   day. Correct the 1.14.0 date to 2026-09-29.
+- The template gate workflows follow the template trigger model.
+  `Immutable Compliance` runs on `pull_request_target` with the base branch
+  checker. The gate workflows drop the branch filters and push triggers.
+  `quality-review-pr.yml` looks up `Immutable Compliance` under
+  `pull_request_target`.
+- The branch checker exempts `develop`. The attribution checker accepts the
+  signed GitHub web-flow committer of a web merge.
+- The template workflows keep the template action pins. The repository
+  workflows keep the repository pins. `tests/test_action_version_pins.py`
+  accepts both reviewed releases.
+- `checks.yml` installs checker dependencies as hashed wheels on Python
+  3.14.
+- Rename 91 local tests to at most five words after `test_`. Each renamed
+  test keeps its description in a docstring.
+
+### Removed
+- Remove the retained foucault 3.3.14 adapter copies under `ci/`,
+  `scripts/check_pr_review_response.py`, and the matching tests, including
+  `tests/test_review_adapter_digests.py` and
+  `tests/test_protected_review_adapters.py`.
+- Remove the Dependabot changelog companion workflow, its script, and its
+  test. The template removed it. Dependabot pull requests need manual
+  changelog entries.
+- Remove `.agents/skills/github-draft`. The template skill
+  `commit-and-draft-pr` replaces it.
+- Remove the local built-in fsmonitor allowance and its tests. `git
+  status` with any `core.fsmonitor` value prompts again.
 
 ## [1.24.0] (2026-11-26)
 

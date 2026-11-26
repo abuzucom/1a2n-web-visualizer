@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Enforce a configured, allowed git identity on commits.
 
-A portable, path-generic checker: copy this file into any repo and use it
+A portable checker for any path: copy this file into any repo and use it
 as a pre-commit hook, a `pull_request` CI step, or a Claude Code hook
 through hooks/enforce_git_identity.py. Three modes:
 
@@ -15,12 +15,12 @@ its automatic-identity warning, and commits anyway. This mode fails first,
 before the guess reaches a commit object.
 
 Limitation: the commit modes cannot recover that signal, because a commit
-object records no mark saying its author field was built rather than
+object records no mark saying its author field was built and not
 configured. They apply the allowlist only.
 
-The default allowlist accepts GitHub noreply addresses, which link a commit
+The default allowlist accepts GitHub noreply addresses. They link a commit
 to its account and publish no private address. The committer may also be
-`noreply@github.com`, which is what GitHub itself sets on squash merges.
+`noreply@github.com`. GitHub itself sets that address on squash merges.
 Override with --allow for a repo that commits under another convention.
 
 Blocking: exits 1 on any violation, 2 on a usage error.
@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 from pathlib import Path
 
 try:
@@ -84,6 +85,50 @@ COMMITTER_EMAIL_SOURCES = (
 
 HISTORY_CANDIDATE_LIMIT = 5
 HISTORY_COMMIT_LIMIT = 50
+SHORT_SHA_LENGTH = 12
+IDENTITY_FIELD_COUNT = 3
+CANDIDATE_FIELD_COUNT = 4
+# Git writes an escaped character as a backslash pair between two quotes.
+QUOTE_ESCAPE_LENGTH = 2
+GIT_CONTEXT_VARIABLES = frozenset((
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+    "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM",
+))
+# Only identity settings travel as context. A forwarded core.fsmonitor or
+# core.sshCommand would make Git run another program.
+# trusted_git.GIT_CONTEXT_IDENTITY_KEYS holds the same set.
+GIT_IDENTITY_CONFIG_KEYS = frozenset((
+    "user.name", "user.email", "user.useconfigonly",
+    "author.name", "author.email", "committer.name", "committer.email",
+))
+# A standalone copy cannot import trusted_git. Keep this set equal to
+# trusted_git.CHILD_ENVIRONMENT.
+STANDALONE_CHILD_ENVIRONMENT = frozenset((
+    "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
+    "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "SYSTEMROOT", "WINDIR",
+    "COMSPEC", "PATHEXT",
+    "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TZ",
+    "XDG_CONFIG_HOME",
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "GIT_SSL_CAINFO",
+    "SSH_AUTH_SOCK",
+    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+    "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+))
+# A standalone copy cannot import trusted_git. Keep these equal to
+# trusted_git.PROXY_VARIABLES, MANAGED_PROXY_HOSTS, and MANAGED_PROXY_PORT.
+# Managed sandboxes point proxies at this closed loopback port.
+STANDALONE_PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                              "http_proxy", "https_proxy", "all_proxy")
+STANDALONE_PROXY_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+STANDALONE_PROXY_PORT = 9
+# Identity checks run local config and log reads. The bound stops a hung Git
+# from stalling a hook or a CI job.
+GIT_TIMEOUT_SECONDS = 120
+CONFIG_PARAMETERS_ERROR = (
+    "GIT_CONFIG_PARAMETERS is malformed. Rerun the command without -c identity overrides."
+)
+CONFIG_COUNT_ERROR = "GIT_CONFIG_COUNT names a missing or invalid config pair"
+BARE_CONFIG_VALUE = "true"
 
 FIX_MESSAGE = (
     "fix: derive or list identity candidates, then request explicit confirmation:\n"
@@ -97,10 +142,6 @@ NUMBERED_NOREPLY = re.compile(
     re.IGNORECASE,
 )
 
-# Fields in the NUL-separated git log records this checker reads.
-SHA_AUTHOR_COMMITTER_FIELDS = 3
-IDENTITY_CANDIDATE_FIELDS = 4
-
 
 def _standalone_resolve_git(repo) -> str:
     """Resolve trusted Git when this portable checker was copied alone."""
@@ -109,32 +150,21 @@ def _standalone_resolve_git(repo) -> str:
         os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     names = ("git.exe", "git.com") if os.name == "nt" else ("git",)
     for raw_directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not raw_directory:
+            continue
         directory = Path(raw_directory.strip('"'))
-        if not raw_directory or not directory.is_absolute():
+        if not directory.is_absolute():
             continue
         for name in names:
-            executable = _external_executable(directory / name, repository)
+            executable = _standalone_trusted_candidate(directory / name, repository)
             if executable:
                 return executable
     raise FileNotFoundError("trusted Git executable was not found on PATH")
 
 
-def _is_within(path: Path, directory: Path) -> bool:
-    """Return whether `path` lies inside `directory`."""
-    try:
-        path.relative_to(directory)
-    except ValueError:
-        return False
-    return True
-
-
-def _external_executable(candidate: Path, repository: Path) -> str:
-    """Return one PATH candidate as a trusted Git path, or an empty string.
-
-    A candidate inside the repository, before or after resolution, is
-    repository-controlled and never trusted.
-    """
-    if _is_within(Path(os.path.abspath(candidate)), repository):
+def _standalone_trusted_candidate(candidate: Path, repository: Path) -> str:
+    """Return the resolved candidate when it is a trusted executable, else ""."""
+    if Path(os.path.abspath(candidate)).is_relative_to(repository):
         return ""
     try:
         if candidate.is_symlink() or not candidate.is_file():
@@ -142,7 +172,7 @@ def _external_executable(candidate: Path, repository: Path) -> str:
         executable = candidate.resolve(strict=True)
     except OSError:
         return ""
-    if _is_within(executable, repository):
+    if executable.is_relative_to(repository):
         return ""
     if os.name == "nt" or os.access(executable, os.X_OK):
         return str(executable)
@@ -182,11 +212,70 @@ def _standalone_safe_path(repository: Path) -> str:
     return os.pathsep.join(safe_entries)
 
 
-def _standalone_run_git(repo, arguments: list[str], *, check=False, runner=None):
-    """Run trusted Git for a standalone copy of this checker."""
+def _standalone_child_environment() -> dict:
+    """Return the allowlisted subset of this process environment."""
+    if os.name == "nt":
+        # Windows names are case-insensitive. Uppercase keys keep one entry per name.
+        allowed = {name.upper() for name in STANDALONE_CHILD_ENVIRONMENT}
+        return {name.upper(): value for name, value in os.environ.items()
+                if name.upper() in allowed}
+    return {name: value for name, value in os.environ.items()
+            if name in STANDALONE_CHILD_ENVIRONMENT}
+
+
+def _standalone_is_proxy_placeholder(value: str) -> bool:
+    """Return whether a proxy value is the managed loopback placeholder."""
+    candidate = value.strip()
+    try:
+        parsed = urllib.parse.urlsplit(candidate if "://" in candidate else "//" + candidate)
+        port = parsed.port
+        hostname = parsed.hostname
+    except ValueError:
+        return False
+    return bool(hostname and hostname.casefold() in STANDALONE_PROXY_HOSTS
+                and port == STANDALONE_PROXY_PORT)
+
+
+def _standalone_strip_proxy_placeholders(environment: dict) -> None:
+    """Remove managed proxy placeholders, as trusted_git.sanitize_managed_proxy does."""
+    for variable in STANDALONE_PROXY_VARIABLES:
+        value = environment.get(variable)
+        if value and _standalone_is_proxy_placeholder(value):
+            environment.pop(variable, None)
+
+
+def _standalone_context_environment(git_context: dict) -> dict:
+    """Return the accepted context subset, as trusted_git._context_environment does.
+
+    Location values must be non-empty strings without NUL. Identity pairs with
+    a NUL value are dropped, and the rest are renumbered.
+    """
+    context = _git_context(git_context)
+    environment = {
+        name: value for name, value in context.items()
+        if name in GIT_CONTEXT_VARIABLES and isinstance(value, str) and value
+        and "\0" not in value
+    }
+    pairs = [(key, value) for key, value in _count_pairs(context) if "\0" not in value]
+    if pairs:
+        environment["GIT_CONFIG_COUNT"] = str(len(pairs))
+    for index, (key, value) in enumerate(pairs):
+        environment[f"GIT_CONFIG_KEY_{index}"] = key
+        environment[f"GIT_CONFIG_VALUE_{index}"] = value
+    return environment
+
+
+def _standalone_run_git(repo, arguments: list[str], *, check=False, runner=None,
+                        git_context=None, timeout=None):
+    """Run trusted Git for a standalone copy of this checker.
+
+    The child receives allowlisted variables plus the validated location and
+    identity values of `git_context`.
+    """
     repository = Path(repo).resolve()
     executable = Path(_standalone_resolve_git(repository))
-    environment = dict(os.environ)
+    environment = _standalone_child_environment()
+    environment.update(_standalone_context_environment(git_context or {}))
     environment.update({"GIT_PAGER": "", "PAGER": "", "GIT_TERMINAL_PROMPT": "0"})
     environment.update(
         {
@@ -198,7 +287,7 @@ def _standalone_run_git(repo, arguments: list[str], *, check=False, runner=None)
             "PATH": _standalone_safe_path(repository),
         }
     )
-    environment.pop("GIT_EXTERNAL_DIFF", None)
+    _standalone_strip_proxy_placeholders(environment)
     if os.name == "nt":
         environment["NoDefaultCurrentDirectoryInExePath"] = "1"
     command = [
@@ -231,6 +320,7 @@ def _standalone_run_git(repo, arguments: list[str], *, check=False, runner=None)
         encoding="utf-8",
         errors="replace",
         check=check,
+        timeout=timeout,
     )
 
 
@@ -239,9 +329,112 @@ if resolve_git is None:
     run_git = _standalone_run_git
 
 
+def _read_quoted(text: str, index: int) -> tuple:
+    """Read one shell-quoted word at `index`. Return it and the next index.
+
+    Git quotes each word in single quotes and writes `'` and `!` as `'\\''`
+    and `'\\!'`.
+    """
+    if not text.startswith("'", index):
+        raise ValueError(CONFIG_PARAMETERS_ERROR)
+    parts = []
+    index += 1
+    while True:
+        end = text.find("'", index)
+        if end < 0:
+            raise ValueError(CONFIG_PARAMETERS_ERROR)
+        parts.append(text[index:end])
+        index = end + 1
+        if not (text.startswith(("\\'", "\\!"), index) and text.startswith("'", index + QUOTE_ESCAPE_LENGTH)):
+            return "".join(parts), index
+        parts.append(text[index + 1])
+        index += QUOTE_ESCAPE_LENGTH + 1
+
+
+def _parse_config_parameters(text: str) -> list:
+    """Return the key and value pairs of a GIT_CONFIG_PARAMETERS value.
+
+    Git writes `-c` settings as `'key'='value'` or as `'key=value'`. A bare
+    `'key'` sets a boolean. A malformed value raises ValueError.
+    """
+    pairs = []
+    index = 0
+    while index < len(text):
+        if text[index].isspace():
+            index += 1
+            continue
+        key, index = _read_quoted(text, index)
+        if text.startswith("=", index):
+            value, index = _read_quoted(text, index + 1)
+        elif "=" in key:
+            key, value = key.split("=", 1)
+        else:
+            value = BARE_CONFIG_VALUE
+        if index < len(text) and not text[index].isspace():
+            raise ValueError(CONFIG_PARAMETERS_ERROR)
+        pairs.append((key, value))
+    return pairs
+
+
+def _count_pairs(source) -> list:
+    """Return the GIT_CONFIG_KEY_n and GIT_CONFIG_VALUE_n pairs of `source`."""
+    raw_count = source.get("GIT_CONFIG_COUNT")
+    if raw_count is None:
+        return []
+    try:
+        count = int(raw_count)
+    except ValueError:
+        raise ValueError(CONFIG_COUNT_ERROR) from None
+    if count < 0:
+        raise ValueError(CONFIG_COUNT_ERROR)
+    pairs = []
+    for index in range(count):
+        key = source.get(f"GIT_CONFIG_KEY_{index}")
+        value = source.get(f"GIT_CONFIG_VALUE_{index}")
+        if key is None or value is None:
+            raise ValueError(CONFIG_COUNT_ERROR)
+        pairs.append((key, value))
+    return pairs
+
+
+def _git_context(source=None) -> dict:
+    """Return the Git location and identity settings of the inspected command.
+
+    The identity hook passes the inspected command's context through these
+    variables. Git passes `-c` settings to its hooks in
+    GIT_CONFIG_PARAMETERS. Trusted Git drops both unless they arrive as
+    context. Identity settings are renumbered as GIT_CONFIG_COUNT pairs.
+    Parameters follow count pairs because Git applies them last. Only the
+    last value of each key is kept.
+    """
+    source = os.environ if source is None else source
+    context = {name: value for name, value in source.items()
+               if name in GIT_CONTEXT_VARIABLES}
+    pairs = _count_pairs(source)
+    pairs.extend(_parse_config_parameters(source.get("GIT_CONFIG_PARAMETERS", "")))
+    latest = {}
+    for key, value in pairs:
+        folded = key.casefold()
+        if folded in GIT_IDENTITY_CONFIG_KEYS:
+            latest.pop(folded, None)
+            latest[folded] = (key, value)
+    if latest:
+        context["GIT_CONFIG_COUNT"] = str(len(latest))
+    for index, (key, value) in enumerate(latest.values()):
+        context[f"GIT_CONFIG_KEY_{index}"] = key
+        context[f"GIT_CONFIG_VALUE_{index}"] = value
+    return context
+
+
+def _git(repo, arguments: list[str], **options):
+    """Run Git with the inspected command's context and a bounded wait."""
+    options.setdefault("timeout", GIT_TIMEOUT_SECONDS)
+    return run_git(repo, arguments, git_context=_git_context(), **options)
+
+
 def _config(key: str, repo=None) -> str:
     """Return a git config value, or an empty string when it is unset."""
-    result = run_git(
+    result = _git(
         repo or os.getcwd(),
         ["config", "--get", key],
         runner=subprocess.run,
@@ -263,7 +456,7 @@ def _first_explicit(sources: tuple, repo=None) -> str:
 def worktree_identity(repo=None) -> dict:
     """Return the identity the next commit would use, and what git would guess."""
     repository = repo or os.getcwd()
-    result = run_git(repository, ["version"], runner=subprocess.run)
+    result = _git(repository, ["version"], runner=subprocess.run)
     if result.returncode != 0:
         raise subprocess.CalledProcessError(result.returncode, "git version")
     author_name = _first_explicit(AUTHOR_NAME_SOURCES, repository)
@@ -284,7 +477,7 @@ def worktree_identity(repo=None) -> dict:
 def log_identities(revisions: list, repo=None) -> list:
     """Return one identity record per commit reachable by `revisions`."""
     repository = repo or os.getcwd()
-    result = run_git(
+    result = _git(
         repository,
         ["log", "--no-ext-diff", "--format=%H%x00%ae%x00%ce", *revisions],
         check=True,
@@ -295,12 +488,12 @@ def log_identities(revisions: list, repo=None) -> list:
         if not line:
             continue
         fields = line.split("\x00")
-        if len(fields) != SHA_AUTHOR_COMMITTER_FIELDS or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+        if len(fields) != IDENTITY_FIELD_COUNT or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
             raise ValueError("git log returned malformed identity metadata")
         sha, author_email, committer_email = fields
         identities.append(
             {
-                "label": sha[:12],
+                "label": sha[:SHORT_SHA_LENGTH],
                 "author_email": author_email,
                 "committer_email": committer_email,
                 "unset_name": False,
@@ -313,7 +506,7 @@ def log_identities(revisions: list, repo=None) -> list:
 def unpushed_identities(repo=None) -> list:
     """Return identity records for commits on HEAD absent from every remote."""
     repository = repo or os.getcwd()
-    result = run_git(repository, ["remote"], runner=subprocess.run)
+    result = _git(repository, ["remote"], runner=subprocess.run)
     if result.returncode != 0:
         raise subprocess.CalledProcessError(result.returncode, "git remote")
     if not result.stdout.strip():
@@ -361,7 +554,7 @@ def strict_identity_violations(identities: list, repo=None) -> list[str]:
 def history_identity_candidates(repo=None) -> list:
     """Return bounded noreply identity candidates from local commit metadata."""
     repository = repo or os.getcwd()
-    result = run_git(
+    result = _git(
         repository,
         ["log", "--no-ext-diff", f"-n{HISTORY_COMMIT_LIMIT}",
          "--format=%an%x00%ae%x00%cn%x00%ce", "--all", "--"],
@@ -372,9 +565,10 @@ def history_identity_candidates(repo=None) -> list:
     seen = set()
     for line in result.stdout.splitlines():
         fields = line.split("\x00")
-        if len(fields) != IDENTITY_CANDIDATE_FIELDS:
+        if len(fields) != CANDIDATE_FIELD_COUNT:
             raise ValueError("git log returned malformed identity candidates")
-        for name, email in ((fields[0], fields[1]), (fields[2], fields[3])):
+        author_name, author_email, committer_name, committer_email = fields
+        for name, email in ((author_name, author_email), (committer_name, committer_email)):
             candidate = (name.strip(), email.strip())
             if not candidate[0] or not NUMBERED_NOREPLY.fullmatch(candidate[1]):
                 continue
@@ -389,7 +583,7 @@ def history_identity_candidates(repo=None) -> list:
 
 def _allowed(email: str, pattern: re.Pattern) -> bool:
     """Return True when `email` matches the allowlist pattern."""
-    return bool(pattern.match(email.strip()))
+    return bool(pattern.fullmatch(email.strip()))
 
 
 def find_violations(identities: list, pattern: re.Pattern = NOREPLY) -> list:
@@ -445,6 +639,7 @@ def gh_advisory(email: str, repo=None) -> str:
 def bootstrap_identity_advisory(repo=None) -> str:
     """Return one confirmation-first identity proposal or history fallback."""
     repository = repo or os.getcwd()
+    lookup_failure = ""
     if authenticated_account is not None:
         try:
             account = authenticated_account(repository)
@@ -454,11 +649,18 @@ def bootstrap_identity_advisory(repo=None) -> str:
                 "identity candidate from authenticated gh for explicit confirmation: "
                 f"repository-local name '{candidate[0]}', email '{candidate[1]}'"
             )
-        except (OSError, subprocess.TimeoutExpired, ValueError):
-            pass
+        except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+            # Name only the type: the message can carry account or token text.
+            lookup_failure = f"authenticated lookup failed ({type(error).__name__}); "
+    return lookup_failure + _history_identity_advisory(repository)
+
+
+def _history_identity_advisory(repository) -> str:
+    """Return the untrusted history fallback for the identity advisory."""
     candidates = history_identity_candidates(repository)
     if not candidates:
-        return "identity candidate unavailable; ask for a repository-local name and email"
+        return ("identity candidate unavailable; derive name and email from an "
+                "authenticated account source, then request approval")
     rendered = "; ".join(f"'{name}' <{email}>" for name, email in candidates)
     return (
         "local history candidates for explicit confirmation only; never auto-select: "
@@ -521,40 +723,36 @@ def _print_advisories(identities: list, repo=None) -> None:
             print(note)
 
 
-def _validate_arguments(parser: argparse.ArgumentParser, args) -> None:
-    """Reject mode combinations the checker cannot validate."""
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
     if bool(args.base) != bool(args.head):
         parser.error("--base and --head must be given together")
     if args.strict and args.base:
         parser.error("--strict cannot validate a commit range")
     if args.strict and args.allow:
         parser.error("--strict cannot be combined with --allow")
+    pattern = NOREPLY
+    if args.allow:
+        try:
+            pattern = re.compile(args.allow)
+        except re.error as error:
+            parser.error(f"--allow is not a valid regular expression ({error})")
 
-
-def _load_identities(args) -> list | None:
-    """Return selected identities, or None after reporting a Git failure."""
     try:
         identities = select_identities(args)
         if args.advise:
             _print_advisories(identities, args.repo)
+    except subprocess.TimeoutExpired as error:
+        command = " ".join(str(part) for part in error.cmd) if isinstance(error.cmd, (list, tuple)) else str(error.cmd)
+        print(f"error: git timed out after {error.timeout} seconds: {command}. "
+              "Re-run once Git responds.", file=sys.stderr)
+        return 1
     except (subprocess.CalledProcessError, UnicodeError, ValueError) as error:
         print(f"error: git log failed: {error}", file=sys.stderr)
-        return None
+        return 1
     except OSError as error:
         print(f"error: git is unavailable: {error}", file=sys.stderr)
-        return None
-    return identities
-
-
-def main() -> int:
-    """Check commit identities and return a process exit code."""
-    parser = build_parser()
-    args = parser.parse_args()
-    _validate_arguments(parser, args)
-    pattern = re.compile(args.allow) if args.allow else NOREPLY
-
-    identities = _load_identities(args)
-    if identities is None:
         return 1
 
     violations = find_violations(identities, pattern)

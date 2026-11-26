@@ -9,6 +9,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = REPOSITORY_ROOT / "hooks" / "block_destructive_cmd.py"
+BLOCKING_EXIT_CODE = 2
 
 
 def run_cmd_gate(command_text: str, permission_mode: str = "default"):
@@ -44,14 +45,14 @@ class CommandBoundaryTest(unittest.TestCase):
     def test_chained_format_is_denied(self):
         self.assertEqual(permission_decision("echo safe & format E:"), "deny")
 
-    def test_caret_escaped_operator_is_not_a_boundary(self):
+    def test_escaped_operator_no_boundary(self):
         self.assertEqual(permission_decision("echo safe ^& text"), "allow")
 
-    def test_caret_escaped_redirect_is_not_a_write(self):
+    def test_escaped_redirect_no_write(self):
         command = "echo safe ^> tests\\test_gate_parity.py"
         self.assertEqual(permission_decision(command), "allow")
 
-    def test_caret_inside_quotes_does_not_hide_a_boundary(self):
+    def test_quoted_caret_keeps_boundary(self):
         command = 'echo "a^" & format E: & echo "'
         self.assertEqual(permission_decision(command), "deny")
 
@@ -75,7 +76,7 @@ class CommandBoundaryTest(unittest.TestCase):
 
 
 class CommandPolicyTest(unittest.TestCase):
-    """CMD operations use behavior rather than operand literals."""
+    """CMD operations use behavior instead of operand literals."""
 
     def test_storage_destruction_is_operand_independent(self):
         for command_text in (
@@ -110,7 +111,7 @@ class CommandPolicyTest(unittest.TestCase):
             with self.subTest(command_text=command_text):
                 self.assertEqual(permission_decision(command_text), "ask")
 
-    def test_recursive_mirror_asks_or_denies_by_target(self):
+    def test_mirror_verdict_by_target(self):
         self.assertEqual(
             permission_decision("robocopy C:\\empty C:\\important /mir"),
             "ask",
@@ -143,7 +144,7 @@ class CommandPolicyTest(unittest.TestCase):
             "ask",
         )
 
-    def test_command_string_and_fixed_batch_have_distinct_verdicts(self):
+    def test_command_string_vs_batch(self):
         self.assertEqual(permission_decision("cmd /c whoami"), "deny")
         self.assertEqual(permission_decision("call hidden.cmd"), "deny")
         self.assertEqual(permission_decision("build.cmd"), "ask")
@@ -187,7 +188,7 @@ class PayloadTest(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("cannot clear", result.stderr)
 
 

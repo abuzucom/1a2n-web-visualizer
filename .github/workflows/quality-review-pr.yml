@@ -12,10 +12,6 @@ name: quality-review-pr
 # revision. Either workflow can finish first, so the caller reads both results
 # and starts the review on the later pass.
 #
-# Both upstream workflows run on the pull_request event in this repository.
-# The template runs Immutable Compliance on pull_request_target instead.
-# docs/template-drift.md records the difference.
-#
 # The engine publishes a skipped "euler / quality" check for a fork pull
 # request and withholds the provider key from it. The security review applies
 # the same fork rule.
@@ -107,7 +103,7 @@ jobs:
 
             const testsRun = await latestRun('Convention Sync Check', 'pull_request');
             const complianceRun = await latestRun(
-              'Immutable Compliance', 'pull_request');
+              'Immutable Compliance', 'pull_request_target');
             const testsPassed =
               testsRun !== null && testsRun.conclusion === 'success';
             const compliancePassed =

@@ -1,0 +1,8 @@
+# Repository scripts that only this repository ships.
+#
+# The line format matches hooks/workflow-scripts.txt. Each entry received
+# individual active-human approval during the e05985f template upgrade.
+
+allow tools/check_preset_equations.py
+allow tools/validate_catalogs.py
+trusted-read tests/validate_html_integration.py

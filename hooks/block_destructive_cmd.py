@@ -7,18 +7,21 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+POLICY_DENIAL_EXIT_CODE = 2
+
 try:
     import _cmd_parser as cmd_parser
     import _gate_core as core
-except ImportError as error:  # pragma: no cover
-    failure_reason = f"shared CMD parser or core import failed ({error})"
+except ImportError as error:
+    failure_reason = (f"shared CMD parser or core import failed ({error}). "
+                      "Stop. Report this denial to the active human. Do not "
+                      "retry a variant or propose a gate change.")
     print(failure_reason, file=sys.stderr)
-    sys.exit(2)
+    sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 
 GATE = "block_destructive_cmd.py"
 CMD_TOOL_NAMES = frozenset({"Cmd", "CMD", "CommandPrompt"})
-STORAGE_DESTRUCTION_PROGRAMS = frozenset({"diskpart", "format"})
 SENSITIVE_DISCOVERY_PROGRAMS = frozenset({
     "arp",
     "driverquery",
@@ -32,20 +35,13 @@ SENSITIVE_DISCOVERY_PROGRAMS = frozenset({
 })
 REMOTE_EXECUTION_PROGRAMS = frozenset({"psexec", "winrs"})
 SCRIPT_SUFFIXES = (".bat", ".cmd", ".ps1")
-INTERPRETER_PROGRAMS = frozenset({
-    "bash",
-    "cmd",
-    "csh",
-    "dash",
-    "fish",
-    "ksh",
-    "powershell",
-    "pwsh",
-    "sh",
-    "tcsh",
-    "zsh",
-})
+# The core list, normalized the way CMD names programs, so a shell the core
+# treats as an interpreter hop (busybox included) is one here too.
+INTERPRETER_PROGRAMS = frozenset(
+    core.normalize_windows_command_name(name) for name in core.SHELL_INTERPRETERS)
 _CWD = [""]
+# The payload permission mode for the current call. Plan mode denies git writes.
+_MODE = [""]
 
 
 def normalize_cmd_program(program_token: str) -> str:
@@ -97,30 +93,12 @@ def classify_named_program(
     prohibited = core.prohibited_command_verdict(program_name, list(arguments))
     if prohibited[0]:
         return prohibited
-    for classify in (_classify_destructive_program, _classify_execution_program):
-        verdict = classify(program_name, arguments)
-        if verdict is not None:
-            return verdict
-    if program_token.casefold().endswith(SCRIPT_SUFFIXES):
-        return "ask", "a fixed local batch script executes code"
-    return "", ""
-
-
-def _classify_destructive_program(program_name: str, arguments: tuple[str, ...]):
-    """Return a verdict for storage, delete, service, or remote tools, else None."""
-    if program_name in STORAGE_DESTRUCTION_PROGRAMS:
-        return "deny", f"{program_name} partitions or formats storage"
     if program_name in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(program_name, list(arguments))
     if program_name in ("sc", "schtasks"):
         return classify_service_or_task(program_name, arguments)
     if program_name in REMOTE_EXECUTION_PROGRAMS:
         return "deny", f"{program_name} enables remote command execution"
-    return None
-
-
-def _classify_execution_program(program_name: str, arguments: tuple[str, ...]):
-    """Return a verdict for discovery, transfer, or nested execution, else None."""
     if program_name in SENSITIVE_DISCOVERY_PROGRAMS:
         return "ask", f"{program_name} enumerates sensitive host state"
     if program_name == "curl":
@@ -129,7 +107,9 @@ def _classify_execution_program(program_name: str, arguments: tuple[str, ...]):
         return classify_interpreter(program_name, arguments)
     if program_name in ("call", "for"):
         return "deny", f"{program_name} can hide nested command execution"
-    return None
+    if program_token.casefold().endswith(SCRIPT_SUFFIXES):
+        return "ask", "a fixed local batch script executes code"
+    return "", ""
 
 
 def classify_cmd_segment(command_tokens: tuple[str, ...]) -> tuple[str, str]:
@@ -154,11 +134,15 @@ def classify_cmd_segment(command_tokens: tuple[str, ...]) -> tuple[str, str]:
     if program_name == "git":
         verdict = core.strongest(
             verdict,
-            core.git_verdict(list(arguments), _CWD[0]),
+            core.plan_mode_git_verdict(
+                _MODE[0], list(arguments), _CWD[0], None,
+                core.git_verdict(list(arguments), _CWD[0])),
         )
     policies = (
         core.cloudflare_pages_verdict(
             program_name, list(arguments), _CWD[0]),
+        core.plan_mode_harden(
+            _MODE[0], core.cmd_set_assignment_verdict(program_name, list(arguments))),
         core.destruction_verdict(program_name, list(arguments)),
         core.alias_verdict(program_name, list(arguments)),
         core.mode_change_verdict(program_name, list(arguments)),
@@ -198,6 +182,7 @@ def classify_cmd_command(command_text: str) -> tuple[str, str]:
 
 def main() -> int:
     """Read one hook payload and emit its CMD policy decision."""
+    core.reset_invocation_caches()
     payload = core.read_payload()
     if payload is None:
         return core.emit(
@@ -214,6 +199,7 @@ def main() -> int:
     if command_text is None:
         return core.emit(GATE, "deny", "the CMD command field is not a string")
     _CWD[0] = core.project_dir(payload)
+    _MODE[0] = core.require_str(payload.get("permission_mode", "")) or ""
     decision, decision_reason = classify_cmd_command(command_text)
     if not decision:
         return 0

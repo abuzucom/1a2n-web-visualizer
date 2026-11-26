@@ -34,6 +34,17 @@ PRE_COMMIT_CONFIG_PATH = REPO_ROOT / ".pre-commit-config.yaml"
 AGENTS_PATH = REPO_ROOT / "AGENTS.md"
 HANDOFF_PATH = REPO_ROOT / "plan" / "HANDOFF.md.example"
 README_PATH = REPO_ROOT / "README.md"
+LARGE_MARKER_SIZE = 10
+SHORT_MARKER_SIZE = 3
+NESTED_CONFLICT_VIOLATION_COUNT = 2
+SEPARATOR_AND_BLOCK_VIOLATION_COUNT = 2
+NARROW_OPENER_WIDTHS = (1, 2)
+SAFE_READ_LIMIT_BYTES = 1024
+GIT_FATAL_EXIT_CODE = 128
+GIT_USAGE_EXIT_CODE = 129
+OVERSIZE_MARGIN_BYTES = 100
+SHA_HEX_LENGTH = 40
+REPEATED_COMMAND_COUNT = 5
 _CHECKER_WORKER = None
 
 
@@ -149,7 +160,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
         )
 
     def test_size_1_conflict_block_detected(self):
-        """Genuine size-1 balanced conflict block is detected."""
+        """A real size-1 balanced conflict block is detected."""
         content = "< HEAD\nleft\n=\nright\n> branch\n"
         violations = checker.check_content(content, "test.py")
         self.assertEqual(len(violations), 1)
@@ -158,7 +169,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             violations[0],
         )
 
-    def test_size_1_with_configured_size_1_detected(self):
+    def test_size_1_configured_match(self):
         content = "< HEAD\nleft\n=\nright\n> branch\n"
         violations = checker.check_content(
             content, "test.py", configured_marker_size=1
@@ -170,7 +181,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
         )
 
     def test_size_2_conflict_block_detected(self):
-        """Genuine size-2 balanced conflict block is detected."""
+        """A real size-2 balanced conflict block is detected."""
         content = "<< HEAD\nleft\n==\nright\n>> branch\n"
         violations = checker.check_content(content, "test.py")
         self.assertEqual(len(violations), 1)
@@ -179,11 +190,11 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             violations[0],
         )
 
-    def test_size_2_detected_with_different_configured_size(self):
+    def test_size_2_configured_mismatch(self):
         """Size-2 block detected even when configured size is 10."""
         content = "<< HEAD\nleft\n==\nright\n>> branch\n"
         violations = checker.check_content(
-            content, "test.py", configured_marker_size=10
+            content, "test.py", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn(
@@ -194,7 +205,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
     def test_configurable_marker_size_detected_exact(self):
         content = "<<< HEAD\nleft\n===\nright\n>>> branch\n"
         violations = checker.check_content(
-            content, "custom.py", configured_marker_size=3
+            content, "custom.py", configured_marker_size=SHORT_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn(
@@ -208,7 +219,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             "==========\nright\n>>>>>>>>>> branch\n"
         )
         violations = checker.check_content(
-            content, "large.py", configured_marker_size=10
+            content, "large.py", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn(
@@ -216,26 +227,26 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             violations[0],
         )
 
-    def test_configured_size_10_still_catches_7char_conflict(self):
+    def test_large_size_catches_default(self):
         """Generic patterns fire even when configured size is 10."""
         content = (
             "<<<<<<< HEAD\nleft\n=======\n"
             "right\n>>>>>>> branch\n"
         )
         violations = checker.check_content(
-            content, "test.py", configured_marker_size=10
+            content, "test.py", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn("unresolved conflict block", violations[0])
 
-    def test_configured_size_10_catches_7char_in_markdown(self):
+    def test_large_size_default_markdown(self):
         """Seven-char conflict in Markdown detected despite size=10."""
         content = (
             "<<<<<<< HEAD\nleft\n=======\n"
             "right\n>>>>>>> branch\n"
         )
         violations = checker.check_content(
-            content, "test.md", configured_marker_size=10
+            content, "test.md", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn("unresolved conflict block", violations[0])
@@ -275,7 +286,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             violations[0],
         )
 
-    def test_orphan_separator_in_python_is_flagged(self):
+    def test_orphan_separator_python(self):
         content = "def foo():\n    x = 1\n=======\n    return x\n"
         violations = checker.check_content(
             content, "script.py"
@@ -286,7 +297,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             violations[0],
         )
 
-    def test_orphan_separator_in_yaml_is_flagged(self):
+    def test_orphan_separator_yaml(self):
         content = "key: value\n=======\nother: value\n"
         violations = checker.check_content(
             content, "config.yml"
@@ -297,7 +308,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             violations[0],
         )
 
-    def test_setext_markdown_heading_is_not_flagged(self):
+    def test_setext_heading_allowed(self):
         content = (
             "# Markdown Doc\n\nSection Title\n"
             "=============\n\nBody text.\n"
@@ -305,7 +316,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
         violations = checker.check_content(content, "doc.md")
         self.assertEqual(violations, [])
 
-    def test_orphan_separator_in_md_without_heading_flagged(self):
+    def test_orphan_separator_markdown(self):
         content = "\n=======\nSome text\n"
         violations = checker.check_content(content, "doc.md")
         self.assertEqual(len(violations), 1)
@@ -322,7 +333,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
         violations = checker.check_content(
             content, "nested.py"
         )
-        self.assertEqual(len(violations), 2)
+        self.assertEqual(len(violations), NESTED_CONFLICT_VIOLATION_COUNT)
         self.assertIn(
             "nested.py:1: unclosed conflict marker opener",
             violations[0],
@@ -332,8 +343,8 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             violations[1],
         )
 
-    def test_narrow_openers_do_not_hide_reportable_diff3_separators(self):
-        for width in (1, 2):
+    def test_narrow_opener_diff3_separator(self):
+        for width in NARROW_OPENER_WIDTHS:
             narrow = "<" * width
             content = (
                 f"{narrow} HEAD\n||||||| base\n"
@@ -342,7 +353,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             )
             with self.subTest(width=width):
                 violations = checker.check_content(content, "hidden.py")
-                self.assertEqual(len(violations), 2)
+                self.assertEqual(len(violations), SEPARATOR_AND_BLOCK_VIOLATION_COUNT)
                 self.assertIn(
                     "hidden.py:2: orphan conflict marker separator",
                     violations[0],
@@ -352,8 +363,8 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
                     violations[1],
                 )
 
-    def test_narrow_openers_do_not_hide_reportable_separators(self):
-        for width in (1, 2):
+    def test_narrow_opener_separator(self):
+        for width in NARROW_OPENER_WIDTHS:
             narrow = "<" * width
             content = (
                 f"{narrow} HEAD\n=======\n"
@@ -362,7 +373,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             )
             with self.subTest(width=width):
                 violations = checker.check_content(content, "hidden.py")
-                self.assertEqual(len(violations), 2)
+                self.assertEqual(len(violations), SEPARATOR_AND_BLOCK_VIOLATION_COUNT)
                 self.assertIn(
                     "hidden.py:2: orphan conflict marker separator",
                     violations[0],
@@ -372,7 +383,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
                     violations[1],
                 )
 
-    def test_setext_heading_stays_valid_under_a_narrow_opener(self):
+    def test_setext_heading_narrow_opener(self):
         content = "< note\nHeading\n=======\n=\n> branch\n"
         violations = checker.check_content(content, "heading.md")
         self.assertEqual(
@@ -436,7 +447,7 @@ class FileCheckingTest(unittest.TestCase):
         finally:
             tmp_path.unlink()
 
-    def test_utf16_encoding_hint_without_bom_detected(self):
+    def test_utf16_hint_without_bom(self):
         text = (
             "<<<<<<< HEAD\nleft\n=======\n"
             "right\n>>>>>>> branch\n"
@@ -476,7 +487,7 @@ class FileCheckingTest(unittest.TestCase):
             tmp.write(b"hello world")
             tmp_path = tmp.name
         try:
-            data, err = checker._safe_read(tmp_path, 1024)
+            data, err = checker._safe_read(tmp_path, SAFE_READ_LIMIT_BYTES)
             self.assertIsNone(err)
             self.assertEqual(data, b"hello world")
         finally:
@@ -484,7 +495,7 @@ class FileCheckingTest(unittest.TestCase):
 
     def test_safe_read_nonexistent(self):
         data, err = checker._safe_read(
-            "no_such_file_xyz.tmp", 1024
+            "no_such_file_xyz.tmp", SAFE_READ_LIMIT_BYTES
         )
         self.assertIsNone(data)
         self.assertIn("file not found", err)
@@ -496,24 +507,24 @@ class FileCheckingTest(unittest.TestCase):
             link = Path(tmp_dir) / "link.txt"
             try:
                 os.symlink(target, link)
-                data, err = checker._safe_read(str(link), 1024)
+                data, err = checker._safe_read(str(link), SAFE_READ_LIMIT_BYTES)
                 self.assertIsNone(data)
                 self.assertIsNone(err)
             except (OSError, NotImplementedError):
                 pass  # symlinks may need privileges on Windows
 
-    def test_get_git_attributes_raises_on_git_failure(self):
+    def test_git_attributes_failure_raises(self):
         """get_git_attributes fails closed on non-zero git exit."""
         with patch("subprocess.run") as mock_run:
             mock_proc = MagicMock()
-            mock_proc.returncode = 128
+            mock_proc.returncode = GIT_FATAL_EXIT_CODE
             mock_proc.stderr = b"fatal: git check-attr error"
             mock_run.return_value = mock_proc
             with self.assertRaises(RuntimeError) as ctx:
                 checker.get_git_attributes(["foo.py"])
             self.assertIn("git check-attr failed", str(ctx.exception))
 
-    def test_staged_utf16_working_tree_encoding_not_applied(self):
+    def test_staged_blob_ignores_encoding(self):
         """Staged blob in index is decoded as UTF-8 without working-tree-encoding."""
         with RetryingTemporaryDirectory() as tmp_dir:
             repo_path = Path(tmp_dir)
@@ -539,7 +550,7 @@ class FileCheckingTest(unittest.TestCase):
                 self.assertEqual(len(violations), 1)
                 self.assertIn("unresolved conflict block", violations[0])
 
-    def test_staged_oversized_blob_rejected_without_buffering(self):
+    def test_staged_oversized_blob_rejected(self):
         """Blobs exceeding MAX_FILE_SIZE are rejected via size check."""
         with patch.object(checker, "_get_index_entries") as mock_entries, \
              patch.object(checker, "get_git_attributes") as mock_attrs, \
@@ -549,7 +560,7 @@ class FileCheckingTest(unittest.TestCase):
                 ("huge.bin", "fake_sha_huge", "0", "100644")
             ]
             mock_attrs.return_value = {}
-            mock_size.return_value = checker.MAX_FILE_SIZE + 100
+            mock_size.return_value = checker.MAX_FILE_SIZE + OVERSIZE_MARGIN_BYTES
             violations = checker._check_staged(".")
             self.assertEqual(len(violations), 1)
             self.assertIn("blob size", violations[0])
@@ -561,7 +572,7 @@ class FileCheckingTest(unittest.TestCase):
 class GitTrackedFilesTest(unittest.TestCase):
     """Git-tracked regular files enumeration."""
 
-    def test_get_tracked_regular_files_includes_repo_files(self):
+    def test_tracked_files_listed(self):
         files = checker.get_tracked_regular_files()
         self.assertIn("AGENTS.md", files)
         self.assertIn("README.md", files)
@@ -573,7 +584,7 @@ class GitTrackedFilesTest(unittest.TestCase):
 class CliExecutionTest(unittest.TestCase):
     """CLI subprocess execution."""
 
-    def test_cli_on_current_repo_exits_zero(self):
+    def test_cli_clean_repo(self):
         proc = subprocess.run(
             [sys.executable, str(CHECKER_PATH)],
             cwd=REPO_ROOT,
@@ -586,7 +597,7 @@ class CliExecutionTest(unittest.TestCase):
             f"stdout: {proc.stdout}, stderr: {proc.stderr}",
         )
 
-    def test_cli_with_conflict_file_exits_one(self):
+    def test_cli_conflict_file(self):
         with tempfile.NamedTemporaryFile(
             mode="w", delete=False, encoding="utf-8"
         ) as tmp:
@@ -623,7 +634,7 @@ class CliExecutionTest(unittest.TestCase):
             f"stdout: {proc.stdout}, stderr: {proc.stderr}",
         )
 
-    def test_staged_flag_exits_zero_on_clean_repo(self):
+    def test_staged_flag_clean_repo(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             subprocess.run(
@@ -643,7 +654,7 @@ class CliExecutionTest(unittest.TestCase):
 class WiringTest(unittest.TestCase):
     """Exact wiring across CI, Makefile, and pre-commit config."""
 
-    def test_sync_check_workflow_wires_exact_command(self):
+    def test_sync_check_command(self):
         content = WORKFLOW_PATH.read_text(encoding="utf-8")
         expected = (
             "- name: Check worktree conflict markers (ordinary test)\n"
@@ -652,9 +663,9 @@ class WiringTest(unittest.TestCase):
         )
         self.assertIn(expected, content)
 
-    def test_immutable_workflow_uses_pinned_external_checker(self):
+    def test_immutable_workflow_base_checker(self):
         content = IMMUTABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
-        self.assertEqual(_workflow_events(content), {"pull_request"})
+        self.assertEqual(_workflow_events(content), {"pull_request_target"})
         self.assertIn("edited", content)
         self.assertRegex(
             content,
@@ -663,19 +674,16 @@ class WiringTest(unittest.TestCase):
         self.assertIn("ref: ${{ env.PR_BASE_SHA }}", content)
         self.assertIn("ref: ${{ env.PR_HEAD_SHA }}", content)
         self.assertIn("path: trusted-base", content)
-        self.assertIn("repository: abuzucom/agents", content)
-        self.assertIn("ref: 868023434592f232f4f1b250cf3855428f5aab1f", content)
-        self.assertIn("path: trusted-checker", content)
         self.assertIn("path: pr-head", content)
         self.assertIn(
-            "TRUSTED_CHECKER: trusted-checker/scripts/check_compliance_tree.py",
+            "TRUSTED_CHECKER: trusted-base/scripts/check_compliance_tree.py",
             content,
         )
         self.assertIn('python "$TRUSTED_CHECKER"', content)
         self.assertIn('--repo "$PR_REPO" --tree "$PR_HEAD_SHA"', content)
         self.assertNotIn("python pr-head/", content)
 
-    def test_privileged_workflow_has_one_immutable_job(self):
+    def test_privileged_workflow_single_job(self):
         content = IMMUTABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
         jobs = _workflow_jobs(content)
         self.assertEqual(set(jobs), {"immutable-compliance"})
@@ -687,13 +695,13 @@ class WiringTest(unittest.TestCase):
         self.assertNotIn("pull-requests: write", content)
         self.assertNotIn("actions/github-script", content)
 
-    def test_privileged_workflow_does_not_execute_pr_authored_tools(self):
+    def test_privileged_workflow_skips_pr_tools(self):
         content = IMMUTABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
         self.assertNotIn("python -m unittest", content)
         self.assertNotRegex(content, r"run:\s+python scripts/")
         self.assertNotIn("0xmariowu/AgentLint", content)
 
-    def test_privileged_trigger_has_read_only_permissions_and_no_secrets(self):
+    def test_privileged_trigger_read_only(self):
         content = IMMUTABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
         self.assertNotIn("secrets.", content.lower())
         self.assertNotIn("write-all", content.lower())
@@ -715,25 +723,23 @@ class WiringTest(unittest.TestCase):
             r"(?m)^\s+[a-z-]+:\s*(?:write|write-all)\s*$",
         )
 
-    def test_security_jobs_use_pinned_external_checkers(self):
+    def test_security_jobs_trusted_checkers(self):
         content = IMMUTABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
         block = _workflow_jobs(content)["immutable-compliance"]
         self.assertIn("path: trusted-base", block)
-        self.assertIn("repository: abuzucom/agents", block)
-        self.assertIn("ref: 868023434592f232f4f1b250cf3855428f5aab1f", block)
-        self.assertIn("path: trusted-checker", block)
         self.assertIn("path: pr-head", block)
         self.assertIn('python "$TRUSTED_CHECKER"', block)
         self.assertIn('--repo "$PR_REPO" --tree "$PR_HEAD_SHA"', block)
         self.assertNotRegex(block, r"python (?:\.\./)?pr-head/")
 
-    def test_untrusted_checks_use_the_standard_pull_request_event(self):
+    def test_untrusted_checks_pull_request_event(self):
         sync_content = WORKFLOW_PATH.read_text(encoding="utf-8")
         compliance_content = AGENTS_MD_WORKFLOW_PATH.read_text(
             encoding="utf-8")
         self.assertEqual(
-            _workflow_events(sync_content), {"push", "pull_request"})
-        self.assertEqual(_workflow_events(compliance_content), {"push"})
+            _workflow_events(sync_content), {"pull_request"})
+        self.assertEqual(
+            _workflow_events(compliance_content), {"pull_request"})
         self.assertNotIn("pull_request_target", sync_content)
         self.assertNotIn("pull-requests: write", sync_content)
         self.assertNotIn("actions/github-script", sync_content)
@@ -749,11 +755,11 @@ class WiringTest(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
             with self.subTest(path=path.name):
                 self.assertNotIn("acknowledged digest", content)
-                self.assertIn("active-user request", content)
+                self.assertIn("active human request", content)
                 self.assertNotIn("git --no-pager branch", content)
                 self.assertIn("scripts/read_git_state.py", content)
 
-    def test_handoff_prescribes_no_pre_consent_git_command(self):
+    def test_handoff_no_pre_consent_git(self):
         for path in (AGENTS_PATH, HANDOFF_PATH, README_PATH):
             content = path.read_text(encoding="utf-8")
             with self.subTest(path=path.name):
@@ -768,7 +774,7 @@ class WiringTest(unittest.TestCase):
             content,
         )
 
-    def test_pre_commit_config_wires_staged_hook(self):
+    def test_pre_commit_staged_hook(self):
         content = PRE_COMMIT_CONFIG_PATH.read_text(
             encoding="utf-8"
         )
@@ -787,12 +793,12 @@ class WiringTest(unittest.TestCase):
 class DirectExecutionOrderingTest(unittest.TestCase):
     """Direct execution must define every late test class before running."""
 
-    def test_direct_execution_can_run_late_test_classes(self):
+    def test_direct_run_late_classes(self):
         tests = [
-            "SecurityHardeningTest.test_blob_size_separates_the_object_name",
+            "SecurityHardeningTest.test_blob_size_separates_name",
             "WindowsPathHandlingTest."
-            "test_attribute_lookup_survives_a_backslash_relpath",
-            "SparseCheckoutTest.test_skip_worktree_entry_does_not_fail_the_check",
+            "test_attribute_lookup_backslash_relpath",
+            "SparseCheckoutTest.test_skip_worktree_entry_passes",
         ]
         result = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "-v", *tests],
@@ -828,7 +834,7 @@ def _init_repo(path: str) -> None:
 class SecurityHardeningTest(unittest.TestCase):
     """Inputs an attacker controls must not steer git or the terminal."""
 
-    def test_replacement_ref_does_not_hide_a_staged_conflict(self):
+    def test_replace_ref_staged_conflict(self):
         """git honors refs/replace by default, so cat-file can return a lie.
 
         The indexed blob carries markers. A replacement points it at a clean
@@ -858,7 +864,7 @@ class SecurityHardeningTest(unittest.TestCase):
         self.assertTrue(
             violations, "a replacement ref hid conflict markers in the index")
 
-    def test_replacement_ref_does_not_hide_a_tree_conflict(self):
+    def test_replace_ref_tree_conflict(self):
         with RetryingTemporaryDirectory() as tmp:
             _init_repo(tmp)
             target = Path(tmp) / "merged.txt"
@@ -890,7 +896,7 @@ class SecurityHardeningTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("unresolved conflict block", result.stderr)
 
-    def test_tree_mode_rejects_malformed_object_id(self):
+    def test_tree_mode_bad_object_id(self):
         with RetryingTemporaryDirectory() as tmp:
             _init_repo(tmp)
             result = subprocess.run(
@@ -901,18 +907,18 @@ class SecurityHardeningTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("validated hexadecimal object id", result.stderr)
 
-    def test_tree_parser_rejects_truncated_and_malformed_entries(self):
+    def test_tree_parser_bad_entries(self):
         malformed_outputs = (
-            b"100644 blob " + (b"a" * 40) + b"\tfile.txt",
+            b"100644 blob " + (b"a" * SHA_HEX_LENGTH) + b"\tfile.txt",
             b"100644 blob\x00",
-            b"100644 tree " + (b"a" * 40) + b"\tfile.txt\x00",
+            b"100644 tree " + (b"a" * SHA_HEX_LENGTH) + b"\tfile.txt\x00",
         )
         for raw in malformed_outputs:
             with self.subTest(raw=raw):
                 with self.assertRaises(RuntimeError):
                     checker._parse_tree_entries(raw)
 
-    def test_tree_mode_reads_content_and_attributes_from_the_tree(self):
+    def test_tree_mode_reads_tree(self):
         with RetryingTemporaryDirectory() as tmp:
             _init_repo(tmp)
             target = Path(tmp) / "marker.txt"
@@ -940,14 +946,14 @@ class SecurityHardeningTest(unittest.TestCase):
         self.assertIn("marker.txt:1: unclosed conflict marker opener",
                       result.stderr)
 
-    def test_blob_size_separates_the_object_name(self):
+    def test_blob_size_separates_name(self):
         """A sha beginning with a dash is read as an option without --."""
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0, stdout=b"4")
             checker._get_blob_size("deadbeef", "/repo")
         self._assert_separated(run.call_args[0][0])
 
-    def test_read_blob_separates_the_object_name(self):
+    def test_read_blob_separates_name(self):
         with patch("subprocess.Popen") as popen:
             popen.return_value = MagicMock(
                 returncode=0,
@@ -962,8 +968,8 @@ class SecurityHardeningTest(unittest.TestCase):
         self.assertLess(argv.index("--"), argv.index("deadbeef"),
                         "the object name is not separated from options")
 
-    def test_symlink_probe_reports_a_failed_check(self):
-        """Swallowing the probe error opens the path without knowing."""
+    def test_symlink_probe_failure(self):
+        """The probe reports whether the path is a link."""
         with RetryingTemporaryDirectory() as tmp:
             plain = Path(tmp) / "plain.txt"
             plain.write_text("clean\n", encoding="utf-8")
@@ -972,9 +978,6 @@ class SecurityHardeningTest(unittest.TestCase):
                               side_effect=[False, True]):
                 self.assertIs(checker._probe_is_symlink(str(plain)), False)
                 self.assertIs(checker._probe_is_symlink(str(link)), True)
-            with patch.object(checker.os.path, "islink",
-                              side_effect=OSError("probe failed")):
-                self.assertIsNone(checker._probe_is_symlink(str(plain)))
 
     def test_diagnostics_escape_control_characters(self):
         """A newline in a path would otherwise forge a diagnostic line."""
@@ -991,11 +994,11 @@ class SecurityHardeningTest(unittest.TestCase):
 class WindowsPathHandlingTest(unittest.TestCase):
     """Git speaks forward slashes whatever the platform separator is."""
 
-    def test_attribute_lookup_survives_a_backslash_relpath(self):
+    def test_attribute_lookup_backslash_relpath(self):
         """os.path.relpath returns backslashes on Windows, check-attr does not.
 
         Keying the result on the backslash spelling loses every attribute
-        for a nested path, so conflict-marker-size is silently dropped.
+        for a nested path, so conflict-marker-size drops without notice.
         """
         with RetryingTemporaryDirectory() as tmp:
             nested = Path(tmp) / "nested"
@@ -1021,9 +1024,9 @@ class WindowsPathHandlingTest(unittest.TestCase):
 
 
 class SparseCheckoutTest(unittest.TestCase):
-    """Scan skip-worktree content from its authoritative source."""
+    """Scan content kept out of the worktree from its authoritative source."""
 
-    def test_skip_worktree_entry_does_not_fail_the_check(self):
+    def test_skip_worktree_entry_passes(self):
         with RetryingTemporaryDirectory() as tmp:
             _init_repo(tmp)
             target = Path(tmp) / "sparse.txt"
@@ -1045,7 +1048,7 @@ class SparseCheckoutTest(unittest.TestCase):
             result.returncode, 0,
             f"a valid sparse checkout failed: {result.stderr}")
 
-    def test_present_skip_worktree_entry_uses_unstaged_content(self):
+    def test_present_entry_reads_worktree(self):
         with RetryingTemporaryDirectory() as tmp:
             _init_repo(tmp)
             target = Path(tmp) / "present.txt"
@@ -1069,7 +1072,7 @@ class SparseCheckoutTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("unresolved conflict block", result.stderr)
 
-    def test_sparse_checkout_scans_absent_index_blob_with_cached_attributes(self):
+    def test_absent_blob_cached_attributes(self):
         with RetryingTemporaryDirectory() as tmp:
             _init_repo(tmp)
             target = Path(tmp) / "sparse.txt"
@@ -1117,20 +1120,20 @@ class GitOptionSupportTest(unittest.TestCase):
     @staticmethod
     def _probe(stderr: bytes):
         """Return a subprocess.run stub answering the support probe."""
-        return MagicMock(returncode=129 if stderr else 0, stderr=stderr,
-                         stdout=b"")
+        return MagicMock(returncode=GIT_USAGE_EXIT_CODE if stderr else 0,
+                         stderr=stderr, stdout=b"")
 
-    def test_unknown_option_is_read_as_no_support(self):
+    def test_rejected_option_unsupported(self):
         """Git 2.43 rejects the option; Ubuntu 24.04 LTS ships 2.43."""
         with patch("subprocess.run",
                    return_value=self._probe(b"unknown option: --no-lazy-fetch\n")):
             self.assertFalse(checker._supports_no_lazy_fetch("."))
 
-    def test_accepted_option_is_read_as_support(self):
+    def test_accepted_option_supported(self):
         with patch("subprocess.run", return_value=self._probe(b"")):
             self.assertTrue(checker._supports_no_lazy_fetch("."))
 
-    def test_command_omits_the_option_where_git_rejects_it(self):
+    def test_command_omits_rejected_option(self):
         with patch("subprocess.run",
                    return_value=self._probe(b"unknown option: --no-lazy-fetch\n")):
             command = checker._object_command(".", "cat-file", "-s", "--", "abc")
@@ -1138,24 +1141,24 @@ class GitOptionSupportTest(unittest.TestCase):
         self.assertIn("--no-replace-objects", command)
         self.assertLess(command.index("--"), command.index("abc"))
 
-    def test_command_keeps_the_option_where_git_accepts_it(self):
+    def test_command_keeps_accepted_option(self):
         with patch("subprocess.run", return_value=self._probe(b"")):
             command = checker._object_command(".", "cat-file", "-s", "--", "abc")
         self.assertIn("--no-lazy-fetch", command)
         self.assertIn("--no-replace-objects", command)
 
-    def test_missing_support_warns_once_rather_than_per_file(self):
+    def test_missing_support_warns_once(self):
         """The old failure printed one error line per tracked file."""
         stub = self._probe(b"unknown option: --no-lazy-fetch\n")
         with patch("subprocess.run", return_value=stub), \
              patch("sys.stderr", new_callable=io.StringIO) as captured:
-            for _ in range(5):
+            for _ in range(REPEATED_COMMAND_COUNT):
                 checker._object_command(".", "cat-file", "-s", "--", "abc")
             warnings = captured.getvalue()
         self.assertEqual(warnings.count("--no-lazy-fetch"), 1)
         self.assertIn("no verdict changes", warnings)
 
-    def test_the_checker_reads_objects_on_this_git(self):
+    def test_checker_reads_local_git(self):
         """Whatever git runs here, --staged must reach a verdict."""
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)

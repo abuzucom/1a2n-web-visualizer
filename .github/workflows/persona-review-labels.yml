@@ -1,0 +1,76 @@
+name: persona-review-labels
+
+# Runs the abuzucom/agents-personas adorno, generay, and havel reviews when a
+# maintainer adds a <persona>-scan-requested label to a pull request. Each
+# new push to a labeled pull request reviews again. These checks stay
+# optional in branch protection.
+#
+# Removing the stop-requested label reviews again with every persona that
+# carries its scan label. Removing any other label starts nothing.
+#
+# pull_request_target runs this file from the base branch. A pull request
+# cannot edit the caller. The caller runs no step. The engine reads the head
+# as git objects and never executes it. Fork pull requests get a skipped
+# check and no secret.
+#
+# .compliance-tree-exemptions.json on the base branch pins the SHA-256 of
+# this file. Update that pin on the base branch before any edit here.
+
+on:
+  pull_request_target:
+    types: [labeled, synchronize, unlabeled]
+
+concurrency:
+  group: persona-review-labels-${{ github.event.pull_request.number }}-${{ github.event.label.name || 'push' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  adorno:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'adorno-scan-requested') &&
+      (github.event.action != 'unlabeled' || github.event.label.name == 'stop-requested')
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    # agents-personas 1.0.0. Keep every uses: pin and personas_ref on the
+    # same commit.
+    uses: abuzucom/agents-personas/.github/workflows/adorno-ui-review.yml@1649e5c9710fd85d6cca12006e344af27a5404a6
+    with:
+      personas_ref: "1649e5c9710fd85d6cca12006e344af27a5404a6"
+    secrets:
+      MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+
+  generay:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'generay-scan-requested') &&
+      (github.event.action != 'unlabeled' || github.event.label.name == 'stop-requested')
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    uses: abuzucom/agents-personas/.github/workflows/generay-time-review.yml@1649e5c9710fd85d6cca12006e344af27a5404a6
+    with:
+      personas_ref: "1649e5c9710fd85d6cca12006e344af27a5404a6"
+    secrets:
+      MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+
+  havel:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'havel-scan-requested') &&
+      (github.event.action != 'unlabeled' || github.event.label.name == 'stop-requested')
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    uses: abuzucom/agents-personas/.github/workflows/havel-privacy-review.yml@1649e5c9710fd85d6cca12006e344af27a5404a6
+    with:
+      personas_ref: "1649e5c9710fd85d6cca12006e344af27a5404a6"
+      # This repository handles no personal data of its own. An empty scope
+      # reviews the baseline classes alone and notes the unchecked regimes.
+      regimes: ""
+    secrets:
+      MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}

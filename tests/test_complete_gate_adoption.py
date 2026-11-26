@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPOSITORY_ROOT / "scripts" / "complete_gate_adoption.py"
+REGISTRATION_PATH_COUNT = 2
 
 
 def load_script():
@@ -37,7 +38,7 @@ class CompleteGateAdoptionTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.script._candidate(root, str(outside))
 
-    def test_candidate_paths_include_all_transaction_configs(self) -> None:
+    def test_candidate_paths_transaction_configs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             candidate = Path(temporary)
             (candidate / "shared-files.json").write_text(
@@ -49,7 +50,7 @@ class CompleteGateAdoptionTest(unittest.TestCase):
         self.assertIn(".claude/settings.json", paths)
         self.assertIn(".codex/config.toml", paths)
 
-    def test_target_path_normalizes_root_before_containment_check(self) -> None:
+    def test_target_path_normalizes_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             nested = root / "nested"
@@ -65,7 +66,8 @@ class CompleteGateAdoptionTest(unittest.TestCase):
             ".codex/hooks.json",
         ])
         self.assertEqual(paths[0], "hooks/example.py")
-        self.assertEqual(paths[-2:], [".claude/settings.json", ".codex/hooks.json"])
+        self.assertEqual(
+            paths[-REGISTRATION_PATH_COUNT:], [".claude/settings.json", ".codex/hooks.json"])
 
     def test_install_failure_restores_prior_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -94,7 +96,7 @@ class CompleteGateAdoptionTest(unittest.TestCase):
             self.assertEqual((root / first).read_text(encoding="utf-8"), "old first")
             self.assertEqual((root / second).read_text(encoding="utf-8"), "old second")
 
-    def test_install_failure_removes_transaction_owned_directories(self) -> None:
+    def test_install_failure_removes_directories(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             candidate = root / ".gate-staging" / "release"
