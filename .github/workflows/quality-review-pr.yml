@@ -1,0 +1,196 @@
+name: quality-review-pr
+
+# Runs the abuzucom/agents-personas euler quality review on this repository's
+# pull requests beside the foucault security review. The wrapper loads the
+# engine, the euler policy, and the model adapter from the pinned
+# agents-personas commit, so this repository supplies no adapter files.
+#
+# The workflow_run trigger keeps this caller on default branch code. A pull
+# request cannot edit the reviewer. The caller subscribes to the Convention
+# Sync Check workflow (the test suite runner) and the Immutable Compliance
+# workflow. The review starts only when both runs succeeded for the same head
+# revision. Either workflow can finish first, so the caller reads both results
+# and starts the review on the later pass.
+#
+# Both upstream workflows run on the pull_request event in this repository.
+# The template runs Immutable Compliance on pull_request_target instead.
+# docs/template-drift.md records the difference.
+#
+# The engine publishes a skipped "euler / quality" check for a fork pull
+# request and withholds the provider key from it. The security review applies
+# the same fork rule.
+
+on:
+  workflow_run:
+    workflows: ["Convention Sync Check", "Immutable Compliance"]
+    types: [completed]
+
+concurrency:
+  group: quality-review-${{ github.repository }}-${{ github.event.workflow_run.head_sha }}
+  # Serialize same-head events so later runs can see completed review checks.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' ||
+      github.event.workflow_run.event == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    outputs:
+      found: ${{ steps.pr.outputs.found }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      head_repo_url: ${{ steps.pr.outputs.head_repo_url }}
+      head_repo_full_name: ${{ steps.pr.outputs.head_repo_full_name }}
+      tests_passed: ${{ steps.pr.outputs.tests_passed }}
+      compliance_passed: ${{ steps.pr.outputs.compliance_passed }}
+      already_reviewed: ${{ steps.pr.outputs.already_reviewed }}
+    steps:
+      - name: Resolve pull request from the head revision
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const headSha = process.env.HEAD_SHA;
+            if (!/^[0-9a-f]{40}$/.test(headSha)) {
+              core.setFailed('workflow run head SHA is invalid');
+              return;
+            }
+
+            const pulls = await github.paginate(
+              github.rest.pulls.list,
+              { ...context.repo, state: 'open', per_page: 100 },
+            );
+            const matches = pulls.filter((pull) => pull.head.sha === headSha);
+            if (matches.length !== 1) {
+              core.setOutput('found', 'false');
+              return;
+            }
+
+            const pull = matches[0];
+            const headRepository = pull.head?.repo;
+            if (!headRepository?.full_name || !headRepository.clone_url) {
+              core.setFailed('pull request head repository metadata is unavailable');
+              return;
+            }
+
+            // The most recent run of each upstream workflow decides the
+            // outcome, so a failed re-run does not inherit an earlier success.
+            const latestRun = async (workflowName, event) => {
+              const runs = await github.paginate(
+                github.rest.actions.listWorkflowRunsForRepo,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  head_sha: headSha,
+                  event,
+                  per_page: 100,
+                },
+              );
+              const workflowRuns = runs.filter(
+                (run) => run.name === workflowName && run.head_sha === headSha,
+              );
+              workflowRuns.sort((left, right) => right.id - left.id);
+              return workflowRuns.length > 0 ? workflowRuns[0] : null;
+            };
+
+            const testsRun = await latestRun('Convention Sync Check', 'pull_request');
+            const complianceRun = await latestRun(
+              'Immutable Compliance', 'pull_request');
+            const testsPassed =
+              testsRun !== null && testsRun.conclusion === 'success';
+            const compliancePassed =
+              complianceRun !== null && complianceRun.conclusion === 'success';
+
+            // Every workflow-authored check run carries the GitHub Actions
+            // app, so a check run from a foreign app never marks this head
+            // as reviewed. The engine titles a verdict check "VERDICT: <v>"
+            // and reruns a passing review. A run that ends before a verdict
+            // uses another title and leaves the head unmarked, so the next
+            // same-head event retries the review. Keep the title pattern in
+            // lockstep with the pinned agents-personas engine.
+            const existingChecks = await github.paginate(
+              github.rest.checks.listForRef,
+              {
+                ...context.repo,
+                ref: headSha,
+                check_name: 'euler / quality',
+                per_page: 100,
+              },
+            );
+            const verdictChecks = existingChecks.filter((check) =>
+              check.app?.slug === 'github-actions' &&
+              check.status === 'completed' &&
+              /^VERDICT: (APPROVE|BLOCK|NEEDS-HUMAN)$/.test(
+                check.output?.title || ''));
+
+            // Any workflow with checks: write can publish a verdict title.
+            // Only a check suite from this caller's own workflow_run
+            // execution runs default branch code. A pull request workflow
+            // runs with another event, so its check never marks the head.
+            const callerPath = '.github/workflows/quality-review-pr.yml';
+            const fromCaller = async (check) => {
+              const suiteId = check.check_suite?.id;
+              if (!suiteId) {
+                return false;
+              }
+              const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                ...context.repo,
+                check_suite_id: suiteId,
+                per_page: 100,
+              });
+              return data.workflow_runs.some((run) =>
+                run.event === 'workflow_run' && run.path === callerPath);
+            };
+            const callerVerdicts = await Promise.all(verdictChecks.map(fromCaller));
+            const alreadyReviewed = callerVerdicts.includes(true);
+
+            core.setOutput('found', 'true');
+            core.setOutput('pr_number', String(pull.number));
+            core.setOutput('base_sha', pull.base.sha);
+            core.setOutput('head_sha', pull.head.sha);
+            core.setOutput('head_repo_url', headRepository.clone_url);
+            core.setOutput('head_repo_full_name', headRepository.full_name);
+            core.setOutput('tests_passed', testsPassed ? 'true' : 'false');
+            core.setOutput('compliance_passed', compliancePassed ? 'true' : 'false');
+            core.setOutput('already_reviewed', alreadyReviewed ? 'true' : 'false');
+
+  review:
+    needs: resolve
+    if: >-
+      needs.resolve.outputs.found == 'true' &&
+      needs.resolve.outputs.already_reviewed == 'false' &&
+      needs.resolve.outputs.tests_passed == 'true' &&
+      needs.resolve.outputs.compliance_passed == 'true'
+    # The wrapper posts a pull request comment and publishes a check run.
+    # The job grants each permission that the reusable workflow uses.
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    # agents-personas 1.0.0. Keep the uses: pin and personas_ref on the same
+    # commit.
+    uses: abuzucom/agents-personas/.github/workflows/euler-quality-review.yml@1649e5c9710fd85d6cca12006e344af27a5404a6
+    with:
+      personas_ref: "1649e5c9710fd85d6cca12006e344af27a5404a6"
+      pr_number: ${{ needs.resolve.outputs.pr_number }}
+      base_sha: ${{ needs.resolve.outputs.base_sha }}
+      head_sha: ${{ needs.resolve.outputs.head_sha }}
+      head_repo_url: ${{ needs.resolve.outputs.head_repo_url }}
+      head_repo_full_name: ${{ needs.resolve.outputs.head_repo_full_name }}
+      fail_on_block: true
+      # The test suite holds destructive command fixtures for the gates.
+      exclude_paths: "tests/**"
+    secrets:
+      MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
