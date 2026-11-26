@@ -18,14 +18,16 @@ def workflow_paths() -> list:
 class VercelDeploymentBoundaryTest(unittest.TestCase):
     """Check the actual Vercel deployment configuration."""
 
-    def test_vercel_config_publishes_the_site_tree(self) -> None:
+    def test_vercel_config_publishes_site_tree(self) -> None:
+        """Vercel config publishes the site tree."""
         config = json.loads((ROOT / 'vercel.json').read_text(encoding='utf-8'))
         self.assertIsNone(config['framework'])
         self.assertEqual(config['outputDirectory'], 'src')
         self.assertEqual(config['installCommand'], '')
         self.assertEqual(config['buildCommand'], '')
 
-    def test_upload_keeps_only_the_site_tree(self) -> None:
+    def test_upload_keeps_only_site_tree(self) -> None:
+        """Upload keeps only the site tree."""
         lines = (ROOT / '.vercelignore').read_text(encoding='utf-8').splitlines()
         patterns = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
         self.assertIn('*', patterns)

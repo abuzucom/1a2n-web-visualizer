@@ -47,7 +47,8 @@ class DeployRetryPinTest(unittest.TestCase):
         ]}}}
         self.assertEqual(len(set(deploy_pages_references(workflow))), 2)
 
-    def test_no_workflow_references_a_pages_deploy_action(self) -> None:
+    def test_no_pages_deploy_action(self) -> None:
+        """No workflow references a pages deploy action."""
         paths = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(WORKFLOW_DIR.glob("*.yaml"))
         for path in paths:
             workflow = yaml.safe_load(path.read_text(encoding="utf-8"))

@@ -13,7 +13,7 @@ class ProtectedClientConfigTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(is_protected(path))
 
-    def test_protects_assembled_policy_inputs_and_gate_manifests(self) -> None:
+    def test_protects_policy_inputs_and_manifests(self) -> None:
         """These files feed the injected policy or pin the gate set."""
         for path in (
             "docs/agent-policy/enforcement.md", "docs/project-orientation.md",

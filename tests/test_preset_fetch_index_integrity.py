@@ -65,7 +65,8 @@ class CreamAppendIndexTests(unittest.TestCase):
         kept = {name: dict(SAMPLE_PRESET) for name in names}
         return start, self.tool.append_chunks(kept, start)
 
-    def test_append_extends_files_map_with_each_new_chunk(self):
+    def test_append_extends_files_map(self):
+        """Append extends files map with each new chunk."""
         write_index(self.out_dir, experimental_index())
 
         start, _ = self.append(["Cream One"])
@@ -81,7 +82,8 @@ class CreamAppendIndexTests(unittest.TestCase):
         chunk_text = (self.out_dir / "chunk-002.js").read_text(encoding="utf-8")
         self.assertTrue(chunk_text.startswith("window.__bcPresetChunk(2,"))
 
-    def test_append_keeps_version_one_index_without_files_map(self):
+    def test_append_keeps_version_one_index(self):
+        """Append keeps version one index without files map."""
         write_index(self.out_dir, {"v": 1, "chunks": [["Mainline A"]]})
 
         self.append(["Cream One"])
@@ -90,7 +92,8 @@ class CreamAppendIndexTests(unittest.TestCase):
         self.assertNotIn("files", data)
         self.assertEqual(data["chunks"], [["Mainline A"], ["Cream One"]])
 
-    def test_append_creates_index_when_none_exists(self):
+    def test_append_creates_missing_index(self):
+        """Append creates index when none exists."""
         start, _ = self.append(["Cream One"])
 
         self.assertEqual(start, 0)
@@ -107,7 +110,8 @@ class FetchExtraRegenerationTests(unittest.TestCase):
         self.out_dir = Path(self.directory.name) / "presets-extra"
         self.out_dir.mkdir()
 
-    def test_write_output_refuses_index_with_files_map(self):
+    def test_write_refuses_files_map_index(self):
+        """Write output refuses index with files map."""
         write_index(self.out_dir, experimental_index())
         experimental_chunk = self.out_dir / "chunk-9000.js"
         experimental_chunk.write_text("window.__bcPresetChunk(1,{});\n", encoding="utf-8")
@@ -118,7 +122,8 @@ class FetchExtraRegenerationTests(unittest.TestCase):
         self.assertTrue(experimental_chunk.exists(), "a refused regeneration must not delete experimental chunks")
         self.assertEqual(read_index(self.out_dir), experimental_index())
 
-    def test_write_output_regenerates_version_one_index(self):
+    def test_write_regenerates_version_one_index(self):
+        """Write output regenerates version one index."""
         write_index(self.out_dir, {"v": 1, "chunks": [["Old"]]})
 
         chunks, _ = self.tool.write_output({"Fresh": dict(SAMPLE_PRESET)}, self.out_dir)
@@ -154,7 +159,8 @@ class FetchExtraRegenerationTests(unittest.TestCase):
 class FetchExtraCuratedRegenerationTests(unittest.TestCase):
     """fetch-extra-presets-curated.py refuses before any download or write."""
 
-    def test_main_refuses_index_with_files_map(self):
+    def test_main_refuses_files_map_index(self):
+        """Main refuses index with files map."""
         curated = load_tool("fetch-extra-presets-curated.py")
         fetch = load_tool("fetch-extra-presets.py")
         with tempfile.TemporaryDirectory() as directory:

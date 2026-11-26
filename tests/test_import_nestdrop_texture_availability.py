@@ -28,7 +28,8 @@ class ComputeAvailableTexturesTests(unittest.TestCase):
             "even when the current batch's own archive does not resupply it",
         )
 
-    def test_existing_texture_names_matches_lowercased_sampler_reference(self):
+    def test_texture_names_match_lowercased_sampler(self):
+        """Existing texture names matches lowercased sampler reference."""
         self.assertIn("cloudsImage", self.tool.EXISTING_TEXTURE_NAMES)
         available = self.tool.compute_available_textures(
             texture_images={}, previously_vendored={},
