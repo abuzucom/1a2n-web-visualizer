@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.23.2] (2026-11-26)
+
+### Added
+- Document branch promotion in `docs/repo-guide.md`. A pull request promotes
+  `develop` to `main`. A forced reset then returns `develop` to `main`. An
+  administrator fast-forward remains the fallback.
+
 ## [1.23.1] (2026-11-24)
 
 ### Changed
