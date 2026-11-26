@@ -75,7 +75,8 @@ class EquationAllowlistTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertEqual(checker.find_equation_violations(source), [])
 
-    def test_rejects_code_outside_the_equation_vocabulary(self) -> None:
+    def test_rejects_code_outside_vocabulary(self) -> None:
+        """Rejects code outside the equation vocabulary."""
         for source in REJECTED:
             with self.subTest(source=source):
                 self.assertNotEqual(checker.find_equation_violations(source), [])
@@ -93,7 +94,8 @@ class EquationAllowlistTests(unittest.TestCase):
         for problem in problems:
             self.assertTrue(problem.startswith("waves[0].point_eqs_str: "), problem)
 
-    def test_rejects_code_outside_the_chunk_wrapper(self) -> None:
+    def test_rejects_code_outside_chunk_wrapper(self) -> None:
+        """Rejects code outside the chunk wrapper."""
         with tempfile.TemporaryDirectory() as directory:
             preset_dir = Path(directory)
             (preset_dir / "index.js").write_text(
@@ -103,7 +105,8 @@ class EquationAllowlistTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 checker.corpus_violations(preset_dir)
 
-    def test_rejects_a_chunk_path_outside_the_preset_directory(self) -> None:
+    def test_rejects_chunk_outside_preset_directory(self) -> None:
+        """Rejects a chunk path outside the preset directory."""
         with tempfile.TemporaryDirectory() as directory:
             preset_dir = Path(directory)
             (preset_dir / "index.js").write_text(

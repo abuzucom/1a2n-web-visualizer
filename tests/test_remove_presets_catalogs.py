@@ -70,7 +70,8 @@ class RemovePresetsCatalogTest(unittest.TestCase):
             capture_output=True, text=True, check=False, cwd=self.root,
         )
 
-    def test_the_dry_run_reports_the_catalog_changes_and_writes_nothing(self):
+    def test_dry_run_reports_without_writing(self):
+        """The dry run reports the catalog changes and writes nothing."""
         result = self.run_tool("--names-file", "names.txt", "--dry-run")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -80,7 +81,8 @@ class RemovePresetsCatalogTest(unittest.TestCase):
         self.assertEqual(self.read("performance-catalog.json"), PERFORMANCE_TEXT)
         self.assertEqual(self.read("src/catalogs/energy-catalog.js"), ENERGY_BUNDLE)
 
-    def test_a_removal_clears_the_references_from_both_catalogs(self):
+    def test_removal_clears_both_catalogs(self):
+        """A removal clears the references from both catalogs."""
         result = self.run_tool("--names-file", "names.txt")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -89,7 +91,8 @@ class RemovePresetsCatalogTest(unittest.TestCase):
         self.assertEqual(energy["presets"], {"presets-extra:Beta": "high"})
         self.assertEqual(performance["presets"], ["presets-extra:Gamma"])
 
-    def test_the_runtime_bundles_follow_the_catalogs(self):
+    def test_runtime_bundles_follow_catalogs(self):
+        """The runtime bundles follow the catalogs."""
         self.assertEqual(self.run_tool("--names-file", "names.txt").returncode, 0)
 
         energy = json.loads(self.read("energy-catalog.json"))
@@ -103,7 +106,8 @@ class RemovePresetsCatalogTest(unittest.TestCase):
             "window.BCPerformanceCatalog = " + json.dumps(performance, separators=(",", ":")) + ";\n",
         )
 
-    def test_the_preset_leaves_the_index_the_chunk_and_the_inventory(self):
+    def test_preset_leaves_index_chunk_inventory(self):
+        """The preset leaves the index the chunk and the inventory."""
         self.assertEqual(self.run_tool("--names-file", "names.txt").returncode, 0)
 
         self.assertNotIn("Alpha", self.read("src/presets-extra/index.js"))
@@ -111,7 +115,8 @@ class RemovePresetsCatalogTest(unittest.TestCase):
         self.assertNotIn("Alpha", self.read("preset-inventory.csv"))
         self.assertIn("Alpha", self.read("removed-presets.csv"))
 
-    def test_a_catalog_entry_for_another_pack_survives(self):
+    def test_other_pack_entry_survives(self):
+        """A catalog entry for another pack survives."""
         # The catalog names the pack the runtime plays. The removal targets
         # the presets-extra pack, so an entry for another pack keeps
         # pointing at a preset that still plays.
@@ -126,13 +131,15 @@ class RemovePresetsCatalogTest(unittest.TestCase):
         energy = json.loads(self.read("energy-catalog.json"))
         self.assertEqual(energy["presets"], {"butterchurnPresetsExtra:Alpha": "low"})
 
-    def test_a_catalog_entry_for_the_removed_pack_goes(self):
+    def test_removed_pack_entry_goes(self):
+        """A catalog entry for the removed pack goes."""
         self.assertEqual(self.run_tool("--names-file", "names.txt").returncode, 0)
 
         energy = json.loads(self.read("energy-catalog.json"))
         self.assertEqual(energy["presets"], {"presets-extra:Beta": "high"})
 
-    def test_the_consistency_check_reports_no_stale_catalog_entries(self):
+    def test_consistency_check_finds_no_stale(self):
+        """The consistency check reports no stale catalog entries."""
         result = self.run_tool("--names-file", "names.txt")
 
         self.assertNotIn("still name a removed preset", result.stdout)

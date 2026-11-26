@@ -46,7 +46,8 @@ class ChecksWorkflowRevisionTest(unittest.TestCase):
         ]}}}
         self.assertEqual(action_references(workflow, "actions/setup-node"), [])
 
-    def test_each_shared_action_uses_one_revision(self) -> None:
+    def test_shared_action_uses_one_revision(self) -> None:
+        """Each shared action uses one revision."""
         workflow = yaml.safe_load(CHECKS_WORKFLOW.read_text(encoding="utf-8"))
         for action in SHARED_REVISION_ACTIONS:
             with self.subTest(action=action):

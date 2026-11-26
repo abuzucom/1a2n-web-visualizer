@@ -17,7 +17,8 @@ def load_tool(name):
 
 
 class TextureBundleMergeTests(unittest.TestCase):
-    def test_write_texture_bundle_merges_with_existing_vendored_images(self):
+    def test_texture_bundle_merges_vendored_images(self):
+        """Write texture bundle merges with existing vendored images."""
         tool = load_tool("import-nestdrop-presets.py")
 
         existing_images = {

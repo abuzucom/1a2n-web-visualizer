@@ -103,19 +103,22 @@ class NestDropRerunRecordTests(unittest.TestCase):
             TOOL.main()
         return json.loads(self.paths["MANIFEST_PATH"].read_text(encoding="utf-8"))
 
-    def test_first_run_records_one_collision_and_retains_two_presets(self):
+    def test_initial_run_records_one_collision(self):
+        """First run records one collision and retains two presets."""
         manifest = self.run_import()
 
         self.assertEqual(len(manifest["collisions"]), 1)
         self.assertEqual(manifest["collisions"][0]["runtimeName"], "Foo [variant 2]")
         self.assertEqual(len(manifest["presets"]), 2)
 
-    def test_reruns_do_not_duplicate_collision_records(self):
+    def test_reruns_keep_collision_records_unique(self):
+        """Reruns do not duplicate collision records."""
         for run in range(RUN_COUNT):
             manifest = self.run_import()
             self.assertEqual(len(manifest["collisions"]), 1, f"run {run + 1}")
 
-    def test_reruns_do_not_duplicate_skip_records(self):
+    def test_reruns_keep_skip_records_unique(self):
+        """Reruns do not duplicate skip records."""
         manifests = [self.run_import() for _ in range(RUN_COUNT)]
 
         for run, manifest in enumerate(manifests, start=1):
@@ -123,7 +126,8 @@ class NestDropRerunRecordTests(unittest.TestCase):
             self.assertEqual(len(keys), len(set(keys)), f"run {run}: {keys}")
         self.assertEqual(manifests[-1]["skipped"], manifests[-2]["skipped"])
 
-    def test_reruns_keep_the_retained_presets_unchanged(self):
+    def test_reruns_keep_retained_presets(self):
+        """Reruns keep the retained presets unchanged."""
         manifests = [self.run_import() for _ in range(RUN_COUNT)]
 
         names = [[item["displayName"] for item in manifest["presets"]] for manifest in manifests]

@@ -112,7 +112,8 @@ class ImporterRerunTests(unittest.TestCase):
     def indexed_names(self):
         return [name for names in read_index(self.index)["chunks"] for name in names]
 
-    def test_rerun_after_a_crash_past_the_index_imports_each_preset_once(self):
+    def test_rerun_past_index_imports_once(self):
+        """Rerun after a crash past the index imports each preset once."""
         writer = failing_writer(self.tool.atomic_write_text, self.manifest)
         with patch.object(self.tool, "atomic_write_text", writer), self.assertRaises(OSError):
             self.run_import()
@@ -121,7 +122,8 @@ class ImporterRerunTests(unittest.TestCase):
 
         self.assertEqual(self.indexed_names().count("[EXP] Sample"), 1)
 
-    def test_texture_failure_leaves_the_index_unchanged(self):
+    def test_texture_failure_keeps_index(self):
+        """Texture failure leaves the index unchanged."""
         self.splitter.fail = True
 
         with self.assertRaises(OSError):
@@ -184,7 +186,8 @@ class RemovalRerunTests(unittest.TestCase):
         with patch.object(sys, "argv", argv):
             return self.tool.main()
 
-    def test_rerun_after_a_crash_completes_once(self):
+    def test_rerun_after_crash_completes_once(self):
+        """Rerun after a crash completes once."""
         writer = failing_writer(self.tool.atomic_write_text, self.manifest)
         with patch.object(self.tool, "atomic_write_text", writer), self.assertRaises(OSError):
             self.run_removal()
@@ -203,7 +206,8 @@ class RemovalRerunTests(unittest.TestCase):
 class TexturePartTests(unittest.TestCase):
     """split-extra-images.py writes every part or none."""
 
-    def test_failure_while_building_parts_keeps_existing_parts(self):
+    def test_part_build_failure_keeps_parts(self):
+        """Failure while building parts keeps existing parts."""
         tool = load_tool("split-extra-images.py")
         with tempfile.TemporaryDirectory() as directory:
             vendor = Path(directory)
@@ -231,7 +235,8 @@ class ReconcileTests(unittest.TestCase):
         tool = load_tool("reconcile_preset_inventory.py")
         self.assertEqual(Path(tool.atomic_write_text.__code__.co_filename).name, "preset_io.py")
 
-    def test_reconcile_rebuilds_rows_from_the_index(self):
+    def test_reconcile_rebuilds_rows_from_index(self):
+        """Reconcile rebuilds rows from the index."""
         tool = load_tool("reconcile_preset_inventory.py")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

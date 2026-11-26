@@ -14,7 +14,8 @@ SUPPRESSION_PATTERN = re.compile(r"#\s*(?:ruff:\s*)?noqa\b", re.IGNORECASE)
 class ToolLintSuppressionTests(unittest.TestCase):
     """Every tools/*.py file passes ruff without a noqa comment."""
 
-    def test_no_tool_suppresses_a_lint_check(self):
+    def test_no_tool_suppresses_lint(self):
+        """No tool suppresses a lint check."""
         findings = []
         for path in sorted(TOOLS_DIR.glob("*.py")):
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):

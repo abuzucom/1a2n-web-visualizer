@@ -71,7 +71,8 @@ def write_fixture_files(root: Path) -> dict[str, Path]:
 
 
 class RemoveExperimentalPresetsTests(unittest.TestCase):
-    def test_removes_numbered_batches_and_updates_generated_records(self):
+    def test_removes_batches_updates_records(self):
+        """Removes numbered batches and updates generated records."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             paths = write_fixture_files(root)
