@@ -3,73 +3,27 @@
 import re
 import sys
 from pathlib import Path
-from typing import Iterator, NamedTuple
 
 import yaml
-from yaml.constructor import ConstructorError
-from yaml.nodes import MappingNode
-from yaml.tokens import ScalarToken
+
+try:
+    from scripts._yaml_lines import (
+        exception_comment_lines, load_documents, mapping_line_numbers,
+        walk_mappings,
+    )
+except ModuleNotFoundError:
+    from _yaml_lines import (
+        exception_comment_lines, load_documents, mapping_line_numbers,
+        walk_mappings,
+    )
 
 FROM_STAGE = re.compile(r"^\s*FROM\s+\S+", re.IGNORECASE)
 USER_INSTRUCTION = re.compile(r"^\s*USER\b(.*)$", re.IGNORECASE)
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z0-9_.-]+)\1")
+HEREDOC_MARKER_GROUP = 2
 CONTAINER_KEYS = ("containers", "initContainers", "ephemeralContainers")
 EXCEPTION_PREFIX = "# runtime-root: this container "
 EXCEPTION_SUFFIX = " (Rule 12 exception)."
-
-
-class _MarkedMapping(dict):
-    """Store the source line for a YAML mapping."""
-
-    def __init__(self, line: int) -> None:
-        super().__init__()
-        self.line = line
-
-    def __eq__(self, other: object) -> bool:
-        """Compare contents only. The source line is location metadata."""
-        return dict.__eq__(self, other)
-
-    __hash__ = None
-
-
-def _construct_unique_mapping(
-    loader: yaml.SafeLoader, node: MappingNode
-) -> Iterator[_MarkedMapping]:
-    """Construct a marked mapping and reject duplicate keys."""
-    mapping = _MarkedMapping(node.start_mark.line)
-    yield mapping
-    explicit_keys = set()
-    for key_node, _value_node in node.value:
-        if key_node.tag == "tag:yaml.org,2002:merge":
-            continue
-        key = loader.construct_object(key_node, deep=True)
-        try:
-            duplicate = key in explicit_keys
-        except TypeError as error:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                "found an unhashable key",
-                key_node.start_mark,
-            ) from error
-        if duplicate:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        explicit_keys.add(key)
-    loader.flatten_mapping(node)
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=True)
-        mapping[key] = loader.construct_object(value_node, deep=True)
-
-
-yaml.SafeLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_unique_mapping,
-)
 
 
 def _is_exception_comment(line: str) -> bool:
@@ -85,54 +39,20 @@ def _is_exception_comment(line: str) -> bool:
 
 def _is_root_user(value: object) -> bool:
     """Return whether a runtime identity is root or invalid."""
-    if isinstance(value, int) and not isinstance(value, bool):
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, int):
         return value <= 0
-    # Booleans, non-strings, blanks, and variable expansions cannot name a
-    # verified non-root user.
-    if not isinstance(value, str) or not value.strip() or "$" in value:
+    if not isinstance(value, str) or not value.strip():
+        return True
+    if "$" in value:
         return True
     principal = value.strip().split()[0].split(":", 1)[0].strip().lower()
+    if principal == "root":
+        return True
     if principal.lstrip("+-").isdigit():
         return int(principal) <= 0
-    return principal == "root"
-
-
-def _mapping_line_numbers(lines: list[str], mapping: dict) -> set[int]:
-    """Return line numbers directly associated with a marked mapping."""
-    start = getattr(mapping, "line", 0)
-    indent = len(lines[start]) - len(lines[start].lstrip(" "))
-    end = len(lines)
-    for index in range(start + 1, len(lines)):
-        next_indent = len(lines[index]) - len(lines[index].lstrip(" "))
-        if lines[index].strip() and next_indent <= indent:
-            end = index
-            break
-    associated = set(range(start, end))
-    index = start - 1
-    while index >= 0 and lines[index].strip().startswith("#"):
-        comment_indent = len(lines[index]) - len(lines[index].lstrip(" "))
-        if comment_indent != indent:
-            break
-        associated.add(index)
-        index -= 1
-    return associated
-
-
-def _exception_comment_lines(text: str) -> set[int]:
-    """Return exact exception comments outside YAML block scalar content."""
-    scalar_lines = set()
-    for token in yaml.scan(text):
-        if isinstance(token, ScalarToken) and (
-            token.style in ("|", ">")
-            or token.end_mark.line > token.start_mark.line
-        ):
-            scalar_lines.update(
-                range(token.start_mark.line + 1, token.end_mark.line))
-    return {
-        number
-        for number, line in enumerate(text.splitlines())
-        if number not in scalar_lines and _is_exception_comment(line)
-    }
+    return False
 
 
 def _has_mapping_exception(
@@ -140,25 +60,7 @@ def _has_mapping_exception(
 ) -> bool:
     """Return whether a mapping carries an exact exception comment."""
     return bool(
-        exception_lines & _mapping_line_numbers(lines, mapping))
-
-
-def _walk_mappings(documents: list[object]) -> Iterator[dict]:
-    """Yield every mapping without following YAML alias cycles twice."""
-    stack = list(reversed(documents))
-    visited: set[int] = set()
-    while stack:
-        value = stack.pop()
-        if isinstance(value, (dict, list)):
-            identity = id(value)
-            if identity in visited:
-                continue
-            visited.add(identity)
-        if isinstance(value, dict):
-            yield value
-            stack.extend(reversed(list(value.values())))
-        elif isinstance(value, list):
-            stack.extend(reversed(value))
+        exception_lines & mapping_line_numbers(lines, mapping))
 
 
 def _docker_escape(lines: list[str]) -> str:
@@ -179,16 +81,20 @@ def _skip_heredocs(lines: list[str], index: int, logical: str) -> int:
     matches = list(HEREDOC.finditer(logical)) if instruction in (
         "RUN", "COPY", "ADD") else []
     for delimiter in matches:
-        marker = delimiter.group(2)
-        strip_tabs = "<<-" in delimiter.group(0)
-        while index < len(lines):
-            candidate = lines[index].lstrip("\t") if strip_tabs else lines[index]
-            index += 1
-            if candidate == marker:
-                break
-        else:
-            raise ValueError("unterminated Dockerfile heredoc")
+        index = _heredoc_end(
+            lines, index, delimiter.group(HEREDOC_MARKER_GROUP),
+            "<<-" in delimiter.group(0))
     return index
+
+
+def _heredoc_end(lines: list[str], index: int, marker: str, strip_tabs: bool) -> int:
+    """Return the line index after the heredoc terminator `marker`."""
+    while index < len(lines):
+        candidate = lines[index].lstrip("\t") if strip_tabs else lines[index]
+        index += 1
+        if candidate == marker:
+            return index
+    raise ValueError("unterminated Dockerfile heredoc")
 
 
 def _docker_instructions(text: str) -> list[tuple[int, str]]:
@@ -265,23 +171,16 @@ def _effective_security_value(container: dict, pod: dict, key: str) -> object:
     return None
 
 
-class _SourceContext(NamedTuple):
-    """The manifest text and path a container violation cites."""
-
-    lines: list[str]
-    exception_lines: set[int]
-    path: str
-
-
 def _container_violation(
     container: object,
     pod: dict,
-    slot: tuple[str, int],
-    source: _SourceContext,
+    kind: str,
+    index: int,
+    lines: list[str],
+    exception_lines: set[int],
+    path: str,
 ) -> str | None:
-    """Return a violation for one Kubernetes container in a kind/index slot."""
-    kind, index = slot
-    lines, exception_lines, path = source
+    """Return a violation for one Kubernetes container."""
     if not isinstance(container, dict):
         return f"{path}: {kind}[{index}] is not a container mapping (Rule 12)"
     if _has_mapping_exception(lines, exception_lines, container):
@@ -309,7 +208,7 @@ def _k8s_violations(
         and isinstance(document.get("apiVersion"), str)
         and isinstance(document.get("kind"), str)
     ]
-    for pod in _walk_mappings(kubernetes_documents):
+    for pod in walk_mappings(kubernetes_documents):
         for kind in CONTAINER_KEYS:
             if kind not in pod:
                 continue
@@ -319,8 +218,7 @@ def _k8s_violations(
                 continue
             for index, container in enumerate(containers):
                 violation = _container_violation(
-                    container, pod, (kind, index),
-                    _SourceContext(lines, exception_lines, path),
+                    container, pod, kind, index, lines, exception_lines, path
                 )
                 if violation is not None:
                     violations.append(violation)
@@ -340,16 +238,14 @@ def find_violations(text: str, path: str) -> list[str]:
     if not name.endswith((".yml", ".yaml")):
         return []
     try:
-        documents = list(yaml.safe_load_all(text))
-        lines = text.splitlines()
-        exception_lines = _exception_comment_lines(text)
-        if name.startswith(("docker-compose", "compose")):
-            return _compose_violations(
-                documents, lines, exception_lines, path)
-        return _k8s_violations(documents, lines, exception_lines, path)
-    except (yaml.YAMLError, ValueError, TypeError, AttributeError, KeyError,
-            IndexError, RecursionError):
+        documents = load_documents(text)
+        exception_lines = exception_comment_lines(text, _is_exception_comment)
+    except yaml.YAMLError:
         return [f"{path}: malformed YAML cannot be checked (Rule 12)"]
+    lines = text.splitlines()
+    if name.startswith(("docker-compose", "compose")):
+        return _compose_violations(documents, lines, exception_lines, path)
+    return _k8s_violations(documents, lines, exception_lines, path)
 
 
 def main() -> int:
@@ -361,7 +257,14 @@ def main() -> int:
     violations = []
     for path in paths:
         text = Path(path).read_text(encoding="utf-8")
-        violations.extend(find_violations(text, path))
+        try:
+            violations.extend(find_violations(text, path))
+        except Exception as error:
+            # Top-level boundary: fail closed and name a checker defect as one.
+            print(f"error: {path}: internal checker failure "
+                  f"({type(error).__name__}). Recovery: report the file and "
+                  "command to the repository maintainers.", file=sys.stderr)
+            return 1
     if not violations:
         return 0
     for message in violations:

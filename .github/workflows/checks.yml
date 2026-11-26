@@ -38,8 +38,12 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm ci --ignore-scripts
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
       - name: Install checker dependencies
-        run: python -m pip install --requirement requirements-checkers.txt
+        run: 'python -m pip install --requirement requirements-checkers.txt --require-hashes --only-binary :all:'
       - name: Run Python tests
         run: npm run test:py
       - name: Run interpreter shim tests
@@ -54,8 +58,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
       - name: Install checker dependencies
-        run: python3 -m pip install --requirement requirements-checkers.txt
+        run: 'python3 -m pip install --requirement requirements-checkers.txt --require-hashes --only-binary :all:'
 
       - name: Check AGENTS.md copies are in sync
         run: python3 scripts/sync.py --check
@@ -135,8 +144,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
       - name: Install checker dependencies
-        run: python3 -m pip install --requirement requirements-checkers.txt
+        run: 'python3 -m pip install --requirement requirements-checkers.txt --require-hashes --only-binary :all:'
 
       - name: Check persist-credentials on checkout steps
         run: python3 scripts/check_persist_credentials.py .github/workflows/*.yml
@@ -224,6 +238,11 @@ jobs:
       - name: Install JS dependencies
         run: npm ci --ignore-scripts
 
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
       - name: Cache pip packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -234,7 +253,7 @@ jobs:
         run: pip install lcov_cobertura==2.1.1 coverage==7.16.2
 
       - name: Install checker dependencies
-        run: python3 -m pip install --requirement requirements-checkers.txt
+        run: 'python3 -m pip install --requirement requirements-checkers.txt --require-hashes --only-binary :all:'
 
       - name: Run Node unit tests with coverage
         run: |

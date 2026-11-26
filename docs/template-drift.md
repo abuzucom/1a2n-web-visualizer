@@ -9,69 +9,118 @@ the reason for each.
 
 ## Adopted revision
 
-Template commit `848d069`. One commit copies `scripts/` and `hooks/` whole,
-together with `AGENTS.md`, `docs/agent-policy/*.md`,
-`shared-files.json`, `hook-coverage-baseline.json`, the four client hook
-registrations, and the template tests for every adopted hook and checker.
-`scripts/complete_gate_adoption.py` installed the registrations as one
-transaction.
+Template commit `e05985f`, tag `v2.50.0`. Every policy and shared file
+matched the `2.50.0` digests in the template's `policy-digests.json` before
+adoption. The upgrade takes `scripts/`, `hooks/`, `tests/`, `skills/`, the
+three skill roots, `AGENTS.md`, `docs/agent-policy/*.md`, the client hook
+registrations, and the template workflows. `scripts/complete_gate_adoption.py`
+installed the gate set as one transaction.
 
-`scripts/sync.py --check-shared` compares the gate files against
-`shared-files.json` in CI. A gate fix landing upstream and not here fails that
-check on the next run. Everything outside the manifest is a convention that
-no check verifies.
+`scripts/sync.py --check-shared` compares the local shared files with the
+local `shared-files.json`. The check cannot read the template. A gate fix
+that lands upstream and not here passes that check. Compare against the
+template revision during each upgrade.
+
+## Not adopted
+
+These template files serve only the template repository:
+
+- `scripts/release.py`, `.github/workflows/release.yml`, and the
+  `tests/test_release_*.py` suites. This repository has its own publishing
+  process.
+- `DRIFT.md`, `adopters/`, `policy-digests.json`,
+  `docs/agent-policy/source-orientation.md`, `CONTRIBUTING.md.example`,
+  `SECURITY.md.example`, and `.github/FUNDING.yml`.
+- The template `README.md`, `CHANGELOG.md`, `LICENSE`, `SECURITY.md`, and
+  `docs/project-orientation.md` content.
 
 ## What differs, and why
 
 ### `docs/project-orientation.md` and `docs/repo-guide.md`
 
 Expected to differ. `scripts/sync.py` caps the assembled policy at 64 KiB.
-The template's `AGENTS.md` plus `docs/agent-policy/*.md` already fill all but
-about 600 bytes of it. The orientation stub therefore names only the paths
-that must never be hand-edited and points to `docs/repo-guide.md`. The guide
-holds the full commands, protected paths, architecture, and gotchas outside
-the injected policy.
+The template's `AGENTS.md` plus `docs/agent-policy/*.md` leave little room.
+The orientation stub therefore names only the paths that must never be
+hand-edited and points to `docs/repo-guide.md`. The guide holds the full
+commands, protected paths, architecture, and gotchas outside the injected
+policy.
 
-### GitHub Actions pinning
+### GitHub Actions pins
 
-Expected to differ. This repository pins every action to a full commit SHA
-with a release comment and enforces it with `scripts/check_action_pins.py`.
-Copy a template workflow step only after confirming its SHA pin.
+Expected to differ. Every action uses a full commit SHA with a release
+comment. Two pin sets coexist:
 
-### Workflow wiring
+- The adopted template workflows keep the template pins.
+  `scripts/check_compliance_tree.py` trusts only the exact checkout and
+  setup-python steps of `immutable-conflict-check.yml`. Template tests also
+  assert the `github-script` pin in `gate-integrity.yml`.
+- `checks.yml`, `protected-files.yml`, and `quality-review-pr.yml` keep this
+  repository's pins.
 
-Expected to differ. The template's own workflows are not copied. The adopted
-checks run from `.github/workflows/checks.yml` instead. This adoption
-holds back the template tests that assert the template's own workflow files,
-Makefile, and pre-commit wiring. Those tests arrive with that wiring.
+`tests/test_action_version_pins.py` accepts both reviewed SHAs for
+`actions/checkout`, `actions/setup-python`, and `actions/github-script`.
+The template workflows drop the AgentLint step. AgentLint is an unapproved
+third-party action.
 
-### Lint and code-scanning fixes in template files
+### Prose file lists
 
-True drift. The repository lints every Python file under `pyproject.toml`
-(`E`, `F`, `W`, `B`, `C90`, `PLR`, `FIX`, `RET`, `BLE`). The template files at
-`848d069` carry 152 findings under those rules. This repository carries local
-fixes:
+Expected to differ. `sync-check.yml`, the `Makefile` `PROSE_FILES` list, and
+`TARGET_FILES` in `scripts/check_agent_prose_gate.py` name this repository's
+prose files instead of the template's.
 
-- Named constants replace magic values.
-- Complex functions split into named helpers. Decision tables replace long
-  `if` chains in the gates.
-- Blind `except` clauses name the exception types each handler covers.
-- `scripts/trusted_git.py` `run_git` takes its keyword options through one
-  validated mapping. Every existing call keeps working.
-- `scripts/check_hook_coverage.py` `run_test_shard` takes the root and
-  environment as one `location` argument. `tests/test_shard_priority.py`
-  follows that signature.
-- Test files move `sys.path` imports to `importlib.import_module` and wrap two
-  long lines. No assertion changes.
-- `_MarkedMapping` in `check_dockerfile_root.py` and
-  `check_persist_credentials.py` defines `__eq__` over its contents.
+### Repository configuration files
 
-Every gate verdict over the 3,900 string literals in `tests/` matches the
-pre-change verdicts. `shared-files.json` and `hook-coverage-baseline.json`
-record the changed files. `scripts/check_pr_review_response.py`, `ci/call_model.py`, and
-`ci/run_model_command.py` also differ from foucault 3.3.14 by named constants.
-`tests/test_review_adapter_digests.py` pins the current digest of each file.
-Upstreaming these fixes to `abuzucom/agents` needs a separate issue.
+Expected to differ. `.pre-commit-config.yaml` extends the Python checks to
+`tools/`. `.gitignore`, `.claudeignore`, `.editorconfig`, and
+`.gitattributes` keep this repository's entries beside the template entries.
+
+### `checks.yml`
+
+Expected to differ. This repository's own workflow runs the application
+tests, preset validation, and HTML checks. Its four checker installs pin
+Python 3.14 and install hashed wheels only, like the template workflows.
+`tests/test_scan_and_hash_wiring.py` counts nine checker installs instead of
+the template's five.
+
+### Persona review callers
+
+Expected to differ. Every agents-personas caller pins 1.0.0 at `1649e5c`.
+The template pins 0.22.0 at `c43f459`. `abuzucom/agents#182` tracks the
+template pin. The affected files:
+
+- `security-review-pr.yml`, `quality-review-pr.yml`, and
+  `persona-review-labels.yml`.
+- `.compliance-tree-exemptions.json`. The manifest records the SHA-256 of
+  the re-pinned `persona-review-labels.yml` and its reusable workflow pins.
+- `tests/test_security_review_wiring.py`,
+  `tests/test_quality_review_wiring.py`, and
+  `tests/test_persona_label_review_wiring.py`.
+
+`quality-review-pr.yml` keeps this repository's `actions/github-script`
+pin. The quality wiring test reads each upstream workflow trigger from its
+workflow file and checks that the run lookup uses that event.
+
+### `hooks/_gate_core.py`
+
+True drift. The file keeps this repository's lexical UNC path classification
+for infrastructure paths through `_is_unc_path`.
+`tests/test_unc_infrastructure_paths.py` covers it. `shared-files.json`
+records the local digest. Upstream review is pending.
+
+### Declined wiring assertions
+
+Two template tests assert files that only the template repository ships.
+This adoption removes those two methods under recorded active human
+sign-off. The other methods in each file still run.
+`abuzucom/agents#187` tracks the upstream fix.
+
+- `tests/test_policy_marker_names.py`,
+  `MarkerNameTest.test_live_policy_uses_new_markers`. The method reads
+  `docs/agent-policy/source-orientation.md`.
+- `tests/test_source_publishing_scripts.py`,
+  `SourcePublishingScriptListTest.test_local_list_supplies_release`. The
+  method expects `scripts/release.py` entries in
+  `hooks/workflow-scripts.local.txt`.
 
 ### Checkers and tests this repository holds alone
 
@@ -80,28 +129,6 @@ The template declined `check_protected_files.py`. The
 server-side backstop for edits to `hooks/`, `.claude/`, `.codex/`, `.gemini/`,
 `.agents/`, and `docs/agent-policy/` is this repository's own, through
 [`protected-file-review.md`](protected-file-review.md).
-
-### Persona review callers
-
-Expected to differ. `security-review-pr.yml` and `quality-review-pr.yml`
-follow the template callers from template commit `e05985f` (v2.50.0). These
-differences remain:
-
-- Both callers pin agents-personas 1.0.0 at `1649e5c`. The template pins
-  0.22.0 at `c43f459`. `abuzucom/agents#182` tracks the template pin.
-- Both callers keep this repository's `actions/github-script` v9.0.0 pin.
-  The template pins v7.1.0.
-- `Immutable Compliance` runs on `pull_request` here. The template runs it
-  on `pull_request_target`. `quality-review-pr.yml` looks up that run under
-  the `pull_request` event.
-- `tests/test_security_review_wiring.py` and
-  `tests/test_quality_review_wiring.py` carry the same pin. The quality test
-  also checks the event lookup.
-- `persona-review-labels.yml` waits for the template upgrade. The pinned
-  immutable checker at `8680234` rejects every `pull_request_target` caller
-  except its own workflow.
-- `tests/test_review_adapter_digests.py` pins the retained foucault 3.3.14
-  adapter copies. The template upgrade removes the copies and the test.
 
 ## Changing a template file here
 

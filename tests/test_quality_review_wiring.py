@@ -2,9 +2,9 @@
 """Cover the euler pull request quality review wiring.
 
 Adapted from the agents template test of the same name. This repository pins
-a newer agents-personas release than the template. Its Immutable Compliance
-workflow runs on pull_request instead of pull_request_target.
-docs/template-drift.md records both differences.
+a newer agents-personas release than the template. The run lookup test reads
+each upstream trigger from its workflow file. docs/template-drift.md records
+the differences.
 """
 import re
 import unittest
@@ -22,6 +22,12 @@ REUSABLE_WORKFLOW = (
 CHECK_NAME = "euler / quality"
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
 UPSTREAM_WORKFLOWS = ("Convention Sync Check", "Immutable Compliance")
+# Each upstream workflow name maps to the file that defines its triggers.
+UPSTREAM_WORKFLOW_FILES = {
+    "Convention Sync Check": "sync-check.yml",
+    "Immutable Compliance": "immutable-conflict-check.yml",
+}
+PULL_REQUEST_EVENTS = ("pull_request", "pull_request_target")
 RESOLVED_INPUTS = (
     "pr_number",
     "base_sha",
@@ -78,24 +84,24 @@ class QualityReviewWiringTest(unittest.TestCase):
         for upstream in UPSTREAM_WORKFLOWS:
             self.assertIn(f"'{upstream}'", script)
 
-    def test_upstream_run_lookup_matches_trigger_events(self):
+    def test_run_lookup_matches_trigger_events(self):
+        """Upstream run lookup matches trigger events."""
         # The resolve step filters upstream runs by event. A wrong event finds
         # no run. The review then never starts.
         script = self.jobs["resolve"]["steps"][0]["with"]["script"]
         for upstream in UPSTREAM_WORKFLOWS:
             with self.subTest(upstream=upstream):
+                document = yaml.safe_load((
+                    ROOT / ".github" / "workflows" / UPSTREAM_WORKFLOW_FILES[upstream]
+                ).read_text(encoding="utf-8"))
+                # PyYAML 1.1 parses a bare `on:` key as the boolean True.
+                triggers = document.get("on", document.get(True))
+                events = [event for event in PULL_REQUEST_EVENTS if event in triggers]
+                self.assertEqual(len(events), 1, f"{upstream} needs one pull request trigger")
                 self.assertRegex(
                     script,
-                    rf"latestRun\(\s*'{upstream}', 'pull_request'\)",
+                    rf"latestRun\(\s*'{upstream}', '{events[0]}'\)",
                 )
-        self.assertNotIn("'pull_request_target')", script)
-        compliance = yaml.safe_load((
-            ROOT / ".github" / "workflows" / "immutable-conflict-check.yml"
-        ).read_text(encoding="utf-8"))
-        # PyYAML 1.1 parses a bare `on:` key as the boolean True.
-        triggers = compliance.get("on", compliance.get(True))
-        self.assertIn("pull_request", triggers)
-        self.assertNotIn("pull_request_target", triggers)
 
     def test_review_skips_reviewed_head(self):
         script = self.jobs["resolve"]["steps"][0]["with"]["script"]

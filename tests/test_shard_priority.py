@@ -7,11 +7,15 @@ from unittest.mock import patch
 
 from scripts import check_hook_coverage as shard_runner
 
+SHARD_DURATION_SECONDS = 0.02
+EXCLUSIVE_SHARD_COUNT = 2
+WORKER_COUNT = 3
+
 
 class ShardPriorityTest(unittest.TestCase):
     """Measured slow shards start before ordinary lexical shards."""
 
-    def test_slow_shards_run_first_and_unknown_shards_stay_sorted(self):
+    def test_slow_shards_first(self):
         shards = [
             ("test_zeta.py::Zeta", "test_zeta.Zeta"),
             ("test_immutable_compliance.py::ImmutableComplianceScannerTest",
@@ -43,7 +47,7 @@ class ShardPriorityTest(unittest.TestCase):
         maximum_heavy = 0
         observed_timeouts = {}
 
-        def run_shard(_location, label, _name, timeout, _registry):
+        def run_shard(_root, _environment, label, _name, timeout, _registry):
             nonlocal active_heavy, maximum_heavy
             heavy = label in shard_runner.RESOURCE_HEAVY_TEST_SHARDS
             with lock:
@@ -51,20 +55,20 @@ class ShardPriorityTest(unittest.TestCase):
                 if heavy:
                     active_heavy += 1
                     maximum_heavy = max(maximum_heavy, active_heavy)
-            time.sleep(0.02)
+            time.sleep(SHARD_DURATION_SECONDS)
             if heavy:
                 with lock:
                     active_heavy -= 1
-            return shard_runner.TestShardResult(label, 0.02, 0, "", "", False)
+            return shard_runner.TestShardResult(label, SHARD_DURATION_SECONDS, 0, "", "", False)
 
-        exclusive_shards = frozenset(label for label, _name in shards[:2])
+        exclusive_shards = frozenset(label for label, _name in shards[:EXCLUSIVE_SHARD_COUNT])
         with patch.object(
             shard_runner,
             "EXCLUSIVE_TEST_SHARDS",
             exclusive_shards,
         ), patch.object(shard_runner, "run_test_shard", side_effect=run_shard):
             problems = shard_runner.run_test_shards(
-                ".", {}, workers=3, timeout=1, test_shards=shards)
+                ".", {}, workers=WORKER_COUNT, timeout=1, test_shards=shards)
 
         self.assertEqual(problems, [])
         self.assertEqual(maximum_heavy, 1)

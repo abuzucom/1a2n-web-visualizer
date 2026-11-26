@@ -8,7 +8,8 @@ PYTHON ?= python3
 
 PROSE_FILES = AGENTS.md README.md CHANGELOG.md SECURITY.md \
 	docs/template-drift.md docs/repo-guide.md docs/project-orientation.md \
-	docs/gate-threat-model.md plan/HANDOFF.md.example
+	docs/gate-threat-model.md plan/HANDOFF.md.example \
+	.github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
 
 sync:
 	$(PYTHON) scripts/sync.py
@@ -24,7 +25,9 @@ lint:
 	$(PYTHON) scripts/check_us_spelling.py $(PROSE_FILES)
 	$(PYTHON) scripts/check_english_only.py $(PROSE_FILES)
 	$(PYTHON) scripts/check_hedging.py $(PROSE_FILES)
+	$(PYTHON) scripts/check_anti_delegation.py $(PROSE_FILES)
 	$(PYTHON) scripts/check_conflict_markers.py
+	$(PYTHON) scripts/check_test_names.py --all
 
 test:
 	$(PYTHON) scripts/run_tests.py

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cover the hook-coverage gate's comparison and statement accounting.
 
-Deliberately does not run the gate end to end: it launches the whole
+Does not run the gate end to end: it launches the whole
 suite under a tracer, and a suite that runs itself does not terminate.
 CI runs it directly, as its own step.
 
@@ -24,13 +24,21 @@ import check_hook_coverage as gate
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE = REPO_ROOT / "hook-coverage-baseline.json"
+UNREACHED_COUNT = 2
+HIGHER_UNREACHED_COUNT = 3
+STATEMENT_LINES_AFTER_DOCSTRING = [3]
+STATEMENT_LINES_AFTER_MODULE_CODE = [5]
+FUNCTION_BODY_STATEMENT_LINES = [2, 3]
+DISAGREEMENT_COUNT = 2
+FIRST_TRACED_LINE = 7
+SECOND_TRACED_LINE = 11
 
 
 class CompareTest(unittest.TestCase):
     """Both directions of disagreement have to fail."""
 
     def test_a_matching_run_reports_nothing(self):
-        counts = {"a.py::f": 2, "b.py::g": 1}
+        counts = {"a.py::f": UNREACHED_COUNT, "b.py::g": 1}
         self.assertEqual(gate.compare(counts, dict(counts)), [])
 
     def test_an_unrecorded_function_fails(self):
@@ -40,24 +48,24 @@ class CompareTest(unittest.TestCase):
         self.assertIn("a.py::f", problems[0])
 
     def test_more_unreached_than_recorded_fails(self):
-        problems = gate.compare({"a.py::f": 3}, {"a.py::f": 1})
+        problems = gate.compare({"a.py::f": HIGHER_UNREACHED_COUNT}, {"a.py::f": 1})
         self.assertEqual(len(problems), 1)
         self.assertIn("New code no test reaches", problems[0])
 
-    def test_fewer_unreached_than_recorded_fails_as_stale(self):
+    def test_fewer_unreached_stale(self):
         """A baseline nobody updates stops meaning anything."""
-        problems = gate.compare({"a.py::f": 1}, {"a.py::f": 3})
+        problems = gate.compare({"a.py::f": 1}, {"a.py::f": HIGHER_UNREACHED_COUNT})
         self.assertEqual(len(problems), 1)
         self.assertIn("stale", problems[0])
 
-    def test_a_function_that_became_covered_fails_as_stale(self):
-        problems = gate.compare({}, {"a.py::f": 2})
+    def test_newly_covered_function_stale(self):
+        problems = gate.compare({}, {"a.py::f": UNREACHED_COUNT})
         self.assertEqual(len(problems), 1)
         self.assertIn("stale", problems[0])
 
-    def test_every_disagreement_is_reported_not_just_the_first(self):
-        problems = gate.compare({"a.py::f": 2}, {"b.py::g": 1})
-        self.assertEqual(len(problems), 2)
+    def test_disagreements_reported(self):
+        problems = gate.compare({"a.py::f": UNREACHED_COUNT}, {"b.py::g": 1})
+        self.assertEqual(len(problems), DISAGREEMENT_COUNT)
 
 
 class StatementAccountingTest(unittest.TestCase):
@@ -72,26 +80,26 @@ class StatementAccountingTest(unittest.TestCase):
         self.addCleanup(Path(handle.name).unlink)
         return handle.name
 
-    def test_a_docstring_is_not_a_statement(self):
+    def test_docstring_not_statement(self):
         path = self.write('def f():\n    """Doc."""\n    return 1\n')
         owned = gate.function_statements(path)
-        self.assertEqual(sorted(owned), [3])
+        self.assertEqual(sorted(owned), STATEMENT_LINES_AFTER_DOCSTRING)
 
-    def test_module_level_code_is_not_counted(self):
+    def test_module_code_not_counted(self):
         path = self.write("CONSTANT = 1\n\n\ndef f():\n    return CONSTANT\n")
         owned = gate.function_statements(path)
-        self.assertEqual(sorted(owned), [5])
+        self.assertEqual(sorted(owned), STATEMENT_LINES_AFTER_MODULE_CODE)
 
-    def test_nested_statements_belong_to_their_function(self):
+    def test_nested_statement_owner(self):
         path = self.write("def f():\n    for x in (1,):\n        print(x)\n")
         owned = gate.function_statements(path)
         self.assertEqual(set(owned.values()), {"f"})
-        self.assertEqual(sorted(owned), [2, 3])
+        self.assertEqual(sorted(owned), FUNCTION_BODY_STATEMENT_LINES)
 
-    def test_a_string_that_is_not_first_is_a_statement(self):
+    def test_later_string_is_statement(self):
         path = self.write('def f():\n    x = 1\n    "not a docstring"\n')
         owned = gate.function_statements(path)
-        self.assertEqual(sorted(owned), [2, 3])
+        self.assertEqual(sorted(owned), FUNCTION_BODY_STATEMENT_LINES)
 
 
 class TracedLineFileTest(unittest.TestCase):
@@ -102,16 +110,18 @@ class TracedLineFileTest(unittest.TestCase):
             path = str(REPO_ROOT / "hooks" / "example.py")
             trace_file = Path(out_dir) / "trace.json"
             trace_file.write_text(
-                json.dumps([[path, 7], [path, 11]]), encoding="utf-8")
+                json.dumps([[path, FIRST_TRACED_LINE], [path, SECOND_TRACED_LINE]]),
+                encoding="utf-8")
 
             self.assertEqual(
-                gate.traced_lines(out_dir), {(path, 7), (path, 11)})
+                gate.traced_lines(out_dir),
+                {(path, FIRST_TRACED_LINE), (path, SECOND_TRACED_LINE)})
 
 
 class TracerScopeTest(unittest.TestCase):
     """The subprocess tracer limits instrumentation to hook source."""
 
-    def test_target_lines_do_not_require_global_line_tracing(self):
+    def test_target_lines_local_tracing(self):
         with tempfile.TemporaryDirectory() as root:
             root_path = Path(root)
             target = root_path / "hooks"
@@ -156,15 +166,15 @@ class BaselineFileTest(unittest.TestCase):
 
     Skipped when there is no baseline yet. Generating the first one runs
     this suite, so a suite that requires the file makes it impossible to
-    produce, which is what a second installation of this gate found. CI
-    still fails on a missing baseline, through the gate rather than here.
+    produce. A second installation of this gate found that. CI
+    still fails on a missing baseline through the gate. This suite does not.
     """
 
     def setUp(self):
         if not BASELINE.is_file():
             self.skipTest("no baseline yet; run --write-baseline to make one")
 
-    def test_the_baseline_is_present_and_parses(self):
+    def test_baseline_parses(self):
         body = json.loads(BASELINE.read_text(encoding="utf-8"))
         self.assertIn("unreached", body)
         self.assertIn("note", body)
@@ -185,7 +195,7 @@ class BaselineFileTest(unittest.TestCase):
                 }
                 self.assertIn(function, defined)
 
-    def test_a_missing_baseline_reads_as_empty(self):
+    def test_missing_baseline_empty(self):
         with tempfile.TemporaryDirectory() as root:
             self.assertEqual(gate.read_baseline(root), {})
 
