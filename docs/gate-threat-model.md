@@ -1,6 +1,6 @@
 # Gate coverage and limits
 
-This document summarizes exercised hook behavior and known limits. Repository
+This document records exercised hook behavior and known limits. Repository
 hooks provide advisory controls. The documented controls lack a security
 boundary.
 
@@ -17,16 +17,81 @@ include the following actions:
 - The gates detect truncating redirects without a delete in the line. Examples
   include `> file` and `cat /dev/null > file`.
 - The gates detect pipes into interpreters. Sources include downloads and shell
-  history.
+  history. List operators end a pipeline. A group opened after a pipe stays in
+  that pipeline. Group nesting past 32 levels denies at the inspection limit.
 - The gates classify history rewrites and published-ref deletion. Covered forms
   include `--force`, `--force-with-lease`, `--mirror`, `--delete`, `--prune`, a
   forced or empty refspec, `--amend`, `rebase`, `filter-branch`, `reset --hard`,
   `branch -D`, and `clean -fdx`.
+- The gates deny tag pushes across Bash, PowerShell, and CMD. Covered forms
+  include `--tags`, `--follow-tags`, and a refspec side under `refs/tags/` or
+  `tags/`. A source that names an existing local tag denies in any name shape.
+  The gates read loose refs and `packed-refs` for that check. A source shaped
+  `v<digit>` denies unless a local branch carries that name. A reftable store,
+  an unreadable or oversized `packed-refs`, and a name that leaves the refs
+  directory ask. The gates also deny `git tag` creation, signing, forcing, and
+  deletion and `git update-ref` under `refs/tags/`. Listing, verifying, and
+  commit filters such as `--contains` and `--merged` pass.
+  `git push --mirror` asks and pushes every tag after consent.
 - The gates classify privilege escalation, process termination, alias
   definition, shell profile writes, schedule destruction, and forge deletion.
 - The gates deny cloud, infrastructure-as-code, orchestration, direct SSH,
-  file-transfer, and firewall client families across Bash, PowerShell, and CMD.
-- The infrastructure file-tool gate denies direct reads and writes to protected
+  file transfer, and firewall client families across Bash, PowerShell, and CMD.
+- Test runners allow without a prompt only when `hooks/trusted-owners.txt`
+  names the `origin` owner. Covered forms include `pytest`,
+  `python -m pytest`, `scripts/run_tests.py`, `make test`, and `npm test`.
+  Each runs repository code such as `conftest.py`, a Makefile, or package
+  scripts. Every other owner keeps the consent prompt. A missing, oversized,
+  non-ASCII, or malformed list trusts nobody. The shadow module, repository
+  PATH, `.npmrc`, missing script, and pytest argument file denials still
+  apply to trusted owners.
+- The gates deny `gh pr create` and `gh pr edit` with a base outside the
+  stable branches. The stable branches are the primary branch, `test`, and
+  `develop`. The trusted
+  wrapper and the shell gates share that verdict. In CI, `gate-integrity.yml`
+  runs the base branch copy of `scripts/check_pr_base.py` on every pull
+  request and on each base change. In Claude Code, `hooks/enforce_pr_base.py` also checks GitHub MCP
+  pull request tools. Other clients expose no MCP tool calls to repository
+  hooks. A session that loads no repository hooks keeps only the wrapper
+  check.
+- `pnpm test`, `yarn test`, `go test`, and `cargo test` follow the trusted
+  owner rule. Other owners keep the consent prompt. A trusted owner's
+  `.cargo/config.toml`, `build.rs`, and go toolchain downloads run without
+  a prompt. A project `.npmrc` denies pnpm. A project `.yarnrc` or
+  `.yarnrc.yml` denies yarn, since `yarnPath` runs a repository file. A
+  missing lockfile, a missing `test` script, a missing or linked go or
+  cargo manifest, and a runner PATH resolves inside the repository deny
+  or stay unmatched.
+- `hooks/workflow-scripts.local.txt` adds adopter script entries. It stays
+  out of the shared set. An entry that repeats a shared entry, a malformed
+  line, or an oversized file denies every repository script call.
+- `scripts/delete_zone_path.py --session <id>` asks when every operand sits
+  strictly below the session's own `.scratch/<id>/` or `.worktrees/<id>/`.
+  The id must equal the hook payload `session_id`. Every shell `rm` and
+  every other helper call keep the opaque denial. The check refuses the zone root, the session folder
+  itself, another session's folder, a `..` escape, a glob, a trailing
+  slash, a link out of the zone, a tracked file, and an unknown Git state.
+  The helper opens every component through its parent descriptor with no
+  link follow and deletes descriptor-relative. A swap after the gate check
+  refuses the delete. Platforms without `dir_fd` support refuse the helper.
+  The tracked check runs the Git that `scripts/trusted_git.py` resolves.
+  A Git inside the repository never answers it.
+  A target that holds a `.git` entry refuses. A linked worktree keeps its
+  own index. `git worktree remove` handles worktrees and refuses a dirty
+  tree.
+  Each check runs before the delete, not atomically with it. A concurrent
+  writer that runs as the same user inside the session zone falls outside
+  the boundary. That writer can stage a file with `git add -f` or plant a
+  `.git` entry after the check. That writer can also delete the same files
+  directly. The helper therefore takes no index lock. A long delete would
+  otherwise block every other session's commits. A file staged inside the
+  window keeps its staged content in Git.
+- The helper deletes one operand at a time. Each deleted operand prints a
+  line on stdout. A failure names how many operands the helper deleted first.
+- `hooks/prepare_session_workspace.py` creates both zone folders at
+  session start through parent descriptors that follow no link. It
+  creates nothing on a platform without `dir_fd` support.
+- The infrastructure file tool gate denies direct reads and writes to protected
   credentials, Terraform files, and Kubernetes or Helm manifests. Broad Glob
   and Grep requests scan a bounded tree and deny when protected files appear.
 - Hosted GitHub operations require `scripts/trusted_gh.py`. The wrapper resolves
@@ -38,16 +103,16 @@ include the following actions:
   available. Clear Git and HTTP substitutes for hosted operations deny.
 - The gates classify recovery destruction through `vssadmin`, `wbadmin`,
   `wmic shadowcopy`, and `bcdedit`.
-- The consent hook gates direct editor-tool writes to existing tests. The same
-  hook gates direct editor-tool writes to protected paths under `hooks/` and
+- The consent hook gates direct editor tool writes to existing tests. The same
+  hook gates direct editor tool writes to protected paths under `hooks/` and
   `.claude/`.
 - The shell gates classify writes with a recognized redirect or writer target
-  that has a test-shaped path. This classification ignores target existence.
+  that has a path resembling a test path. This classification ignores target existence.
 - The shell gates classify known Bash and PowerShell writers that target
   `hooks/`, `.claude/`, or `scripts/`. PowerShell named path and destination
   parameters accept valid unambiguous prefixes. The parser reads each parameter
   independently of order.
-- The gates classify a git read command in a repository whose effective config
+- The gates classify a git read command in a repository where the effective config
   declares a key naming a program that git runs. Covered read commands include
   `status`, `diff`, `log`, `show`, `blame`, and `grep`. The classifier accounts
   for ordered `-c` settings and leading environment assignments. The classifier
@@ -71,8 +136,8 @@ include the following actions:
   to either operation. A possible alias creates ambiguity for an unknown
   subcommand. Unavailable alias sources preserve that ambiguity.
 - Strict branch preflight reads bounded Git `HEAD` metadata without launching
-  Git. The gate blocks every observable ordinary tool on an invalid branch.
-  Active-human question tools remain available. The agent selects one compliant
+  Git. The gate stops each observable ordinary tool on an invalid branch.
+  Active human question tools remain available. The agent selects one compliant
   correction command. The client requests execution authorization for that
   command. Chaining, wrappers, substitutions, and redirects prevent correction
   clearance. Creation and publication of a `claude/` target also deny from a
@@ -86,22 +151,31 @@ include the following actions:
   bootstrap remains available from the installed policy root.
 - Branch alias inspection runs trusted Git with a fixed configuration-read
   operation. Native Git resolves includes and configuration precedence.
-  Invocation settings travel through argument arrays and environment values.
+  Per-run settings travel through argument arrays and environment values.
   The config reader accepts only required environment fields. Trace and stream
-  redirection controls never reach Git. Fixed environment values disable Trace2
+  redirection controls do not reach Git. Fixed environment values disable Trace2
   destinations from Git configuration.
   The inspection never executes an alias. Reads stop at 256 KiB or five seconds.
   Alias expansion stops after ten steps. Unknown and shell aliases deny.
-- The branch gate denies opaque interpreters, unlisted scripts, and unresolved
-  branch arguments. Commands require an explicit inspectable program name.
+- The command execution gate in `hooks/_command_execution_gate.py` denies
+  opaque interpreters and unlisted scripts. The branch gate loads it for every
+  shell command. The branch gate denies unresolved branch arguments. Commands
+  require an explicit inspectable program name.
   Incomplete parsing receives a syntax denial. Only recovered Git commands
   create ambiguous Git-write contexts. Parsing stops at 65,536 characters.
-  Bounded repository workflows request native consent. The route rejects
-  wrappers, chained commands, redirection, and shell expansion. Unsupported
-  consent responses and unattended Claude sessions remain closed.
+  Bounded repository workflows that write request native consent. Unsupported
+  consent responses and unattended Claude sessions deny those workflows.
+  Inspecting workflows run without a prompt for every client. Inspecting
+  workflows cover `allow` entries in `hooks/workflow-scripts.txt`, unittest runs, Ruff checking
+  forms, and `rg` searches bound to the repository. Listed scripts and tests
+  execute repository code without a human checkpoint. Repository writers
+  control that code and the list. The route accepts `&&` chains of accepted
+  forms. It rejects wrappers, other operators, `#`, redirection, and shell
+  expansion. A program that resolves inside the repository turns an unprompted form into a
+  consent request.
 - Metadata checks classify the write destination separately from reference
   content. Linked worktrees use resolved administration paths. Unresolved
-  directory-root writes deny. Copy target-directory options identify destinations.
+  directory-root writes deny. Copy options that name a target directory identify destinations.
   Copy and move destinations cannot contain protected administration directories.
   Unresolved metadata writes deny without claiming a literal prohibited-branch match.
   Git reads receive the same output-redirection checks. Quoted redirection
@@ -110,7 +184,7 @@ include the following actions:
 - Lifecycle hooks read bounded canonical `AGENTS.md` content. Claude injects
   numbered chunks into built-in Explore and Plan agents. Codex injects complete
   context at session and subagent lifecycle events. Gemini and Antigravity
-  inject complete context before each model invocation.
+  inject complete context before each model request.
 - The gates classify commands that one shell passes to another shell. Each
   gate reads both interpreter names. The Bash gate denies `powershell -Command
   'Remove-Item -Recurse -Force /etc'`. The PowerShell gate denies `bash -c 'rm
@@ -153,14 +227,14 @@ include the following actions:
   operations include storage destruction, persistence, security controls,
   credentials, packages, orchestration, discovery, and transfer direction.
 
-Editor-tool handling resolves the named target with `realpath`. The handler
-checks the raw name and resolved name. The handler also checks hard-linked test
-inodes. The handler gates test-shaped targets outside the project root. The
+Editor tool handling resolves the named target with `realpath`. The handler
+checks the raw name and resolved name. The handler also checks test inodes that
+share hard links. The handler gates targets resembling test paths outside the project root. The
 shell gates parse command text instead. The shell test-path check uses lexical
 analysis. The check handles case variants and alternate data streams. The check
 also handles trailing dots or spaces. Shell handling canonicalizes known
-protected-path targets. Shell handling omits the editor gate's inode scan.
-General shell symlink, hard-link, and short 8.3 handling remain outside the
+targets on protected paths. Shell handling omits the editor gate's inode scan.
+General shell handling of symlinks, hard links, and short 8.3 names remain outside the
 documented coverage.
 
 The destructive and consent gates deny malformed top-level JSON. The same gates
@@ -181,6 +255,29 @@ renders non-printable and non-ASCII characters visibly. Branch and identity
 `additionalContext`. Universal output sanitization remains outside the
 guarantee. Import-error text remains untrusted output. Checker stderr from
 other paths also remains untrusted output.
+
+## Release integrity
+
+`.github/workflows/release.yml` attests each release file and
+`SHA256SUMS.txt` with `actions/attest`. A verified attestation proves that the
+release workflow built the file from the tagged commit. Verify with
+`--signer-workflow abuzucom/agents/.github/workflows/release.yml`. A check
+with `--repo` alone accepts a signature from any workflow in the repository.
+
+The attestation leaves these facts unproven:
+
+- A human reviewed the tagged commit.
+- The repository owner pushed the tag.
+- A valid signature covers the tag. The workflow does not verify tag
+  signatures.
+- The repository owner chose the right channel at publication.
+
+Three repository settings carry the remaining controls. A tag ruleset on
+every tag limits tag creation, moves, and deletion to the repository owner. The ruleset
+also rejects the tags a consented `git push --mirror` would carry. The `release` environment
+requires owner approval before the release job receives its write token.
+Immutable releases lock a published release. Repository files cannot enforce
+or verify these settings.
 
 ## Explicit non-goals
 
@@ -205,7 +302,7 @@ enforce Constrained Language Mode.
   "N deletions in M minutes" and correlation with an anomalous login. Each gate
   reads one command shape.
 - The marked GitHub fallback asks for confirmation. The gate lacks persistent
-  cross-process state. Human review enforces the one-use limit after a failed
+  cross-process state. Human review enforces the limit of one use after a failed
   trusted wrapper operation.
 - Gate registration defines tool coverage. Unregistered tools bypass the gates.
 - Codex hosted tools bypass local `PreToolUse` hooks. Claude does not document
@@ -223,13 +320,65 @@ enforce Constrained Language Mode.
 
 ## Modes and limits
 
+Plan mode denies Git writes in every shell gate. `plan_mode_git_verdict` in
+`hooks/_gate_core.py` keeps inspection subcommands open. It denies options
+that write files or run a program in any position:
+
+- `--output`, `--output-directory`, `-o`, `-O`
+- `--open-files-in-pager`, `--ext-diff`, `--textconv`
+
+Before the subcommand it also denies `-c`, `--config-env`, `-p`,
+`--paginate`, and `--exec-path`. In plan mode `git grep -o` denies too.
+Plan mode leaves out `ls-remote`, `cat-file`, and `help`. Each one can run
+a transport helper, a filter, or a help viewer. Every allowed subcommand
+gets the config and environment check of `git_read_verdict`. A configured
+external diff, driver, pager, or `GIT_PAGER` value turns the ask into a
+deny in plan mode. An approved ask would still run that program.
+
+An in-command assignment of a Git-relevant variable asks in every mode. The
+Bash gate reads `export` and `declare -x`. The PowerShell gate reads `$env:`
+assignments. The CMD gate reads `set`. Plan mode turns each of those asks
+into a deny through `plan_mode_harden`.
+
+On an invalid branch `EnterPlanMode` passes in every mode. `ExitPlanMode`
+and `ToolSearch` pass only while `permission_mode` is plan.
+
+The disclosure check parses each line that holds the raw boundary token.
+Only an entry with type `system` and subtype `compact_boundary` counts. A
+tool argument with the same text never hides the real boundary.
+
+The Claude `Stop` registration of the reinjection hook checks the compaction
+disclosure. The check reads the transcript backward in 4 MiB chunks up to
+64 MiB. It finds the last `compact_boundary` entry and the next
+`isCompactSummary` entry. It blocks one turn end unless later assistant text
+holds a closed fenced block with the first line `COMPACTION TEXT DISCLOSURE`.
+The block body must contain the summary text after whitespace normalization.
+These cases let the turn end with a notice:
+
+- a missing or unreadable transcript
+- a boundary with no summary entry
+- a scan that reaches 64 MiB without a boundary
+
+The check covers only the disclosure. It cannot verify the stop, plan mode,
+or continuation claims. Codex exposes no assistant output to a stop hook.
+Codex disclosure stays unverified.
+
+The check blocks once per turn end. Claude sets `stop_hook_active` on the
+retry, and the check then lets the turn end. The retry can therefore end
+without a disclosure. Every Stop hook here keeps that guard. A check without
+it would trap a session that cannot produce the disclosure.
+
 `INTERACTIVE_MODES` lists the `permission_mode` values in which a person can
 answer a gated prompt. An unrecognized value denies a gated verdict. The
 current behavior correctly handles `bypassPermissions`. A future interactive
 mode would also deny. A legitimate gated action would then fail closed. Review
 the list when Claude Code adds a mode.
 
-The editor-tool inode walk for hard-linked tests runs only when `st_nlink > 1`.
+A broad read command triggers an infrastructure scan of up to 20000 files.
+Each hook call starts a new process. The scan cache therefore lasts one hook
+call. A second broad read in a later call scans again.
+
+The editor tool inode walk for tests with hard links runs only when `st_nlink > 1`.
 The walk skips `.git`, `node_modules`, `.venv`, and `__pycache__`. The walk
 carries a budget.
 Budget exhaustion returns an incomplete result. The caller gates an incomplete
@@ -240,12 +389,23 @@ prevents write clearance.
 The Python classifiers receive synthetic hook payloads for PowerShell and CMD
 coverage. Coverage lacks exercised live PowerShell and CMD tool calls.
 
+The infrastructure sweep reads the manifest prefix of the file that the
+check names, on every check.
+A cached prefix would classify a file by content the file no longer holds.
+The gate reads the file each time.
+The cost falls on the corpus worker instead.
+`tests/gate_corpus.py` allows thirty seconds for one request, because a
+sweep over a large repository reads thousands of files before it answers.
+The repository ignore rules never prune the sweep.
+A repository author controls those rules, and the rules must not decide
+which files the sweep reads.
+
 ## Coverage baseline
 
 The suites run each gate as a subprocess. Tracing uses a `sitecustomize` module
 on `PYTHONPATH`. Supported runtimes use local `sys.monitoring` line events when
-the coverage tool slot remains available. Other runtimes use a target-scoped
-`sys.settrace` fallback. Both implementations record only hook source lines.
+the coverage tool slot remains available. Other runtimes use a `sys.settrace`
+fallback limited to the target. Both implementations record only hook source lines.
 The baseline records unreached statements by function. Each entry requires a
 reason.
 
@@ -254,7 +414,7 @@ reason.
   alternate `env -S`, direct-caller, and maximum-depth branches. Subprocess
   entry points reject some branches earlier. Other branches require syntactic
   forms outside the regression corpus.
-- The Git config and repository-discovery helpers, including
+- The Git config and repository discovery helpers, including
   `_apply_git_config_argument`, `_apply_git_path_argument`,
   `_environment_config`, `_parent_repository_dir`, and
   `_read_invocation_configs`, retain bounds and missing optional files. The
@@ -262,34 +422,37 @@ reason.
   representative fail-closed classes and executable settings. Equivalent arms
   remain outside coverage.
 - The commit and push context helpers, `git_checker_environment`,
-  `_alias_terminal_label`, `_alias_write_label`, `_shell_alias_write_label`,
-  and both enforcement
+  `_alias_write_label`, `_shell_alias_write_label`, and both enforcement
   handlers retain malformed global options. The same functions retain
   alias-depth variants and shell-alias variants. Absent config sources and
   error-reporting arms also remain.
 - `_is_system_root`, `_mentions_device`,
-  `_segment_program`, `device_write_verdict`, `forge_verdict`,
+  `device_write_verdict`, `forge_verdict`,
   `logging_verdict`, `mass_operation_verdict`, `posix_delete_verdict`,
-  `remote_execution_verdict`, `schedule_verdict`, `unparseable_verdict`, and
-  `volume_verdict` retain platform, device, mount, and uncommon-program arms.
+  `remote_execution_verdict`, `schedule_verdict`, and `unparseable_verdict`
+  retain platform, device, mount, and uncommon-program arms.
   Corpus rows exercise representative outcomes. The corpus avoids building
   real devices or mounts.
 - `_protected_path` uses an explicit `ntpath` cross-drive case. Linux and
   Windows therefore reach the same defensive `ValueError` branch.
-- `_pages_deployment_path_verdict` and the option parsing in
-  `_pages_options_verdict` and `_pages_option_value` retain tracer-unreached
-  statements. The Cloudflare regression tests exercise these branches through
-  direct verdicts, persistent shell gates, and a fresh Bash subprocess. The
-  coverage runner still records no trace for these statements. Keep the
-  measured limit in the baseline until the subprocess tracer can attribute this
-  import path.
+- `_pages_deployment_path_verdict` and the added path-validation statements in
+  `cloudflare_pages_verdict` retain four statements the tracer misses. The
+  Cloudflare regression tests exercise these branches through direct verdicts,
+  persistent shell gates, and a fresh Bash subprocess. The coverage runner
+  still records no trace for these four statements. Keep the measured limit in
+  the baseline until the subprocess tracer can attribute this import path.
 - `is_test_path` retains alternate Windows path-component and drive-relative
-  arms. Representative test-shaped and ordinary paths cover each verdict.
+  arms. Representative test paths and ordinary paths cover each verdict.
+- `is_protected_infrastructure_path` retains two unreached statements.
+  The Kubernetes values file name match reaches the protected set only for a
+  YAML extension.
+  `tests/test_infrastructure_values_scope.py` covers the protected YAML names
+  and the unprotected source names.
 - `su_target_verdict` retains malformed option sequences, unsupported option
   operands, and direct-caller token shapes. Corpus rows cover missing, root,
   fixed non-root, dynamic, and command-payload targets.
-- `_cmd_parser` functions retain empty-segment, terminal-caret, unmatched
-  expansion, size-bound, and malformed direct-caller arms. Synthetic CMD rows
+- `_cmd_parser` functions retain arms for empty segments, terminal carets,
+  unmatched expansion, the size limit, and malformed direct callers. Synthetic CMD rows
   cover complete, dynamic, malformed, empty, and bounded command parsing.
 - `_platform_policy` functions retain alternate endpoint syntax and uncommon
   macOS or Linux program-family arms. Cross-host tests cover every verdict and
@@ -301,8 +464,7 @@ reason.
   a recognized interpreter. Shared corpus rows cover fixed scripts, command
   payloads, dynamic targets, and plain shell transitions.
 - Branch enforcement retains malformed lifecycle payloads and uncommon Git target positions in
-  `alias_names_prohibited_branch`, `command_names_prohibited_branch`,
-  `command_names_prohibited_metadata`, `handle_context_event`, and `main`.
+  `handle_context_event` and `_run`.
   Hook tests cover every lifecycle event and client consent response.
   Tests also cover exact recovery, aliases, metadata, and branch publication.
 - `read_payload`, `resolved_under`, and `sanitize` retain defensive exceptions
@@ -313,7 +475,7 @@ reason.
   `lstat`. A deterministic test cannot create that filesystem race.
 - The consent entries retain cross-drive path handling, absent path fields, and
   the top-level exception boundary. Narrow OS-boundary tests cover out-of-tree
-  paths and open errors. The tests also cover the hard-link budget and ordinary
+  paths and open errors. The tests also cover the hard link budget and ordinary
   denial paths.
 
 CI runs `scripts/check_hook_coverage.py`. The script compares the run against
@@ -329,7 +491,7 @@ shards run alone. Ordinary shards use every worker after that lane completes.
 Classifier-heavy suites reuse one hook process within each isolated class
 process. Selected CLI suites reuse one loaded entrypoint and restore argv,
 stdin, cwd, and environment after every request. Fresh-process smoke cases
-retain process-entrypoint coverage. Start notices, completion notices, and
+retain coverage of the process entry point. Start notices, completion notices, and
 10-second heartbeats expose progress. A 30-second ordinary per-class timeout
 and a 180-second resource-heavy timeout terminate the process tree and fail the
 check. Coverage comparison starts only after every worker succeeds.
@@ -338,6 +500,6 @@ Every baseline entry requires a reason in this document. An unexplained entry
 represents untested code. A recorded exception requires an explanation.
 
 The baseline tool conservatively refuses baseline writes as root.
-Permission-mode tests use real files. Narrow patches at `os.open` and `os.stat`
+Tests of permission modes use real files. Narrow patches at `os.open` and `os.stat`
 exercise error boundaries independently of account privileges. Windows and
 Linux therefore record the same consent-hook branches.

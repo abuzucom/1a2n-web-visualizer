@@ -45,19 +45,8 @@ pull request only after the upstream runs finish for that head. Find the
 `security-review-pr` and `quality-review-pr` runs under the default branch in
 the Actions tab.
 
-## Retained adapter files
-
-The engine supplies its own model adapter and reply validator. The callers
-use no file from this repository. These foucault 3.3.14 copies remain until
-the next `abuzucom/agents` template upgrade removes the copies:
-
-- `ci/build_pr_case.py`
-- `ci/run_model_command.py`
-- `ci/call_model.py`
-- `ci/model_providers.json`
-- `scripts/check_pr_review_response.py`
-
-`tests/test_review_adapter_digests.py` pins the SHA-256 digest of each copy.
+This repository vendors no adapter or response validator. The engine
+supplies both from the pinned revision.
 
 ## Tests
 

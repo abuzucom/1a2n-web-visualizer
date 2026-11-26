@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Verify macOS and Linux behavior policy without host-specific execution."""
-import importlib
 import sys
 import unittest
 from pathlib import Path
@@ -9,7 +8,7 @@ from pathlib import Path
 HOOKS_DIRECTORY = Path(__file__).resolve().parent.parent / "hooks"
 sys.path.insert(0, str(HOOKS_DIRECTORY))
 
-platform_policy = importlib.import_module("_platform_policy")
+import _platform_policy as platform_policy
 
 
 class MacOSPolicyTest(unittest.TestCase):
@@ -118,7 +117,7 @@ class TransferPolicyTest(unittest.TestCase):
         )
         self.assertEqual(verdict, "ask")
 
-    def test_windows_drive_is_not_remote_endpoint(self):
+    def test_windows_drive_not_remote(self):
         verdict, _reason = platform_policy.classify_platform_command(
             "win32",
             "scp",

@@ -13,7 +13,8 @@ SPEC.loader.exec_module(CORE)
 
 
 class UncInfrastructurePathTests(unittest.TestCase):
-    def test_recognizes_unc_namespaces_but_not_device_paths(self):
+    def test_unc_namespaces_exclude_device_paths(self):
+        """Recognizes unc namespaces but not device paths."""
         paths = (
             (r"\\server\share", True),
             (r"\\?\UNC\server\share", True),
@@ -25,7 +26,8 @@ class UncInfrastructurePathTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(CORE._is_unc_path(path), expected)
 
-    def test_inspects_unc_markers_and_remote_yaml_without_opening_them(self):
+    def test_remote_yaml_stays_unopened(self):
+        """Inspects unc markers and remote yaml without opening them."""
         self.assertTrue(CORE.is_protected_infrastructure_path(
             r"\\server\share\.kube\config",
             r"K:\repo",
@@ -40,19 +42,22 @@ class UncInfrastructurePathTests(unittest.TestCase):
                 r"K:\repo",
             ))
 
-    def test_resolves_relative_path_lexically_from_unc_repository_root(self):
+    def test_relative_path_uses_unc_root(self):
+        """Resolves relative path lexically from unc repository root."""
         self.assertTrue(CORE.is_protected_infrastructure_path(
             ".kube/config",
             r"\\server\share",
         ))
 
-    def test_does_not_classify_an_ordinary_unc_path_as_infrastructure(self):
+    def test_ordinary_unc_path_not_infrastructure(self):
+        """Does not classify an ordinary unc path as infrastructure."""
         self.assertFalse(CORE.is_protected_infrastructure_path(
             r"\\server\share\notes.txt",
             r"K:\repo",
         ))
 
-    def test_rejects_empty_and_option_like_paths(self):
+    def test_rejects_empty_and_option_paths(self):
+        """Rejects empty and option like paths."""
         for path in ("", "-Recurse"):
             with self.subTest(path=path):
                 self.assertFalse(CORE.is_protected_infrastructure_path(

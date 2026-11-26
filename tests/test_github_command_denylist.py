@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Test fail-closed loading of the GitHub CLI denylist."""
-import importlib
 import sys
 import unittest
 from pathlib import Path
@@ -9,7 +8,7 @@ from unittest.mock import patch
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPOSITORY_ROOT / "hooks"))
 
-_gate_core = importlib.import_module("_gate_core")
+import _gate_core
 
 
 class GithubCommandDenylistTest(unittest.TestCase):
@@ -38,7 +37,7 @@ class GithubCommandDenylistTest(unittest.TestCase):
         self.assertEqual(decision, "deny")
         self.assertIn("invalid", reason)
 
-    def test_option_values_do_not_shift_denied_paths(self):
+    def test_option_values_keep_denied_paths(self):
         cases = (
             ["pr", "-R", "OWNER/REPO", "merge", "12"],
             ["pr", "-ROWNER/REPO", "merge", "12"],
@@ -56,7 +55,7 @@ class GithubCommandDenylistTest(unittest.TestCase):
                 decision, _reason = _gate_core.github_cli_verdict(command)
                 self.assertEqual(decision, "deny")
 
-    def test_option_values_do_not_shift_legacy_guards(self):
+    def test_option_values_keep_legacy_guards(self):
         decision, _reason = _gate_core.github_cli_verdict(
             ["repo", "--repo", "OWNER/REPO", "edit", "--visibility", "public"])
         self.assertEqual(decision, "deny")

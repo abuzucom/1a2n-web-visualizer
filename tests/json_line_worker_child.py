@@ -10,18 +10,13 @@ from pathlib import Path
 
 
 WORKER_MODES = frozenset({"hook", "main"})
-# Program name, worker mode, and target path.
-EXPECTED_ARGV_LENGTH = 3
-# Failures a target can raise while handling one request. Each one becomes a
-# reported worker_error so the parent test sees it instead of a dead worker.
-REPORTED_WORKER_ERRORS = (
-    OSError, ValueError, TypeError, LookupError, AttributeError, RuntimeError,
-    ImportError, SyntaxError, ArithmeticError, AssertionError, RecursionError,
-)
+# The argument vector holds the script path, the worker mode, and the target path.
+WORKER_ARGUMENT_COUNT = 3
+USAGE_ERROR_EXIT_CODE = 2
 
 
 def load_target_module(target_path: Path):
-    """Import one explicit Python target for persistent test invocation."""
+    """Import one explicit Python target for persistent test runs."""
     target_directory = str(target_path.parent)
     if target_directory not in sys.path:
         sys.path.insert(0, target_directory)
@@ -98,7 +93,7 @@ def process_requests(worker_mode: str, target_path: Path) -> None:
                 response = invoke_hook(target_module, request)
             else:
                 response = invoke_main(target_path, target_module, request)
-        except REPORTED_WORKER_ERRORS as error:
+        except Exception as error:
             response = {
                 "worker_error": f"{type(error).__name__}: {error}",
             }
@@ -108,14 +103,15 @@ def process_requests(worker_mode: str, target_path: Path) -> None:
 
 def main() -> int:
     """Validate fixed worker arguments and run the request protocol."""
-    if len(sys.argv) != EXPECTED_ARGV_LENGTH or sys.argv[1] not in WORKER_MODES:
+    if len(sys.argv) != WORKER_ARGUMENT_COUNT or sys.argv[1] not in WORKER_MODES:
         print("usage: json_line_worker_child.py <hook|main> <target>", file=sys.stderr)
-        return 2
-    target_path = Path(sys.argv[2]).resolve()
+        return USAGE_ERROR_EXIT_CODE
+    _, worker_mode, target_argument = sys.argv
+    target_path = Path(target_argument).resolve()
     if not target_path.is_file() or target_path.suffix.casefold() != ".py":
         print("persistent worker target must be a Python file", file=sys.stderr)
-        return 2
-    process_requests(sys.argv[1], target_path)
+        return USAGE_ERROR_EXIT_CODE
+    process_requests(worker_mode, target_path)
     return 0
 
 
