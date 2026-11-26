@@ -133,6 +133,40 @@ assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
   `security-review-pr.yml` (foucault model review of each pull request, see
   `docs/pr-security-review.md`).
 
+## Branch promotion
+
+`develop` publishes the staging site. `main` publishes the production site.
+`main` is the default branch.
+
+- Start every feature branch from `develop`. Target `develop` with every
+  feature pull request.
+- Rulesets protect `main` only. Every change to `main` needs a pull request.
+  `main` keeps a linear history and rejects force pushes.
+- `main` requires the `immutable-compliance`, `protected-gate-changes`, and
+  `security-review` checks.
+- `workflow_run` review callers run from `main`. A caller change takes effect
+  only after promotion.
+
+Promote `develop` to `main` through a pull request:
+
+1. Open a pull request from `develop` to `main`.
+2. Wait for every required check.
+3. Merge with squash or rebase. Either method writes new commits on `main`.
+4. Fetch both branches. Confirm that `git diff origin/main origin/develop`
+   prints nothing. A difference means `develop` gained commits after the
+   pull request opened. Promote those commits first.
+5. Reset `develop` to the new `main` commit:
+   `git push --force-with-lease=develop:<old-develop-sha> origin
+   origin/main:develop`. The reset discards the old `develop` commits. Rule 2
+   in `AGENTS.md` requires active-human authorization for each reset.
+6. Rebase every open branch onto the new `develop`.
+
+An administrator can fast-forward `main` instead:
+`git push origin develop:main`. The push uses the ruleset bypass. No required
+check runs on `main`. Use the fast-forward when a required check cannot
+arrive, such as during a review caller rename. A fast-forward needs `main` as
+an ancestor of `develop`. Every reset in step 5 restores that condition.
+
 ## Gotchas
 
 - `file://` usage blocks `fetch()` of local JSON; that is why preset chunks
