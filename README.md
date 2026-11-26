@@ -351,9 +351,12 @@ not the other fails the other's suite.
 | `scripts/check_external_pr_refs.py` | No external repository cross-references (Rule 17) | Yes |
 | `scripts/check_ascii.py` | Same rule as `lint_style.py`, portable to any file glob | Wired into CI against `README.md`, `CHANGELOG.md`, `SECURITY.md`, and `docs/`. It reads prose, so a table delimiter row, a list marker, and an inline code span spanning two lines are excluded from the dash rule rather than rewritten |
 
-After `Checks` completes, `.github/workflows/security-review-pr.yml` runs the
-`abuzucom/foucault` model security review on each same-repository pull
-request and fails on a `BLOCK` or `NEEDS-HUMAN` verdict. See
+Two `abuzucom/agents-personas` model reviews run on each pull request. After
+`Immutable Compliance` completes, `.github/workflows/security-review-pr.yml`
+runs the foucault security review. After `Convention Sync Check` and
+`Immutable Compliance` both pass, `.github/workflows/quality-review-pr.yml`
+runs the euler quality review. A `BLOCK` verdict fails the check. A
+`NEEDS-HUMAN` verdict warns. See
 [`docs/pr-security-review.md`](docs/pr-security-review.md).
 
 `plan/HANDOFF.md.example` is the template for a session handoff. Treat

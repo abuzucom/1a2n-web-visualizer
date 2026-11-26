@@ -4,6 +4,38 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
+## [1.24.0] (2026-11-26)
+
+### Added
+- Add `.github/workflows/quality-review-pr.yml`. It runs the
+  `abuzucom/agents-personas` euler quality review after `Convention Sync
+  Check` and `Immutable Compliance` both pass. The review publishes a
+  `euler / quality` check and skips `tests/**`.
+- Add `tests/test_security_review_wiring.py`,
+  `tests/test_quality_review_wiring.py`, and
+  `tests/test_review_verdict_producer.py` from the `abuzucom/agents`
+  template at `e05985f`. Each pins agents-personas 1.0.0.
+- Add `tests/test_review_adapter_digests.py`. It pins the retained foucault
+  3.3.14 adapter copies until the template upgrade removes the copies.
+
+### Changed
+- `.github/workflows/security-review-pr.yml` calls the agents-personas
+  `foucault-security-review.yml` wrapper. It runs after `Immutable
+  Compliance` and publishes a `foucault / security` check.
+- Both review callers pin `uses:` and `personas_ref` to agents-personas
+  commit `1649e5c9710fd85d6cca12006e344af27a5404a6` (1.0.0).
+- The engine publishes the skipped check for a fork pull request. The caller
+  drops its fork job.
+- A review caller trusts a prior `VERDICT:` check only from its own
+  `workflow_run` execution.
+- Describe both reviews in `docs/pr-security-review.md`, `README.md`,
+  `docs/repo-guide.md`, and `docs/template-drift.md`.
+
+### Removed
+- Remove the `abuzucom/foucault` 3.3.14 pin.
+- Delete `tests/test_foucault_review_wiring.py`. The new wiring tests and
+  `tests/test_review_adapter_digests.py` replace it.
+
 ## [1.23.2] (2026-11-26)
 
 ### Added

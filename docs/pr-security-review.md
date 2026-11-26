@@ -1,60 +1,91 @@
-# PR security review
+# Pull request reviews
 
-`.github/workflows/security-review-pr.yml` runs the `abuzucom/foucault`
-security reviewer against every same-repository pull request. The reviewer
-loads `AUDIT.md` as the model's system prompt and returns a verdict of
-`APPROVE`, `BLOCK`, or `NEEDS-HUMAN`.
+This repository calls the `abuzucom/agents-personas` foucault security review
+and euler quality review. The `docs/` and `reviewers/` directories of
+agents-personas own the architecture and the trust boundary. This document
+records only the local wiring.
 
-## Event flow
+## What runs
 
-1. A pull request event starts the `Checks` workflow.
-2. `Checks` completes and starts `security-review-pr.yml` through
-   `workflow_run`. That event runs the caller from the default branch. A pull
-   request therefore cannot edit the reviewer that judges it.
-3. The `resolve-pr` job maps the run's head commit to exactly one pull
-   request. It skips a head that already carries a `security-review` check
-   run with a verdict.
-4. A fork pull request gets the `fork-review-skipped` job and no secret.
-5. A same-repository pull request calls the reusable
-   `abuzucom/foucault/.github/workflows/security-review.yml`.
-6. The reusable workflow checks out the base commit and fetches the head
-   object without checking it out. It never executes pull request content.
-7. The workflow posts a fenced review comment and a `security-review` check
-   run on the head commit. `BLOCK` and `NEEDS-HUMAN` fail the check.
+`.github/workflows/security-review-pr.yml` triggers on completion of the
+`Immutable Compliance` workflow. It resolves the pull request from the
+workflow run head. It then calls the agents-personas
+`foucault-security-review.yml` wrapper. The wrapper loads the engine, the
+foucault prompt, and the model adapter from the pinned revision. It builds the
+review case without the provider key. It sends each envelope to the
+configured provider, posts a fenced report, and publishes a
+`foucault / security` check run.
 
-## Pins
+`.github/workflows/quality-review-pr.yml` calls the
+`euler-quality-review.yml` wrapper at the same revision. The review starts
+after `Convention Sync Check` and `Immutable Compliance` both pass for the
+same head. It publishes a `euler / quality` check run. The euler review skips
+`tests/**`. The test suite holds destructive command fixtures for the gates.
 
-Both `uses:` and `audit_ref` pin foucault release 3.3.14 at
-`06d74fba4d9013654cdaf9896bb7535724385186`. Update both together, never to a
-tag or branch.
+Both callers pin the reusable workflow and `personas_ref` to agents-personas
+commit `1649e5c9710fd85d6cca12006e344af27a5404a6`, version 1.0.0. One
+revision for both keeps the policy and its runner together. Change the pin
+only on purpose. Record the change in `CHANGELOG.md`.
 
-The reusable workflow runs these files from this repository's own base
-checkout. Each file comes from the pinned foucault revision.
-`ci/call_model.py`, `ci/run_model_command.py`, and
-`scripts/check_pr_review_response.py` carry local lint fixes recorded in
-`docs/template-drift.md`:
+Both callers set `fail_on_block: true`. A `BLOCK` verdict fails the check. A
+`NEEDS-HUMAN` verdict warns and concludes neutral.
+
+A pull request from a fork receives a skipped check from the engine and no
+provider secret.
+
+Each caller skips a head with a GitHub Actions check run that already carries
+a `VERDICT:` title. The caller trusts that check only when its check suite
+belongs to a `workflow_run` execution of the same caller file. A run that ends
+before a verdict carries another title. The next event for that head then
+retries the review.
+
+The `workflow_run` trigger keeps each caller on default branch code. A caller
+change takes effect only after it reaches `main`. The review appears on a
+pull request only after the upstream runs finish for that head. Find the
+`security-review-pr` and `quality-review-pr` runs under the default branch in
+the Actions tab.
+
+## Retained adapter files
+
+The engine supplies its own model adapter and reply validator. The callers
+use no file from this repository. These foucault 3.3.14 copies remain until
+the next `abuzucom/agents` template upgrade removes the copies:
 
 - `ci/build_pr_case.py`
 - `ci/run_model_command.py`
 - `ci/call_model.py`
 - `ci/model_providers.json`
-- `scripts/check_pr_review_response.py`, part of the template `scripts/` set
+- `scripts/check_pr_review_response.py`
 
-`tests/test_foucault_review_wiring.py` checks the pins, the secret mapping,
-the fork skip, and the SHA-256 digest of each copied file. A foucault upgrade
-updates the pins, the copies, and the recorded digests in one change.
+`tests/test_review_adapter_digests.py` pins the SHA-256 digest of each copy.
 
-## Provider and secret
+## Tests
 
-`ci/model_providers.json` selects Ollama with `kimi-k2.7-code`. The caller
-maps only the `OLLAMA_API_KEY` repository secret to `MODEL_API_KEY`. It never
-uses `secrets: inherit`, since the job sends an untrusted diff to a provider.
+- `tests/test_security_review_wiring.py` covers the foucault caller.
+- `tests/test_quality_review_wiring.py` covers the euler caller.
+- `tests/test_review_verdict_producer.py` covers the verdict producer check
+  in both callers.
 
-## Setup
+## Required repository secret
 
-- Add the `OLLAMA_API_KEY` repository secret. The review fails until it
-  exists.
-- After the first successful run, optionally require the `security-review`
-  check in branch protection for `main` and `develop`.
-- `workflow_run` runs appear under the default branch in the Actions tab, not
-  on the pull request branch.
+The review stays idle until an active human adds the provider API key as a
+repository secret. No agent sets it, and no agent commits it.
+
+The active profile in the pinned `engine/model_providers.json` selects the
+provider. The callers map `secrets.OLLAMA_API_KEY` to the reusable workflow's
+`MODEL_API_KEY`. Neither caller uses `secrets: inherit`.
+
+Add the key under Settings, Secrets and variables, Actions, as
+`OLLAMA_API_KEY`. Until the secret exists, the `foucault / security` and
+`euler / quality` checks fail. That failure reflects the absent secret. It
+reports no finding against the diff.
+
+## Required checks
+
+The `main` ruleset requires the `security-review` check from the former
+foucault caller. The caller on `main` reviews the promotion pull request from
+`develop` to `main`. The former caller publishes only `security-review`.
+Keep that requirement until the promotion pull request merges. Then replace
+it with `foucault / security` and `euler / quality`. An administrator
+fast-forward runs no required check. That path permits the swap at any time.
+Repository files cannot change a ruleset.
