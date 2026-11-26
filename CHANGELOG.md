@@ -11,6 +11,10 @@ All notable changes to this project are documented here. Format loosely follows
   `develop` to `main`. A forced reset then returns `develop` to `main`. An
   administrator fast-forward remains the fallback.
 
+### Fixed
+- Set the root version in `package-lock.json` to match `package.json`. The
+  lockfile still recorded 1.22.5.
+
 ## [1.23.1] (2026-11-24)
 
 ### Changed
