@@ -70,7 +70,7 @@ Every gate verdict over the 3,900 string literals in `tests/` matches the
 pre-change verdicts. `shared-files.json` and `hook-coverage-baseline.json`
 record the changed files. `scripts/check_pr_review_response.py`, `ci/call_model.py`, and
 `ci/run_model_command.py` also differ from foucault 3.3.14 by named constants.
-`tests/test_foucault_review_wiring.py` pins the current digest of each file.
+`tests/test_review_adapter_digests.py` pins the current digest of each file.
 Upstreaming these fixes to `abuzucom/agents` needs a separate issue.
 
 ### Checkers and tests this repository holds alone
@@ -81,13 +81,27 @@ server-side backstop for edits to `hooks/`, `.claude/`, `.codex/`, `.gemini/`,
 `.agents/`, and `docs/agent-policy/` is this repository's own, through
 [`protected-file-review.md`](protected-file-review.md).
 
-### `tests/test_foucault_review_wiring.py`
+### Persona review callers
 
-Expected to differ. The template's `tests/test_security_review_wiring.py`
-pins that repository's foucault revision and trigger workflow. This
-repository adapts it under a new name with its own pin, its `Checks`
-trigger, and digest checks for the copied adapters. The template file is
-not adopted.
+Expected to differ. `security-review-pr.yml` and `quality-review-pr.yml`
+follow the template callers from template commit `e05985f` (v2.50.0). These
+differences remain:
+
+- Both callers pin agents-personas 1.0.0 at `1649e5c`. The template pins
+  0.22.0 at `c43f459`. `abuzucom/agents#182` tracks the template pin.
+- Both callers keep this repository's `actions/github-script` v9.0.0 pin.
+  The template pins v7.1.0.
+- `Immutable Compliance` runs on `pull_request` here. The template runs it
+  on `pull_request_target`. `quality-review-pr.yml` looks up that run under
+  the `pull_request` event.
+- `tests/test_security_review_wiring.py` and
+  `tests/test_quality_review_wiring.py` carry the same pin. The quality test
+  also checks the event lookup.
+- `persona-review-labels.yml` waits for the template upgrade. The pinned
+  immutable checker at `8680234` rejects every `pull_request_target` caller
+  except its own workflow.
+- `tests/test_review_adapter_digests.py` pins the retained foucault 3.3.14
+  adapter copies. The template upgrade removes the copies and the test.
 
 ## Changing a template file here
 

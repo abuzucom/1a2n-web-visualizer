@@ -130,7 +130,8 @@ assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
   Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff,
   HTML/CSS validation via the Nu Html Checker), `protected-files.yml`
   (code-owner approval gate, see `docs/protected-file-review.md`),
-  `security-review-pr.yml` (foucault model review of each pull request, see
+  `security-review-pr.yml` and `quality-review-pr.yml` (agents-personas
+  foucault and euler model reviews of each pull request, see
   `docs/pr-security-review.md`).
 
 ## Branch promotion
