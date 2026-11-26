@@ -2,22 +2,27 @@
 """Provide shared advisory prose-policy analysis."""
 from __future__ import annotations
 
+import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from scripts.handoff_policy import is_handoff_path
+    from scripts.handoff_policy import HANDOFF_PATH, is_handoff_path
 except ModuleNotFoundError:
-    from handoff_policy import is_handoff_path
+    from handoff_policy import HANDOFF_PATH, is_handoff_path
 
 ROOT = Path(__file__).resolve().parent.parent
 DENYLIST_PATH = Path(__file__).resolve().with_name("prose_bans.txt")
 DENYLIST_RELATIVE_PATH = "scripts/prose_bans.txt"
-HANDOFF_PATH = "plan/HANDOFF.md.example"
 MAX_DENYLIST_BYTES = 64 * 1024
 
-SCOPES = {"global", "handoff-exempt"}
+HANDOFF_SCOPE = "handoff exemption"
+SCOPES = {"global", HANDOFF_SCOPE}
+# Adopter denylists still carry the older section spelling. Loading maps it
+# to the new scope and prints a rename notice.
+LEGACY_SCOPES = {"handoff-exempt": HANDOFF_SCOPE}
 
 PERSONAL_PRONOUNS = (
     "i", "me", "my", "mine", "myself",
@@ -68,6 +73,13 @@ RHETORICAL_PATTERNS = (
     ),
 )
 LITERAL_ESCAPE_PATTERN = re.compile(r"\\[nrt]")
+# Rule 14 requires these attribution trailers in commits and pull requests.
+# A trailer key and its colon read as a colon clause join. The checker blanks
+# only the key at the line start. The value after the key stays checked.
+TRAILER_KEY_PATTERN = re.compile(
+    r"^[ \t]*(?:co-authored-by|assisted-by|(?:[a-z0-9][a-z0-9-]*-)?session):",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 HEDGING_PHRASES = (
     "could potentially",
@@ -164,14 +176,26 @@ def _normalize_path(path: str | Path) -> str:
     """Return a slash-normalized repository-relative path when possible."""
     candidate = Path(path)
     if candidate.is_absolute():
-        try:
-            candidate = candidate.resolve().relative_to(ROOT.resolve())
-        except (OSError, ValueError):
-            candidate = Path(path)
+        # realpath never raises in non-strict mode. A path outside the
+        # repository stays absolute and matches no repository-relative entry.
+        resolved = Path(os.path.realpath(candidate))
+        root = Path(os.path.realpath(ROOT))
+        if resolved.is_relative_to(root):
+            candidate = resolved.relative_to(root)
     normalized = str(candidate).replace("\\", "/")
     while normalized.startswith("./"):
-        normalized = normalized[2:]
+        normalized = normalized.removeprefix("./")
     return normalized
+
+
+def _current_scope_name(name: str, number: int) -> str:
+    """Return the current scope name for one section header."""
+    replacement = LEGACY_SCOPES.get(name)
+    if replacement is None:
+        return name
+    print(f"notice: denylist line {number}: rename [{name}] to [{replacement}]",
+          file=sys.stderr)
+    return replacement
 
 
 def load_denylist(path: str | Path = DENYLIST_PATH) -> list[DenyEntry]:
@@ -188,7 +212,7 @@ def load_denylist(path: str | Path = DENYLIST_PATH) -> list[DenyEntry]:
         if not value:
             continue
         if value.startswith("[") and value.endswith("]"):
-            scope = value[1:-1]
+            scope = _current_scope_name(value[1:-1], number)
             if scope not in SCOPES:
                 raise ValueError(f"unknown denylist scope on line {number}")
             continue
@@ -247,6 +271,12 @@ def mask_markdown_code(text: str) -> str:
     return "".join(output)
 
 
+def mask_trailer_keys(text: str) -> str:
+    """Blank each allowed trailer key and its colon while preserving offsets."""
+    return TRAILER_KEY_PATTERN.sub(
+        lambda match: _mask_characters(match.group(0)), text)
+
+
 def _entry_pattern(text: str) -> re.Pattern:
     """Compile one case-insensitive exact token or phrase pattern."""
     escaped = re.escape(text).replace(r"\ ", r"\s+")
@@ -273,23 +303,16 @@ def _overlaps(finding: Finding, occupied: list[tuple[int, int]]) -> bool:
                for start, end in occupied)
 
 
-class _FindingCollector:
-    """Accumulate non-overlapping findings in collection priority order."""
-
-    def __init__(self) -> None:
-        self.findings: list[Finding] = []
-        self.occupied: list[tuple[int, int]] = []
-
-    def collect(
-            self, text: str, pattern: re.Pattern, category: str,
-            detail: str) -> None:
-        """Collect non-overlapping matches for one policy category."""
-        for match in pattern.finditer(text):
-            finding = Finding(match.start(), match.end(), category, detail)
-            if _overlaps(finding, self.occupied):
-                continue
-            self.findings.append(finding)
-            self.occupied.append((finding.start, finding.end))
+def _collect_pattern(
+        text: str, pattern: re.Pattern, category: str, detail: str,
+        findings: list[Finding], occupied: list[tuple[int, int]]) -> None:
+    """Collect non-overlapping matches for one policy category."""
+    for match in pattern.finditer(text):
+        finding = Finding(match.start(), match.end(), category, detail)
+        if _overlaps(finding, occupied):
+            continue
+        findings.append(finding)
+        occupied.append((finding.start, finding.end))
 
 
 def _format_finding(text: str, path: str, finding: Finding) -> str:
@@ -310,56 +333,93 @@ def find_violations(
     if normalized_path == DENYLIST_RELATIVE_PATH:
         return []
     denylist = entries if entries is not None else load_denylist()
-    collector = _FindingCollector()
+    findings = []
+    occupied = []
+    _collect_vocabulary(text, normalized_path, denylist, findings, occupied)
+    prose = mask_trailer_keys(mask_markdown_code(text))
+    _collect_sentence_style(prose, findings, occupied)
+    _collect_discourse(prose, normalized_path, findings, occupied)
+    findings.sort(key=lambda item: (item.start, item.end, item.category))
+    return [
+        _format_finding(text, normalized_path, finding)
+        for finding in findings
+    ]
 
+
+def _collect_vocabulary(
+        text: str, normalized_path: str, denylist: list[DenyEntry],
+        findings: list[Finding], occupied: list[tuple[int, int]]) -> None:
+    """Collect controlled-vocabulary matches from the raw source text."""
     for entry in denylist:
-        if entry.scope == "handoff-exempt" and is_handoff_path(normalized_path):
+        if entry.scope == HANDOFF_SCOPE and is_handoff_path(normalized_path):
             continue
-        collector.collect(
+        _collect_pattern(
             text,
             _entry_pattern(entry.text),
             "controlled vocabulary",
             f"denylist line {entry.line}",
+            findings,
+            occupied,
         )
 
-    prose = mask_markdown_code(text)
+
+def _collect_sentence_style(
+        prose: str, findings: list[Finding],
+        occupied: list[tuple[int, int]]) -> None:
+    """Collect voice, clause, punctuation, and escape findings from prose."""
     pronoun_pattern = _phrase_pattern(PERSONAL_PRONOUNS)
-    collector.collect(
+    _collect_pattern(
         prose, pronoun_pattern, "personal pronoun", "impersonal voice",
+        findings, occupied,
     )
-    collector.collect(
+    _collect_pattern(
         prose, PASSIVE_PATTERN, "passive voice", "active voice preferred",
+        findings, occupied,
     )
 
-    collector.collect(
+    _collect_pattern(
         prose, COMMA_TAIL_PATTERN, "comma-led tail", "separate sentence",
+        findings, occupied,
     )
-    collector.collect(
+    _collect_pattern(
         prose, SEMICOLON_CLAUSE_PATTERN, "clause join", "semicolon",
+        findings, occupied,
     )
-    collector.collect(
+    _collect_pattern(
         prose, COLON_CLAUSE_PATTERN, "clause join", "colon",
+        findings, occupied,
     )
-    collector.collect(
+    _collect_pattern(
         prose,
         INLINE_ENUMERATION_PATTERN,
         "punctuation chain",
         "inline enumeration",
+        findings,
+        occupied,
     )
     for pattern in RHETORICAL_PATTERNS:
-        collector.collect(
+        _collect_pattern(
             prose,
             pattern,
             "rhetorical contrast",
             "direct statement preferred",
+            findings,
+            occupied,
         )
-    collector.collect(
+    _collect_pattern(
         prose,
         LITERAL_ESCAPE_PATTERN,
         "literal escape sequence",
         "use real newlines and whitespace",
+        findings,
+        occupied,
     )
 
+
+def _collect_discourse(
+        prose: str, normalized_path: str, findings: list[Finding],
+        occupied: list[tuple[int, int]]) -> None:
+    """Collect hedging, justification, narration, and provenance findings."""
     discourse_patterns = (
         (_phrase_pattern(HEDGING_PHRASES), "hedging", "direct statement preferred"),
         (
@@ -384,15 +444,6 @@ def find_violations(
             "state a durable fact",
         ),)
     for pattern, category, detail in discourse_patterns:
-        collector.collect(
-            prose, pattern, category, detail,
+        _collect_pattern(
+            prose, pattern, category, detail, findings, occupied,
         )
-
-    findings = sorted(
-        collector.findings,
-        key=lambda item: (item.start, item.end, item.category),
-    )
-    return [
-        _format_finding(text, normalized_path, finding)
-        for finding in findings
-    ]

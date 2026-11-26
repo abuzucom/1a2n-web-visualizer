@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Exercise platform policy paths that host integration tests reach."""
-import importlib
 import sys
 import unittest
 from pathlib import Path
@@ -9,7 +8,7 @@ from pathlib import Path
 HOOKS_DIRECTORY = Path(__file__).resolve().parent.parent / "hooks"
 sys.path.insert(0, str(HOOKS_DIRECTORY))
 
-platform_policy = importlib.import_module("_platform_policy")
+import _platform_policy as platform_policy
 
 
 class PlatformPolicyCoverageTest(unittest.TestCase):

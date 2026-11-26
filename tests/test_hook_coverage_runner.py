@@ -11,6 +11,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import check_hook_coverage as gate
 
+SHARD_WORKER_COUNT = 2
+SHARD_TIMEOUT_SECONDS = 30
+EXPIRING_TIMEOUT_SECONDS = 0.1
+
 
 class TestShardRunnerTest(unittest.TestCase):
     """Coverage workers execute real test classes and report progress."""
@@ -26,7 +30,7 @@ class TestShardRunnerTest(unittest.TestCase):
             (tests / name).write_text(body, encoding="utf-8")
         return root
 
-    def test_workers_split_classes_from_the_same_file(self):
+    def test_workers_split_file_classes(self):
         root = self.make_root({
             "test_alpha.py": (
                 "import unittest\n\nclass Alpha(unittest.TestCase):\n"
@@ -37,7 +41,8 @@ class TestShardRunnerTest(unittest.TestCase):
         diagnostics = io.StringIO()
         with contextlib.redirect_stderr(diagnostics):
             problems = gate.run_test_shards(
-                str(root), dict(os.environ), workers=2, timeout=30)
+                str(root), dict(os.environ), workers=SHARD_WORKER_COUNT,
+                timeout=SHARD_TIMEOUT_SECONDS)
 
         self.assertEqual(problems, [])
         output = diagnostics.getvalue()
@@ -45,7 +50,7 @@ class TestShardRunnerTest(unittest.TestCase):
         self.assertIn("passed test_alpha.py::Alpha", output)
         self.assertIn("passed test_alpha.py::Beta", output)
 
-    def test_worker_timeout_names_the_test_file(self):
+    def test_worker_timeout_names_file(self):
         root = self.make_root({
             "test_slow.py": (
                 "import time\nimport unittest\n\nclass Slow(unittest.TestCase):\n"
@@ -54,13 +59,13 @@ class TestShardRunnerTest(unittest.TestCase):
         diagnostics = io.StringIO()
         with contextlib.redirect_stderr(diagnostics):
             problems = gate.run_test_shards(
-                str(root), dict(os.environ), workers=1, timeout=0.1)
+                str(root), dict(os.environ), workers=1, timeout=EXPIRING_TIMEOUT_SECONDS)
 
         self.assertEqual(len(problems), 1)
         self.assertIn("test_slow.py", problems[0])
         self.assertIn("timed out", problems[0])
 
-    def test_first_failure_stops_future_shard_submission(self):
+    def test_first_failure_stops_submission(self):
         root = self.make_root({
             "test_early.py": (
                 "import unittest\n\nclass Early(unittest.TestCase):\n"
@@ -79,13 +84,13 @@ class TestShardRunnerTest(unittest.TestCase):
                 str(root),
                 dict(os.environ),
                 workers=1,
-                timeout=30,
+                timeout=SHARD_TIMEOUT_SECONDS,
             )
 
         self.assertEqual(len(problems), 1)
         self.assertFalse((root / "late-ran").exists())
 
-    def test_invalid_worker_count_fails_before_executor_creation(self):
+    def test_invalid_worker_count_fails(self):
         root = self.make_root({
             "test_worker_count.py": (
                 "import unittest\n\nclass WorkerCount(unittest.TestCase):\n"
@@ -97,7 +102,7 @@ class TestShardRunnerTest(unittest.TestCase):
                 str(root),
                 dict(os.environ),
                 workers=0,
-                timeout=30,
+                timeout=SHARD_TIMEOUT_SECONDS,
             )
 
 

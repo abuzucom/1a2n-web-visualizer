@@ -19,6 +19,11 @@ import subprocess
 import sys
 
 try:
+    from scripts._commit_trailers import parse_coauthor, terminal_trailers
+except ModuleNotFoundError:
+    from _commit_trailers import parse_coauthor, terminal_trailers
+
+try:
     from scripts.trusted_git import run_git
 except ModuleNotFoundError:
     try:
@@ -32,19 +37,15 @@ DENYLIST_NAMES = ("grok", "xai")
 DENYLIST_EMAIL_DOMAINS = ("x.ai",)
 DENYLIST_MODELS = ("deepseekv4flash",)
 
-TRAILER_LINE = re.compile(
-    r"^(?P<key>[A-Za-z0-9]+(?:[- ][A-Za-z0-9]+)*):[ \t]*(?P<value>.*)$"
-)
-CO_AUTHOR = re.compile(
-    r"^(?P<name>[^<>]+?)[ \t]*(?:<(?P<email>[^<>]+)>[ \t]*)?$"
-)
 OBJECT_ID = re.compile(r"^[0-9a-fA-F]{40,64}$")
 MAX_COMMITS = 200
 MAX_COMMIT_BYTES = 256 * 1024
 MAX_TOTAL_COMMIT_BYTES = 4 * 1024 * 1024
-
-# Fields in the NUL-separated commit metadata record.
-COMMIT_METADATA_FIELDS = 6
+SHORT_SHA_LENGTH = 12
+GIT_COMMIT_TIMEOUT_SECONDS = 30
+GIT_RANGE_TIMEOUT_SECONDS = 60
+# Object ID, author name and email, committer name and email, then the message.
+COMMIT_FIELD_COUNT = 6
 
 
 def _compile_wildcard(pattern: str) -> re.Pattern[str]:
@@ -103,47 +104,43 @@ def _matches_denylist(
     is_disclosure: bool = False,
 ) -> bool:
     """Return True if an author, committer, or model disclosure names a banned agent."""
+    name_lower = name.strip().lower()
     local_part = email.strip().lower().split("@", 1)[0]
-    candidates = (
-        re.sub(r"[^a-z0-9]", "", name.strip().lower()),
-        re.sub(r"[^a-z0-9]", "", local_part),
-    )
-    if _matches_vendor(candidates, email):
+    normalized_name = re.sub(r"[^a-z0-9]", "", name_lower)
+    normalized_local = re.sub(r"[^a-z0-9]", "", local_part)
+    for term in DENYLIST_NAMES:
+        if term in normalized_name or term in normalized_local:
+            return True
+    domain = email.strip().lower().rsplit("@", 1)[-1] if "@" in email else ""
+    if any(
+        domain == denied or domain.endswith(f".{denied}")
+        for denied in DENYLIST_EMAIL_DOMAINS
+    ):
         return True
     active_exact = DENYLIST_MODELS if exact_bans is None else exact_bans
     if is_disclosure:
-        model_hit = any(
-            model in candidate for model in active_exact for candidate in candidates
-        )
+        for model in active_exact:
+            if model in normalized_name or model in normalized_local:
+                return True
+        if wildcards:
+            for pattern in wildcards:
+                if pattern.match(normalized_name) or pattern.match(normalized_local):
+                    return True
     else:
         # Human/bot author or committer field: match exact model identifier or bot login
-        model_hit = any(
-            model in candidates or f"{model}bot" in candidates
-            for model in active_exact
-        )
-    return model_hit or _matches_wildcard(candidates, wildcards)
-
-
-def _matches_vendor(candidates: tuple[str, str], email: str) -> bool:
-    """Return True when a name, local part, or email domain names a banned vendor."""
-    if any(term in candidate for term in DENYLIST_NAMES for candidate in candidates):
-        return True
-    domain = email.strip().lower().rsplit("@", 1)[-1] if "@" in email else ""
-    return any(
-        domain == denied or domain.endswith(f".{denied}")
-        for denied in DENYLIST_EMAIL_DOMAINS
-    )
-
-
-def _matches_wildcard(
-    candidates: tuple[str, str], wildcards: list[re.Pattern[str]] | None,
-) -> bool:
-    """Return True when any wildcard pattern matches a normalized candidate."""
-    return any(
-        pattern.match(candidate)
-        for pattern in wildcards or ()
-        for candidate in candidates
-    )
+        for model in active_exact:
+            if (
+                normalized_name == model
+                or normalized_local == model
+                or normalized_name == f"{model}bot"
+                or normalized_local == f"{model}bot"
+            ):
+                return True
+        if wildcards:
+            for pattern in wildcards:
+                if pattern.match(normalized_name) or pattern.match(normalized_local):
+                    return True
+    return False
 
 
 def _extract_pr_disclosures(body: str) -> list[str]:
@@ -164,61 +161,9 @@ def _extract_pr_disclosures(body: str) -> list[str]:
     return disclosures
 
 
-def _terminal_trailers(body: str) -> list[tuple[str, str]]:
-    """Return key/value pairs from a structured terminal trailer paragraph."""
-    lines = body.splitlines()
-    while lines and not lines[-1].strip():
-        lines.pop()
-    if not lines:
-        return []
-    trailer_lines = []
-    for line in reversed(lines):
-        if not line.strip():
-            break
-        trailer_lines.append(line)
-    trailer_lines.reverse()
-    trailers = []
-    for line in trailer_lines:
-        if line.startswith((" ", "\t")):
-            if trailers:
-                key, value = trailers[-1]
-                trailers[-1] = (key, f"{value}\n{line.lstrip()}")
-            continue
-        match = TRAILER_LINE.fullmatch(line)
-        if match:
-            trailers.append((match.group("key"), match.group("value")))
-    return trailers
-
-
-def _commit_violations(
-    commit: dict, exact_bans: set[str], wildcards: list[re.Pattern[str]],
-) -> list[str]:
-    """Return banned-agent signals from one commit's identities and trailers."""
-    sha = commit["sha"][:12]
-    violations = []
-    for role in ("author", "committer"):
-        name = commit[f"{role}_name"]
-        email = commit[f"{role}_email"]
-        if _matches_denylist(
-            name, email, exact_bans, wildcards, is_disclosure=False
-        ):
-            violations.append(f"{sha}: banned-agent {role} '{name} <{email}>'")
-    for key, value in _terminal_trailers(commit.get("body", "")):
-        norm_key = key.lower().replace(" ", "-")
-        match = CO_AUTHOR.fullmatch(value)
-        if norm_key not in ("co-authored-by", "assisted-by") or not match:
-            continue
-        name = match.group("name").strip()
-        email = match.group("email") or ""
-        if not _matches_denylist(
-            name, email, exact_bans, wildcards, is_disclosure=True
-        ):
-            continue
-        if norm_key == "assisted-by":
-            violations.append(f"{sha}: banned-agent model '{name}'")
-        else:
-            violations.append(f"{sha}: banned-agent co-author '{name} <{email}>'")
-    return violations
+# The attribution checker reads the same trailer paragraph through
+# scripts/_commit_trailers.py.
+_terminal_trailers = terminal_trailers
 
 
 def find_violations(
@@ -235,14 +180,37 @@ def find_violations(
     exact_bans, wildcards = load_banned_models(banned_models_file)
     violations = []
     for commit in commits:
-        violations.extend(_commit_violations(commit, exact_bans, wildcards))
+        sha = commit["sha"][:SHORT_SHA_LENGTH]
+        for role in ("author", "committer"):
+            name = commit[f"{role}_name"]
+            email = commit[f"{role}_email"]
+            if _matches_denylist(
+                name, email, exact_bans, wildcards, is_disclosure=False
+            ):
+                violations.append(f"{sha}: banned-agent {role} '{name} <{email}>'")
+        for key, value in _terminal_trailers(commit.get("body", "")):
+            norm_key = key.lower().replace(" ", "-")
+            if norm_key not in ("co-authored-by", "assisted-by"):
+                continue
+            match = parse_coauthor(value)
+            if not match:
+                continue
+            name = match.group("name").strip()
+            email = match.group("email") or ""
+            if _matches_denylist(
+                name, email, exact_bans, wildcards, is_disclosure=True
+            ):
+                if norm_key == "assisted-by":
+                    violations.append(f"{sha}: banned-agent model '{name}'")
+                else:
+                    violations.append(f"{sha}: banned-agent co-author '{name} <{email}>'")
     if pr_author and _matches_denylist(
         pr_author, "", exact_bans, wildcards, is_disclosure=False
     ):
         violations.append(f"PR author: banned-agent login '{pr_author}'")
     if pr_body:
         for disclosure in _extract_pr_disclosures(pr_body):
-            match = CO_AUTHOR.fullmatch(disclosure)
+            match = parse_coauthor(disclosure)
             name = match.group("name").strip() if match else disclosure.strip()
             email = match.group("email") or "" if match else ""
             if _matches_denylist(
@@ -258,7 +226,7 @@ def _commit_size(repository, sha: str) -> int:
     """Return one bounded commit-object size."""
     result = run_git(
         repository, ["cat-file", "-s", "--", sha], check=True,
-        runner=subprocess.run, timeout=30)
+        runner=subprocess.run, timeout=GIT_COMMIT_TIMEOUT_SECONDS)
     raw_size = result.stdout.strip()
     if not raw_size.isdigit() or int(raw_size) > MAX_COMMIT_BYTES:
         raise ValueError(f"commit {sha} exceeds the metadata size limit")
@@ -273,16 +241,15 @@ def _load_commit(repository, sha: str) -> dict:
         ["show", "--no-ext-diff", "--no-patch", f"--format={fmt}", "--end-of-options", sha],
         check=True,
         runner=subprocess.run,
-        timeout=30,
+        timeout=GIT_COMMIT_TIMEOUT_SECONDS,
     )
-    fields = result.stdout.split("\x00", 5)
-    if len(fields) != COMMIT_METADATA_FIELDS or fields[0] != sha:
+    fields = result.stdout.split("\x00", COMMIT_FIELD_COUNT - 1)
+    if len(fields) != COMMIT_FIELD_COUNT or fields[0] != sha:
         raise ValueError(f"malformed metadata for commit {sha}")
     return dict(
         zip(
             ("sha", "author_name", "author_email", "committer_name", "committer_email", "body"),
             fields,
-            strict=True,
         )
     )
 
@@ -298,7 +265,7 @@ def load_commits(base: str, head: str, repo=None) -> list[dict]:
         ["rev-list", "--count", "--end-of-options", revision],
         check=True,
         runner=subprocess.run,
-        timeout=60,
+        timeout=GIT_RANGE_TIMEOUT_SECONDS,
     )
     raw_count = count_result.stdout.strip()
     if not raw_count.isdigit() or int(raw_count) > MAX_COMMITS:
@@ -308,7 +275,7 @@ def load_commits(base: str, head: str, repo=None) -> list[dict]:
         ["rev-list", "--reverse", "--end-of-options", revision],
         check=True,
         runner=subprocess.run,
-        timeout=60,
+        timeout=GIT_RANGE_TIMEOUT_SECONDS,
     )
     shas = result.stdout.splitlines()
     if len(shas) > MAX_COMMITS:

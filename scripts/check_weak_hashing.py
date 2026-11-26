@@ -96,7 +96,7 @@ class _WeakHashVisitor(ast.NodeVisitor):
         if isinstance(target, (ast.Tuple, ast.List)) and isinstance(
             value, (ast.Tuple, ast.List)
         ) and len(target.elts) == len(value.elts):
-            for child_target, child_value in zip(target.elts, value.elts, strict=True):
+            for child_target, child_value in zip(target.elts, value.elts):
                 self._bind_assignment(child_target, child_value)
             return
         self._bind(target, self._kind(value))
@@ -170,11 +170,11 @@ def _python_violations(text: str, path: str) -> list[str]:
     """Analyze Python syntax and fail closed when parsing is impossible."""
     try:
         tree = ast.parse(text, filename=path)
-        comments = _python_comments(text)
-        visitor = _WeakHashVisitor()
-        visitor.visit(tree)
-    except (SyntaxError, ValueError, RecursionError, MemoryError, tokenize.TokenError):
+    except (SyntaxError, ValueError):
         return [f"{path}: malformed Python cannot be checked (Rule 7)"]
+    comments = _python_comments(text)
+    visitor = _WeakHashVisitor()
+    visitor.visit(tree)
     violations = [
         f"{path}:{call.lineno}: MD5/SHA-1 call without a "
         "justification comment (Rule 7)"
@@ -231,7 +231,14 @@ def main() -> int:
     violations = []
     for path in paths:
         text = Path(path).read_text(encoding="utf-8")
-        violations.extend(find_violations(text, path))
+        try:
+            violations.extend(find_violations(text, path))
+        except Exception as error:
+            # Top-level boundary: fail closed and name a checker defect as one.
+            print(f"error: {path}: internal checker failure "
+                  f"({type(error).__name__}). Recovery: report the file and "
+                  "command to the repository maintainers.", file=sys.stderr)
+            return 1
     if not violations:
         return 0
     for message in violations:

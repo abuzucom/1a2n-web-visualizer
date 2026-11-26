@@ -7,12 +7,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import check_action_pins
 
+COMMIT_SHA_HEX_LENGTH = 40
+SHA256_DIGEST_HEX_LENGTH = 64
+
 
 class ActionPinTest(unittest.TestCase):
     """External actions require immutable revisions."""
 
     def test_full_sha_passes(self):
-        text = "jobs:\n  test:\n    steps:\n      - uses: actions/checkout@" + "a" * 40
+        text = "jobs:\n  test:\n    steps:\n      - uses: actions/checkout@" + "a" * COMMIT_SHA_HEX_LENGTH
         self.assertEqual(check_action_pins.find_violations(text, "x.yml"), [])
 
     def test_tag_fails(self):
@@ -25,7 +28,7 @@ class ActionPinTest(unittest.TestCase):
         self.assertEqual(check_action_pins.find_violations(text, "x.yml"), [])
 
     def test_container_digest_passes(self):
-        text = "jobs:\n  test:\n    steps:\n      - uses: docker://alpine@sha256:" + "a" * 64
+        text = "jobs:\n  test:\n    steps:\n      - uses: docker://alpine@sha256:" + "a" * SHA256_DIGEST_HEX_LENGTH
         self.assertEqual(check_action_pins.find_violations(text, "x.yml"), [])
 
     def test_container_tag_fails(self):
@@ -33,7 +36,7 @@ class ActionPinTest(unittest.TestCase):
         found = check_action_pins.find_violations(text, "x.yml")
         self.assertEqual(len(found), 1)
 
-    def test_repository_workflows_use_full_sha_pins(self):
+    def test_repository_workflows_use_sha_pins(self):
         """All external actions in this repository's workflows use full SHAs."""
         root = Path(__file__).resolve().parent.parent
         workflow_root = root / ".github" / "workflows"

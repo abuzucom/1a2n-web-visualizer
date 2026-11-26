@@ -3,17 +3,18 @@
 
 Parity is a promise unless something checks it. This session watched
 scripts/check_commit_message.py diverge between two repositories until a
-merge commit exposed it, so the shared corpus is a test rather than a
+merge commit exposed it, so the shared corpus is a test and not a
 convention: a fix landing in one gate and not the other fails here.
 
 Each row pairs a command with its equivalent in the other shell. Where a
-form exists in only one shell, the pair repeats the same string, which
-still asserts that both gates read it identically.
+form exists in only one shell, the pair repeats the same string. The
+pair still asserts that both gates read it identically.
 """
 import importlib.util
 import json
 import os
 import tempfile
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -28,6 +29,7 @@ BASH_HOOK = REPO_ROOT / "hooks" / "block_destructive_bash.py"
 POWERSHELL_HOOK = REPO_ROOT / "hooks" / "block_destructive_powershell.py"
 CMD_HOOK = REPO_ROOT / "hooks" / "block_destructive_cmd.py"
 CORE_PATH = REPO_ROOT / "hooks" / "_gate_core.py"
+NON_STRING_COMMANDS = (None, 5, ["rm"], {"a": 1})
 _HOOK_WORKERS = {}
 
 
@@ -100,7 +102,7 @@ class GitParityTest(unittest.TestCase):
                 self.assertEqual(bash(command), powershell(command))
                 self.assertEqual(bash(command), cmd(command))
 
-    def test_inline_config_and_repo_location_forms_agree(self):
+    def test_inline_config_forms_agree(self):
         with tempfile.TemporaryDirectory() as root:
             git_dir = Path(root) / ".git"
             git_dir.mkdir()
@@ -129,7 +131,7 @@ class MalformedParityTest(unittest.TestCase):
     """All gates must fail closed on the same malformed inputs."""
 
     def test_non_string_commands_agree(self):
-        for value in (None, 5, ["rm"], {"a": 1}):
+        for value in NON_STRING_COMMANDS:
             with self.subTest(value=value):
                 self.assertEqual(bash(value), powershell(value))
                 self.assertEqual(bash(value), cmd(value))
@@ -221,7 +223,7 @@ class PowerShellPolicyParityTest(unittest.TestCase):
         ("Get-ChildItem .", ""),
     )
 
-    def test_shared_policy_commands_match_expected_verdicts(self):
+    def test_shared_policy_verdicts(self):
         for command, expected in self.CASES:
             with self.subTest(command=command):
                 self.assertEqual(bash(command), expected)
@@ -330,7 +332,7 @@ class SharedCommandPolicyParityTest(unittest.TestCase):
                 self.assertEqual(powershell(command), "deny")
                 self.assertEqual(cmd(command), "deny")
 
-    def test_subcommand_only_bans_keep_read_forms(self):
+    def test_subcommand_bans_keep_reads(self):
         for command in ("gpt show disk0", "log show --last 1m"):
             with self.subTest(command=command):
                 self.assertEqual(bash(command), powershell(command))
@@ -440,8 +442,8 @@ class GitHubCliSafetyParityTest(unittest.TestCase):
         (WRAPPER + "auth status", ""),
         ("gh repo view OWNER/REPO", "deny"),
         # Rule 17. These owners never match a real origin owner, so the
-        # verdict holds whether or not the gate reads one, which keeps the
-        # row independent of the checkout running it.
+        # verdict holds whether or not the gate reads one. The row stays
+        # independent of the checkout running it.
         (WRAPPER + "pr comment 16 --repo outside-owner-x9/repo", "ask"),
         (WRAPPER + "pr create --repo outside-owner-x9/repo", "ask"),
         (WRAPPER + "pr review 16 --repo outside-owner-x9/repo", "ask"),
@@ -529,8 +531,9 @@ class GitHubCliSafetyParityTest(unittest.TestCase):
         self.assertEqual(powershell(command), "ask")
         self.assertEqual(cmd(command), "ask")
 
-    def test_normal_local_git_transport_stays_available(self):
-        for command in ("git fetch origin main", "git pull", "git push origin HEAD"):
+    def test_local_git_transport_available(self):
+        for command in ("git fetch --no-tags --no-prune-tags origin main",
+                        "git pull --no-tags --no-prune", "git push origin HEAD"):
             with self.subTest(command=command):
                 self.assertEqual(bash(command), "")
                 self.assertEqual(powershell(command), "")
@@ -547,7 +550,7 @@ class CoreOwnershipTest(unittest.TestCase):
         self.assertTrue(core.is_relevant_git_environment("GIT_DIR"))
         self.assertFalse(core.is_relevant_git_environment("PATH"))
 
-    def test_no_gate_defines_its_own_verdict_helpers(self):
+    def test_verdict_helpers_centralized(self):
         shared = ("delete_verdict", "git_verdict", "push_verdict",
                   "is_root_target", "strongest", "is_test_path",
                   "cmd_delete_verdict", "curl_transfer_verdict",

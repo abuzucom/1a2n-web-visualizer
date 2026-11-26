@@ -4,9 +4,16 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project aims to use
 [Semantic Versioning](https://semver.org/).
 
-## [1.24.0] (2026-11-26)
+## [1.25.0] (2026-11-26)
 
 ### Added
+- Adopt the `abuzucom/agents` template at `e05985f` (v2.50.0). The upgrade
+  adds the new hooks, checkers, tests, and skills, the template issue and
+  pull request templates, `persona-review-labels.yml`,
+  `policy-size-report.yml`, and `.compliance-tree-exemptions.json`.
+  `docs/template-drift.md` lists each difference.
+- Add `hooks/workflow-scripts.local.txt` for this repository's checker
+  scripts and trust `abuzucom` in `hooks/trusted-owners.txt`.
 - Add `.github/workflows/quality-review-pr.yml`. It runs the
   `abuzucom/agents-personas` euler quality review after `Convention Sync
   Check` and `Immutable Compliance` both pass. The review publishes a
@@ -22,6 +29,22 @@ All notable changes to this project are documented here. Format loosely follows
   administrator fast-forward remains the fallback.
 
 ### Changed
+- The template gate workflows follow the template trigger model.
+  `Immutable Compliance` runs on `pull_request_target` with the base branch
+  checker. The gate workflows drop the branch filters and push triggers.
+  `quality-review-pr.yml` looks up `Immutable Compliance` under
+  `pull_request_target`.
+- The branch checker exempts `develop`. The attribution checker accepts the
+  signed GitHub web-flow committer of a web merge.
+- The template workflows keep the template action pins. The repository
+  workflows keep the repository pins. `tests/test_action_version_pins.py`
+  accepts both reviewed releases.
+- `checks.yml` installs checker dependencies as hashed wheels on Python
+  3.14.
+- Rename 91 local tests to at most five words after `test_`. Each renamed
+  test keeps its description in a docstring.
+- Merge same-day `CHANGELOG.md` entries under the newest version of each
+  day. Correct the 1.14.0 date to 2026-09-29.
 - `.github/workflows/security-review-pr.yml` calls the agents-personas
   `foucault-security-review.yml` wrapper. It runs after `Immutable
   Compliance` and publishes a `foucault / security` check.
@@ -36,6 +59,17 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Removed
 - Remove the `abuzucom/foucault` 3.3.14 pin.
+- Remove the retained foucault 3.3.14 adapter copies under `ci/`,
+  `scripts/check_pr_review_response.py`, and the matching tests, including
+  `tests/test_review_adapter_digests.py` and
+  `tests/test_protected_review_adapters.py`.
+- Remove the Dependabot changelog companion workflow, its script, and its
+  test. The template removed it. Dependabot pull requests need manual
+  changelog entries.
+- Remove `.agents/skills/github-draft`. The template skill
+  `commit-and-draft-pr` replaces it.
+- Remove the local built-in fsmonitor allowance and its tests. `git
+  status` with any `core.fsmonitor` value prompts again.
 - Delete `tests/test_foucault_review_wiring.py`. The new wiring tests and
   `tests/test_review_adapter_digests.py` replace it.
 

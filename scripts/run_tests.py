@@ -12,55 +12,19 @@ except ImportError:
     import check_hook_coverage as shard_runner
 
 DIAGNOSTIC_LIMIT = 4000
-
-
-def _ensure_import_root(root: str) -> None:
-    """Make test modules importable from the repository root."""
-    resolved_root = os.path.abspath(root)
-    if resolved_root not in sys.path:
-        sys.path.insert(0, resolved_root)
-
-
-def _class_shard(test) -> tuple[str, str]:
-    """Return the import name and display label for one test class."""
-    test_class = test.__class__
-    import_name = f"{test_class.__module__}.{test_class.__qualname__}"
-    module_path = test_class.__module__.replace(".", "/") + ".py"
-    return import_name, f"{module_path}::{test_class.__qualname__}"
+USAGE_ERROR_EXIT_CODE = 2
 
 
 def _suite_ids(suite: unittest.TestSuite) -> collections.Counter:
     """Return every test ID in a nested suite."""
-    identifiers = []
-    stack = [suite]
-    while stack:
-        item = stack.pop()
-        if isinstance(item, unittest.TestSuite):
-            stack.extend(reversed(list(item)))
-        else:
-            identifiers.append(item.id())
-    return collections.Counter(identifiers)
+    return collections.Counter(test.id() for test in shard_runner.iterate_tests(suite))
 
 
 def _discovered_tests(
         root: str) -> tuple[collections.Counter, list[tuple[str, str]]]:
     """Return test IDs and class shards from one discovery pass."""
-    _ensure_import_root(root)
-    tests = os.path.join(root, "tests")
-    suite = unittest.TestLoader().discover(tests, pattern="test_*.py")
-    identifiers = collections.Counter()
-    shards = {}
-    stack = [suite]
-    while stack:
-        item = stack.pop()
-        if isinstance(item, unittest.TestSuite):
-            stack.extend(reversed(list(item)))
-            continue
-        identifiers[item.id()] += 1
-        import_name, label = _class_shard(item)
-        shards[import_name] = label
-    ordered = sorted((label, name) for name, label in shards.items())
-    return identifiers, ordered
+    suite = shard_runner.discover_tests(root)
+    return _suite_ids(suite), shard_runner.shards_from_suite(suite)
 
 
 def _sharded_ids(shards: list[tuple[str, str]]) -> collections.Counter:
@@ -81,7 +45,7 @@ def _test_module_names(root: str) -> set[str]:
         package = [] if relative == "." else relative.split(os.sep)
         for filename in files:
             if filename.startswith("test_") and filename.endswith(".py"):
-                stem = filename[:-3]
+                stem = filename.removesuffix(".py")
                 names.add(".".join(package + [stem]))
                 names.add(".".join(["tests"] + package + [stem]))
     return names
@@ -128,26 +92,35 @@ def run_suite(root: str, *, workers: int, timeout: float) -> int:
         )
     except (ImportError, OSError, RuntimeError, ValueError) as error:
         diagnostic = _safe_diagnostic(f"{type(error).__name__}: {error}")
-        print(diagnostic, file=sys.stderr)
+        print(diagnostic, file=sys.stderr, flush=True)
         print(
             "error: test discovery failed; repair the suite and retry",
             file=sys.stderr,
+            flush=True,
         )
         return 1
     if not problems:
-        print("all test shards passed")
+        print("all test shards passed", flush=True)
         return 0
     for problem in problems:
-        print(_safe_diagnostic(problem), file=sys.stderr)
-    print("error: test shards failed; fix the reported tests and retry", file=sys.stderr)
+        print(_safe_diagnostic(problem), file=sys.stderr, flush=True)
+    print(
+        "error: test shards failed; fix the reported tests and retry",
+        file=sys.stderr,
+        flush=True,
+    )
     return 1
 
 
 def main(argv: list[str]) -> int:
     """Run the repository suite with project defaults."""
     if argv:
-        print("error: run_tests.py accepts no arguments", file=sys.stderr)
-        return 2
+        print(
+            "error: run_tests.py accepts no arguments",
+            file=sys.stderr,
+            flush=True,
+        )
+        return USAGE_ERROR_EXIT_CODE
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     started = time.monotonic()
     result = run_suite(
@@ -156,7 +129,7 @@ def main(argv: list[str]) -> int:
         timeout=shard_runner.TEST_SHARD_TIMEOUT_SECONDS,
     )
     elapsed = time.monotonic() - started
-    print(f"test suite finished in {elapsed:.1f}s")
+    print(f"test suite finished in {elapsed:.1f}s", flush=True)
     return result
 
 

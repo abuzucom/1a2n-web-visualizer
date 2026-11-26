@@ -11,6 +11,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import check_gate_pr_integrity as integrity
 
+SHA_HEX_LENGTH = 40
+
 
 class ProtectedPathTest(unittest.TestCase):
     """Protected paths require out-of-band human approval."""
@@ -21,7 +23,7 @@ class ProtectedPathTest(unittest.TestCase):
     def test_client_configuration_requires_approval(self) -> None:
         self.assertTrue(integrity.requires_approval([".codex/hooks.json"]))
 
-    def test_documentation_only_change_does_not_require_approval(self) -> None:
+    def test_docs_change_needs_no_approval(self) -> None:
         self.assertFalse(integrity.requires_approval(["README.md"]))
 
     def test_approval_label_matches_exact_value(self) -> None:
@@ -33,15 +35,15 @@ class ProtectedPathTest(unittest.TestCase):
             with patch.object(integrity, "_fetch_head") as fetch_head:
                 with patch.object(integrity, "_changed_paths", return_value=[]):
                     result = integrity.main([
-                        "--base", "a" * 40,
-                        "--head", "b" * 40,
+                        "--base", "a" * SHA_HEX_LENGTH,
+                        "--head", "b" * SHA_HEX_LENGTH,
                         "--pr-number", "1",
                         "--labels-json", "[]",
                     ])
         self.assertEqual(result, 0)
         fetch_head.assert_not_called()
 
-    def test_fetch_head_uses_workspace_root_with_real_git(self) -> None:
+    def test_fetch_head_workspace_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "source.git"
