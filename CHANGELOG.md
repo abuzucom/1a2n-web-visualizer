@@ -17,6 +17,9 @@ All notable changes to this project are documented here. Format loosely follows
   template at `e05985f`. Each pins agents-personas 1.0.0.
 - Add `tests/test_review_adapter_digests.py`. It pins the retained foucault
   3.3.14 adapter copies until the template upgrade removes the copies.
+- Document branch promotion in `docs/repo-guide.md`. A pull request promotes
+  `develop` to `main`. A forced reset then returns `develop` to `main`. An
+  administrator fast-forward remains the fallback.
 
 ### Changed
 - `.github/workflows/security-review-pr.yml` calls the agents-personas
@@ -36,13 +39,6 @@ All notable changes to this project are documented here. Format loosely follows
 - Delete `tests/test_foucault_review_wiring.py`. The new wiring tests and
   `tests/test_review_adapter_digests.py` replace it.
 
-## [1.23.2] (2026-11-26)
-
-### Added
-- Document branch promotion in `docs/repo-guide.md`. A pull request promotes
-  `develop` to `main`. A forced reset then returns `develop` to `main`. An
-  administrator fast-forward remains the fallback.
-
 ### Fixed
 - Set the root version in `package-lock.json` to match `package.json`. The
   lockfile still recorded 1.22.5.
@@ -52,10 +48,6 @@ All notable changes to this project are documented here. Format loosely follows
 ### Changed
 - Correct the staging hostname. The staging environment serves the `develop`
   branch at `develop.visualizer.1a2n.net`.
-
-## [1.23.0] (2026-11-24)
-
-### Changed
 - Deploy the site through Vercel instead of GitHub Pages. `vercel.json`
   publishes `src/` as a static site, and `.vercelignore` keeps the rest of
   the repository out of the deployment payload.
@@ -92,10 +84,6 @@ All notable changes to this project are documented here. Format loosely follows
   awaits nothing.
 - Drop the unused `index` parameter from `readChunk` in
   `tools/validate-preset-chunks.js`.
-
-## [1.22.4] (2026-11-18)
-
-### Changed
 - Correct seven comments in `src/js/visualizer-core.js` that contradicted
   the code: the file header, `unplayedNames`, `removeCurrent`,
   `favoriteCurrent`, `createPlaybackController`, `loadExtraImages`, and
@@ -106,14 +94,6 @@ All notable changes to this project are documented here. Format loosely follows
   name in a category cycle already has a runtime index.
 - `src/js/obs-ui.js` lowercases the preset names once at load instead of
   on every filter rebuild.
-
-### Added
-- Cover the case-insensitive OBS preset filter in
-  `tests/test_obs_preset_filter.js`.
-
-## [1.22.3] (2026-11-18)
-
-### Changed
 - Share one bracket matcher and one `index.js` reader between
   `tools/remove_presets.js` and `tools/analyze_curation_history.js`
   through the new `tools/preset_source.js`. The chunk reader moves there
@@ -121,34 +101,22 @@ All notable changes to this project are documented here. Format loosely follows
   unexpected wrapper instead of slicing it blindly.
 - The removal and history tool test fixtures copy
   `tools/preset_source.js` beside the tool under test.
-
-### Added
-- Cover the shared matcher and wrapper readers in
-  `tests/test_preset_source.js`.
-
-## [1.22.2] (2026-11-18)
-
-### Changed
 - Use the shared `BCViz` helpers in `obs-ui.js`, `fullscreen-ui.js`,
   and `performance-ui.js`. The page scripts no longer carry their own
   `describeDeviceError`, audio-prefs fallback, or shortcut filter.
   Behavior stays the same.
-
-### Added
-- Fail the test suite when a page script defines its own copy of a
-  shared `BCViz` helper. The check covers declarations, function
-  expressions, and arrow functions.
-
-## [1.22.1] (2026-11-18)
-
-### Changed
 - Give the page-script unit tests the real shared `BCViz` helpers. The
   new `tests/support/bcviz-stub.js` loads them from `visualizer-core.js`
   beside each test's own `create()`. No assertion changes.
 
-## [1.22.0] (2026-11-18)
-
 ### Added
+- Cover the case-insensitive OBS preset filter in
+  `tests/test_obs_preset_filter.js`.
+- Cover the shared matcher and wrapper readers in
+  `tests/test_preset_source.js`.
+- Fail the test suite when a page script defines its own copy of a
+  shared `BCViz` helper. The check covers declarations, function
+  expressions, and arrow functions.
 - Expose `describeDeviceError`, `audioPrefs`, and `shouldIgnoreShortcut`
   on `BCViz`. Each page script carries its own copy of these helpers
   today. `audioPrefs` returns an inert store when `audio-prefs.js` is
@@ -165,8 +133,6 @@ All notable changes to this project are documented here. Format loosely follows
   `tools/remove_presets.js` resolves outside the repository. The check
   follows symlinks. The run continues. Callers that keep a names file
   elsewhere keep working.
-
-## [1.21.0] (2026-11-17)
 
 ### Changed
 - Pin the `lodash` override to the locked version, 4.18.1.
@@ -190,10 +156,6 @@ All notable changes to this project are documented here. Format loosely follows
 - Split the importer's `extract_source` and `main` into stages, name its
   file-mode and marker constants, remove an unreachable path check, and
   drop its inline lint suppressions.
-
-## [1.20.4] (2026-11-15)
-
-### Fixed
 - Escape the `--reason` text in the ledger row that
   `tools/remove-experimental-duplicates.py` writes. A reason with a comma
   split the row into extra columns.
@@ -214,10 +176,6 @@ All notable changes to this project are documented here. Format loosely follows
   chunk counted as removed.
 - Remove the temporary directory after a failed write in
   `tools/remove_presets.js` and `tools/convert-milk-presets.js`.
-
-## [1.20.2] (2026-11-13)
-
-### Fixed
 - Warn on stderr about an unrecognized argument to
   `tools/remove_presets.js`. A misspelled `--dry-run` no longer passes
   without notice.
@@ -228,10 +186,6 @@ All notable changes to this project are documented here. Format loosely follows
 - Name the physical chunk file, such as `chunk-9000.js`, in chunk error
   messages.
 - Describe the tool's write order and checks accurately in its header.
-
-## [1.20.1] (2026-11-13)
-
-### Fixed
 - Skip already indexed names in `tools/import-nestdrop-presets.py`. A
   re-run after a stop past the index write indexed the batch twice.
 - Write the vendored textures first in `tools/import-nestdrop-presets.py`.
@@ -245,41 +199,19 @@ All notable changes to this project are documented here. Format loosely follows
   disagreed on the part total.
 - Close the inventory file and replace it atomically in
   `tools/reconcile_preset_inventory.py`.
-
-## [1.20.0] (2026-11-13)
-
-### Changed
-- Move the atomic file writer and the preset hash into the shared
-  `tools/preset_io.py` module. Four tools carried their own writer copy.
-  Two tools carried their own hash copy. The duplicate-content report
-  compares against hashes that the importer recorded.
-
-### Fixed
 - Write LF line endings on every platform in
   `tools/import-nestdrop-presets.py`. Its writer copy wrote CRLF on
   Windows.
 - Remove the temporary file after a failed write in
   `tools/fetch-cream-of-the-crop-presets.py`.
-
-## [1.19.10] (2026-11-13)
-
-### Fixed
 - Report counts in `tools/fetch-cream-of-the-crop-presets.py` that add up
   to the converted count. The inventory count ignores case, the way the
   filter does. A name in both ledgers counts once.
-
-## [1.19.9] (2026-11-13)
-
-### Fixed
 - Fail `npm run validate:exp` when an experimental preset carries an
   invalid equation. The CI step now blocks such a preset.
 - Accept a preset index without a `files` map in both preset validators.
   The chunk validator reads the padded chunk names the runtime falls back
   to.
-
-## [1.19.8] (2026-11-13)
-
-### Fixed
 - Disconnect the audio source from the old visualizer before a WebGL
   rebuild. The old analyser chain stayed connected after every recovery.
 - Reload the experimental textures for a rebuilt visualizer. `[EXP]`
@@ -291,20 +223,12 @@ All notable changes to this project are documented here. Format loosely follows
   stops. The late load connected a node with no owner.
 - Clear the failed mark for presets in a chunk that arrives after its
   timeout. Those presets stayed ineligible for the whole session.
-
-## [1.19.7] (2026-11-13)
-
-### Fixed
 - Start the fullscreen and performance pages on the remembered audio
   input. The pages resolved the saved input against an empty device list.
   The fullscreen page then replaced the saved choice with the system
   default.
 - Stop reporting a released input after a failed device switch. The core
   and the OBS panel named the old input while the visualizer had none.
-
-## [1.19.6] (2026-11-13)
-
-### Fixed
 - Record each appended chunk in the index `files` map in
   `tools/fetch-cream-of-the-crop-presets.py`. Index readers reject an index
   whose chunk and file counts differ.
@@ -317,6 +241,12 @@ All notable changes to this project are documented here. Format loosely follows
   timeout.
 - Close the upstream archive and read the texture name list as UTF-8 in the
   three fetch tools.
+
+### Changed
+- Move the atomic file writer and the preset hash into the shared
+  `tools/preset_io.py` module. Four tools carried their own writer copy.
+  Two tools carried their own hash copy. The duplicate-content report
+  compares against hashes that the importer recorded.
 
 ## [1.19.5] (2026-11-09)
 
@@ -333,15 +263,9 @@ All notable changes to this project are documented here. Format loosely follows
 - Remove 8 presets on request. The batch covers 6 mainline presets and 2
   experimental presets.
 
-## [1.19.3] (2026-11-07)
-
 ### Fixed
 - Restart the preset cycle timer after an energy curation key. The keys
   reset the timer now, the way the shuffle removal key does.
-
-## [1.19.2] (2026-11-07)
-
-### Fixed
 - Drop every requested preset in one curation run. The removal pass rebuilt
   the catalog from the original list. Only the last removal survived.
 - Record the pack the runtime plays in a catalog entry. A name that exists
@@ -359,10 +283,6 @@ All notable changes to this project are documented here. Format loosely follows
 - Follow the page attribute for the curation feature. The panel markup no
   longer decides whether the curation keys work.
 - Load the shared catalog helpers without a lint suppression.
-
-## [1.19.1] (2026-11-07)
-
-### Fixed
 - Wrap the long removal tool test fixture line. The CI lint job checks
   every Python file, and that fixture line ran past the line limit.
 - Assert the played session pick by exclusion. The old assertion named one
@@ -400,29 +320,19 @@ All notable changes to this project are documented here. Format loosely follows
   The batch covers 14 mainline presets, four original experimental presets,
   and one vendored preset. The inventory contains 18,155 presets.
 - Preserve the EXP4 import, converter repairs, Jira removal, and newer curation records.
-
-## [1.18.1] (2026-11-04)
+- Remove the remaining Jira integration and deployment publishing step.
+- Remove the sync script, dedicated tests, integration guide, and current documentation references.
 
 ### Documentation
 - Remove obsolete integration references from the repository guide and template drift notes.
 
-## [1.18.0] (2026-11-04)
-
-### Removed
-- Remove the remaining Jira integration and deployment publishing step.
-- Remove the sync script, dedicated tests, integration guide, and current documentation references.
-
 ### Tests
 - Preserve Pages permissions, pinned deployment actions, and failure retry behavior.
-
-## [1.17.0] (2026-11-04)
 
 ### Added
 - Import 228 curated `[EXP4] ` presets across five sources in two lazy-loaded chunks.
 - Record pinned source paths, content hashes, upstream license notices, and unresolved rights.
 - Preserve current curation and PR 173 exclusions. The inventory contains 18,174 presets.
-
-## [1.16.12] (2026-11-04)
 
 ### Fixed
 - Correct custom wave and shape parser calls and preserve wave point equations.
@@ -441,8 +351,6 @@ All notable changes to this project are documented here. Format loosely follows
   removals. The preset inventory now holds 17,946 rows across 582 logical
   chunks.
 
-## [1.16.10] (2026-11-01)
-
 ### Security
 - Bumped `fast-uri` from 3.1.8 to 3.1.9. The release fixes four URI parsing
   and normalization advisories. The fixed defects cover percent-encoded
@@ -451,8 +359,6 @@ All notable changes to this project are documented here. Format loosely follows
   references.
   `fast-uri` reaches this repository only as a development dependency of
   `serve`.
-
-## [1.16.9] (2026-11-01)
 
 ### Fixed
 - Load non-EXP lazy presets without waiting for the experimental texture
@@ -546,15 +452,9 @@ All notable changes to this project are documented here. Format loosely follows
 - Run slow remediation, branch-review, and branch-context coverage in
   isolation with the resource timeout.
 
-## [1.16.2] (2026-10-08)
-
 ### Changed
 - Tightened the hook coverage baseline after fsmonitor regression coverage
   reached another Git config parser statement.
-
-## [1.16.1] (2026-10-08)
-
-### Changed
 - Updated the shared gate manifest after the fsmonitor correction.
 
 ## [1.16.0] (2026-10-07)
@@ -563,8 +463,6 @@ All notable changes to this project are documented here. Format loosely follows
 - Extended experimental curation to numbered prefixes and approved unmatched
   targets. Preserved existing removal-ledger bytes when appending records.
 - Classified built-in `core.fsmonitor` boolean values as non-executable.
-
-## [1.15.1] (2026-10-07)
 
 ### Dependencies
 - Combined Dependabot bumps:
@@ -627,6 +525,12 @@ All notable changes to this project are documented here. Format loosely follows
   confusion, authority injection, and server-side request forgery
   advisories. `fast-uri` reaches this repository only as a development
   dependency of `serve`.
+- Stopped expanding `github.head_ref` into the `branch-name` job's shell
+  script in `.github/workflows/checks.yml`. A branch name with shell syntax
+  could run commands on the runner. `scripts/check_branch_name.py` reads
+  `GITHUB_HEAD_REF` from the environment instead.
+- Added `tests/test_workflow_script_injection.py`, which rejects pull
+  request controlled expressions inside any workflow `run:` script.
 
 ### Changed
 - Bumped `eslint` from 10.9.1 to 10.11.0. `npx eslint .` stays clean.
@@ -636,8 +540,8 @@ All notable changes to this project are documented here. Format loosely follows
 - Added `tests/test_workflow_action_pins.py`. It runs the action pin checker
   over every real workflow and requires the Pages deploy retry to use the
   same `actions/deploy-pages` revision as the first attempt.
-
-## [1.14.0] (2026-09-28)
+- Replaced a `--` dash substitute in a `.github/workflows/checks.yml`
+  comment with a sentence break.
 
 ### Added
 - Added the `abuzucom/foucault` pull request security review:
@@ -652,22 +556,6 @@ All notable changes to this project are documented here. Format loosely follows
 - Added `ci/` to the protected-file review and `CODEOWNERS`. Documented the
   wiring in `docs/pr-security-review.md`.
 
-## [1.13.8] (2026-09-29)
-
-### Changed
-- Replaced a `--` dash substitute in a `.github/workflows/checks.yml`
-  comment with a sentence break.
-
-## [1.13.7] (2026-09-29)
-
-### Security
-- Stopped expanding `github.head_ref` into the `branch-name` job's shell
-  script in `.github/workflows/checks.yml`. A branch name with shell syntax
-  could run commands on the runner. `scripts/check_branch_name.py` reads
-  `GITHUB_HEAD_REF` from the environment instead.
-- Added `tests/test_workflow_script_injection.py`, which rejects pull
-  request controlled expressions inside any workflow `run:` script.
-
 ## [1.13.6] (2026-09-28)
 
 ### Fixed
@@ -676,39 +564,19 @@ All notable changes to this project are documented here. Format loosely follows
   tracer-scope test.
 - Scoped the `tempfile.tempdir` override in `tests/test_trusted_gh.py` to
   that module.
-
-## [1.13.5] (2026-09-28)
-
-### Fixed
 - Restored full gate decision reasons in hook prompts and denials.
-
-## [1.13.4] (2026-09-28)
-
-### Fixed
 - Removed the Jira pull request workflow.
 - Moved protected-file review to an unprivileged pull request trigger.
 - Bound immutable scanner bootstrap to the approved pinned source checkout.
-
-## [1.13.3] (2026-09-28)
-
-### Fixed
 - Bootstrapped immutable compliance from the pinned `abuzucom/agents` scanner
   while the target base lacks the scanner.
-
-## [1.13.2] (2026-09-28)
-
-### Fixed
 - Preserved the fixed protected-value diagnostic for malformed CMD payloads.
-
-## [1.13.1] (2026-09-28)
-
-### Fixed
 - Moved immutable compliance to an unprivileged pull request trigger and kept
   checker setup pinned without reading a pull request dependency manifest.
 - Replaced untrusted gate diagnostics with fixed safe labels while preserving
   branch-correction and unsafe Git configuration diagnostics.
-
-## [1.13.0] (2026-09-28)
+- Prevented keyboard shortcut keys from wrapping onto multiple lines in the
+  fullscreen and demo help dialogs.
 
 ### Changed
 - Re-adopted the `abuzucom/agents` template whole at commit `848d069`:
@@ -748,10 +616,6 @@ All notable changes to this project are documented here. Format loosely follows
 - Fixed the 152 ruff findings and the code-scanning findings in the template
   files as recorded drift. Every gate verdict over the test corpus is
   unchanged.
-
-### Fixed
-- Prevented keyboard shortcut keys from wrapping onto multiple lines in the
-  fullscreen and demo help dialogs.
 
 ## [1.12.1] (2026-09-01)
 
@@ -900,6 +764,57 @@ All notable changes to this project are documented here. Format loosely follows
 - Imported `unittest.mock` in `tests/test_require_consent.py` rather than
   importing `unittest` twice, once plainly and once with `from`, which a
   code-quality bot flagged on this pull request.
+
+- Split the newly mirrored Git option, repository-config, alias, and nested
+  interpreter parsing into focused helpers so all shared gate files pass this
+  repository's strict ruff rules without changing decisions.
+- Removed `find_reason` and `find_consent_reason` from the Bash gate. Both
+  were defined and called by nothing, here or upstream.
+- Closed three false positives in `check_ascii.py` and `lint_style.py`.
+  A Markdown table delimiter row tripped the dash rule, so did a list
+  marker opening its own line, and an inline code span opening on one line
+  and closing on the next leaked its contents. The last one flagged the
+  preset name `Optiks - Nerve` in a 1.6.2 entry, where satisfying the
+  checker would have meant rewriting the name and falsifying the record of
+  which preset was removed.
+- Brought the shared gates under this repository's ruff ruleset. `lint` had
+  been red on every commit of this branch: `npx eslint .` passes, and the
+  `astral-sh/ruff-action` install step runs `ruff check` over the whole
+  repository before the explicit `ruff check tools/` step is reached.
+  Seven magic values are named, `git_verdict` splits into a resolution
+  reading, a per-subcommand table and a flag reading, and the three
+  `_program_verdict` functions split so each returns at most six times.
+- Rewrote the README hook section and dropped a contradicting sentence from
+  AGENTS.md rule 3. Both described the gates two revisions back: two hooks
+  where there are three, `git push --force` as a refusal after it moved to
+  a prompt, the append carve-out as live after it came out, and the Bash
+  redirect as an open gap after the shell gate closed it. Rule 3 carried
+  both the corrected sentence and the stale one, which disagreed.
+- Excluded merge commits from `scripts/check_commit_message.py`, and returned it to the template's advisory
+  behavior so a subject violation reports rather than blocks. `git merge` writes `Merge branch 'x' into y`,
+  which no author chose and which no `type: description` subject can express, so every ordinary branch update
+  failed the check. Added `tests/test_check_commit_message.py` covering the merge case, a real violation, and
+  the advisory exit code.
+- Registered both hooks in the exec form (`command` plus `args`) instead of a shell string. In shell form an
+  unquoted `${CLAUDE_PROJECT_DIR}` splits a project path containing a space, and the gate silently never runs.
+- Made both hooks fail closed on their own inputs. An unparseable payload or a malformed `tool_input` is denied
+  rather than treated as a SessionStart or crashing, and a test file that cannot be read or decoded is gated
+  rather than read as an empty string, which had let a non-UTF-8 test file be overwritten with no prompt.
+- Wired `hooks/block_destructive_bash.py` into `.claude/settings.json`. The repo has
+  carried the script since adopting the template but never registered it, so it had
+  never run. It also gained ask outcomes: a recursive `rm` against any target outside
+  `/`, `~`, and `$HOME`; the `--force-with-lease` family, which its `--force` pattern
+  never matched; `git push --mirror`; `git push --delete`; a forced `+` refspec;
+  `git commit --amend`; `git rebase`; and `git filter-branch`.
+- Rewrote that hook to tokenize and normalize the command before deciding. Matching
+  the raw string matched spelling rather than meaning, so every equivalent spelling
+  walked through: `rm -Rf` and `rm -r`, `git -C dir push --force` and other
+  global-option forms, `--force-with-lease=main:<oid>`, and `git push origin
+  +HEAD:main`. The `git -C dir push --force` form bypassed a deny, not just an ask.
+  Ambiguity now fails closed, and quoted text such as `echo 'rm -rf /'` no longer
+  reads as a command.
+- Documented the new protected paths in `docs/protected-file-review.md` and both
+  hooks in the README Security Model section.
 
 ### Added
 - Measured the coverage baseline where CI measures it. A mode 000 file is
@@ -1059,58 +974,6 @@ All notable changes to this project are documented here. Format loosely follows
   scope qualifier; disclosure is not a substitute for stopping; `--force-with-lease`
   is not an exception to the pushed-history rule.
 
-### Changed
-- Split the newly mirrored Git option, repository-config, alias, and nested
-  interpreter parsing into focused helpers so all shared gate files pass this
-  repository's strict ruff rules without changing decisions.
-- Removed `find_reason` and `find_consent_reason` from the Bash gate. Both
-  were defined and called by nothing, here or upstream.
-- Closed three false positives in `check_ascii.py` and `lint_style.py`.
-  A Markdown table delimiter row tripped the dash rule, so did a list
-  marker opening its own line, and an inline code span opening on one line
-  and closing on the next leaked its contents. The last one flagged the
-  preset name `Optiks - Nerve` in a 1.6.2 entry, where satisfying the
-  checker would have meant rewriting the name and falsifying the record of
-  which preset was removed.
-- Brought the shared gates under this repository's ruff ruleset. `lint` had
-  been red on every commit of this branch: `npx eslint .` passes, and the
-  `astral-sh/ruff-action` install step runs `ruff check` over the whole
-  repository before the explicit `ruff check tools/` step is reached.
-  Seven magic values are named, `git_verdict` splits into a resolution
-  reading, a per-subcommand table and a flag reading, and the three
-  `_program_verdict` functions split so each returns at most six times.
-- Rewrote the README hook section and dropped a contradicting sentence from
-  AGENTS.md rule 3. Both described the gates two revisions back: two hooks
-  where there are three, `git push --force` as a refusal after it moved to
-  a prompt, the append carve-out as live after it came out, and the Bash
-  redirect as an open gap after the shell gate closed it. Rule 3 carried
-  both the corrected sentence and the stale one, which disagreed.
-- Excluded merge commits from `scripts/check_commit_message.py`, and returned it to the template's advisory
-  behavior so a subject violation reports rather than blocks. `git merge` writes `Merge branch 'x' into y`,
-  which no author chose and which no `type: description` subject can express, so every ordinary branch update
-  failed the check. Added `tests/test_check_commit_message.py` covering the merge case, a real violation, and
-  the advisory exit code.
-- Registered both hooks in the exec form (`command` plus `args`) instead of a shell string. In shell form an
-  unquoted `${CLAUDE_PROJECT_DIR}` splits a project path containing a space, and the gate silently never runs.
-- Made both hooks fail closed on their own inputs. An unparseable payload or a malformed `tool_input` is denied
-  rather than treated as a SessionStart or crashing, and a test file that cannot be read or decoded is gated
-  rather than read as an empty string, which had let a non-UTF-8 test file be overwritten with no prompt.
-- Wired `hooks/block_destructive_bash.py` into `.claude/settings.json`. The repo has
-  carried the script since adopting the template but never registered it, so it had
-  never run. It also gained ask outcomes: a recursive `rm` against any target outside
-  `/`, `~`, and `$HOME`; the `--force-with-lease` family, which its `--force` pattern
-  never matched; `git push --mirror`; `git push --delete`; a forced `+` refspec;
-  `git commit --amend`; `git rebase`; and `git filter-branch`.
-- Rewrote that hook to tokenize and normalize the command before deciding. Matching
-  the raw string matched spelling rather than meaning, so every equivalent spelling
-  walked through: `rm -Rf` and `rm -r`, `git -C dir push --force` and other
-  global-option forms, `--force-with-lease=main:<oid>`, and `git push origin
-  +HEAD:main`. The `git -C dir push --force` form bypassed a deny, not just an ask.
-  Ambiguity now fails closed, and quoted text such as `echo 'rm -rf /'` no longer
-  reads as a command.
-- Documented the new protected paths in `docs/protected-file-review.md` and both
-  hooks in the README Security Model section.
-
 ## [1.8.1] (2026-08-03)
 
 ### Fixed
@@ -1124,8 +987,26 @@ All notable changes to this project are documented here. Format loosely follows
   to absorb a driver that is briefly slow to free an exclusive-mode handle.
   See the new "Exclusive-mode devices (Windows)" section in
   `docs/unattended-operation.md`.
-
-## [1.8.0] (2026-08-03)
+- Fixed an errant double `try-catch` block inside `tools/convert-milk-presets.js` and ensured exceptions are properly logged or handled instead of swallowed.
+- Prevented potential zero-division crashes and eliminated slow/backtracking regular expressions during the preset parsing processes.
+- Eliminated unreachable dead code segments across the tooling scripts.
+- Randomized the initial fullscreen preset across the resident vendored
+  collection while leaving the OBS startup behavior unchanged.
+- Normalized equation strings with a trailing newline before load, so presets
+  whose final statement lacks a semicolon compile in butterchurn's
+  space-separated equation wrapper instead of being skipped.
+- Detected warp/comp shader link failures during preset load and skipped the
+  preset instead of rendering every frame with an unlinked program.
+- Added runtime-detected broken presets (bad equations or shader link
+  failures) to the exportable excluded-presets list for later curation.
+- Reduced fullscreen startup blocking by selecting the initial vendored preset
+  from a resident index and deferring experimental image loading until idle or
+  lazy-preset selection.
+- Stopped treating post-load WebGL error state as proof that a preset failed.
+- Started the visualizer before microphone permission and device enumeration
+  finish, so the first frame does not wait on audio input setup.
+- Fixed equation validation for valid statements without trailing semicolons.
+- Hardened workflow checkouts by disabling persisted GitHub credentials.
 
 ### Added
 - Kept the visualizer rendering while its window is covered, minimized, or in a
@@ -1150,13 +1031,6 @@ All notable changes to this project are documented here. Format loosely follows
   source, visibility, wake lock, keepalive, input device, track state, and
   watchdog counters. Toggles with `I` or `?diag=1`.
 - Added `docs/background-rendering.md` and `docs/unattended-operation.md`.
-
-### Changed
-- Stopped hyperspeed switching itself off when the page is hidden. The old
-  behavior is still available through the new `pauseWhenHidden` option.
-
-## [1.7.2] (2026-08-03)
-### Added
 - Added `hooks/_gate_core.py`, which both shell gates and the consent gate import, so a decision has one definition rather than one per gate.
 - Added `hooks/block_destructive_powershell.py` under a `PowerShell` matcher. The Bash matcher covered only Bash, so `Remove-Item -Recurse -Force` on a Windows session met no gate at all.
 - Added `tests/test_gate_parity.py`, which feeds both gates an equivalent corpus and fails when their verdicts differ, and asserts neither gate defines a decision function of its own.
@@ -1196,29 +1070,9 @@ All notable changes to this project are documented here. Format loosely follows
   viewing/copying the session's favorites list, mirroring the excluded-
   presets workflow, for building a setlist during a live performance.
 
-### Fixed
-- Fixed an errant double `try-catch` block inside `tools/convert-milk-presets.js` and ensured exceptions are properly logged or handled instead of swallowed.
-- Prevented potential zero-division crashes and eliminated slow/backtracking regular expressions during the preset parsing processes.
-- Eliminated unreachable dead code segments across the tooling scripts.
-- Randomized the initial fullscreen preset across the resident vendored
-  collection while leaving the OBS startup behavior unchanged.
-- Normalized equation strings with a trailing newline before load, so presets
-  whose final statement lacks a semicolon compile in butterchurn's
-  space-separated equation wrapper instead of being skipped.
-- Detected warp/comp shader link failures during preset load and skipped the
-  preset instead of rendering every frame with an unlinked program.
-- Added runtime-detected broken presets (bad equations or shader link
-  failures) to the exportable excluded-presets list for later curation.
-- Reduced fullscreen startup blocking by selecting the initial vendored preset
-  from a resident index and deferring experimental image loading until idle or
-  lazy-preset selection.
-- Stopped treating post-load WebGL error state as proof that a preset failed.
-- Started the visualizer before microphone permission and device enumeration
-  finish, so the first frame does not wait on audio input setup.
-- Fixed equation validation for valid statements without trailing semicolons.
-- Hardened workflow checkouts by disabling persisted GitHub credentials.
-
 ### Changed
+- Stopped hyperspeed switching itself off when the page is hidden. The old
+  behavior is still available through the new `pauseWhenHidden` option.
 - Removed the end-of-file append carve-out from the consent gate. Every edit to a test file that already exists now asks. A textual append check cannot tell a new test from a statement that neutralizes every test above it.
 - Launched hooks as `python` rather than `python3`, and added a test asserting the configured string resolves. The behavioral tests run hooks through `sys.executable`, so they passed against a configuration that never started on Windows.
 - Gated Bash writes that reach a test file through a redirect, a here-document, `tee`, `sed -i`, `cp`, or `mv`. Rule 3 applied to the same act through one tool and not the other.
@@ -1356,6 +1210,8 @@ All notable changes to this project are documented here. Format loosely follows
   for review checks and Jira workflows.
 - Removed 131 invalid generated presets and kept generated indexes, chunks,
   inventories, and removal ledgers consistent.
+- Audited and simplified the README and local-hosting guide. Corrected current
+  preset counts, commands, controls, tooling, security notes, and provenance.
 
 ### Security
 - Jira secrets are used only by trusted `pull_request_target` and deployment
@@ -1363,14 +1219,8 @@ All notable changes to this project are documented here. Format loosely follows
 - Protected-file workflows never execute code from the pull request branch.
 - Documented the single-maintainer branch protection model without requiring
   global GitHub Code Owner approval.
-
-## [1.6.6] (2026-07-15)
-
-### Changed
-- Audited and simplified the README and local-hosting guide. Corrected current
-  preset counts, commands, controls, tooling, security notes, and provenance.
-
-## [1.6.5] (2026-07-15)
+- Added a lodash version override of `>=4.17.12` to prevent the known
+  prototype-pollution vulnerability in the dependency tree.
 
 ### Fixed
 - Prevented Butterchurn equation compilation failures caused by missing empty
@@ -1380,14 +1230,6 @@ All notable changes to this project are documented here. Format loosely follows
   exclusion, inventory, and removal-ledger records.
 - Added runtime diagnostics for broken preset loads, including the preset name,
   logical chunk ID, physical chunk file, and caught exception.
-
-## [1.6.4] (2026-07-15)
-
-### Security
-- Added a lodash version override of `>=4.17.12` to prevent the known
-  prototype-pollution vulnerability in the dependency tree.
-
-### Fixed
 - Corrected the logical IDs passed by all 377 experimental NestDrop preset
   chunks. Mainline chunk insertion had shifted the generated `index.js`
   mapping without updating the chunks' registration callbacks, causing valid
@@ -1424,10 +1266,6 @@ All notable changes to this project are documented here. Format loosely follows
   Ships 14,770 deduplicated presets now (378 vendored + 14,392
   lazy-loaded from 14,458 index names minus 66 that duplicate a vendored
   name).
-
-## [1.6.2] (2026-07-11)
-
-### Removed
 - 32 more presets curated out of `src/presets-extra/` (removed from
   `index.js` and their backing chunk files, with the matching
   `preset-inventory.csv` rows dropped): 4 individually named presets
@@ -1527,33 +1365,11 @@ All notable changes to this project are documented here. Format loosely follows
   capture, so no TLS is needed.
 - `docs/local-hosting.md` covering all three local modes: `file://`, dev
   server, and the Docker container (including its security hardening).
-
-## [1.3.1] (2026-07-04)
-
-### Changed
-- The GitHub Pages deploy workflow now retries the deployment step once
-  (after a 30s pause) when the Pages backend rejects the first attempt with
-  its transient "Deployment failed, try again later." error.
-- Documentation refreshed to reflect the production deployment at
-  `https://visualizer.1a2n.net/`, the vendored (CDN-free) libraries, and the
-  `src/vendor/` layout.
-
-## [1.3.0] (2026-07-04)
-
-### Added
 - Shuffle mode for the auto-cycle: picks a random preset (never the current
   one) each tick. On by default on the fullscreen page; toggle with
   <kbd>S</kbd>. The OBS page keeps sequential cycling.
 - <kbd>R</kbd> (and the panel's Random button) now never re-picks the
   currently showing preset.
-
-### Changed
-- Fullscreen <kbd>[</kbd> / <kbd>]</kbd> adjust the cycle interval in 1s steps
-  at/below 10s and 5s steps above, instead of a fixed 5s step.
-
-## [1.2.0] (2026-07-04)
-
-### Added
 - Vendored three additional preset packs from `butterchurn-presets@2.4.7`
   (Extra, Extra2, MD1) and the `butterchurnExtraImages` texture pack from
   `butterchurn@2.6.7`.
@@ -1563,9 +1379,15 @@ All notable changes to this project are documented here. Format loosely follows
 - Custom textures are passed to butterchurn via `loadExtraImages` so the
   handful of texture-using presets render fully.
 
-## [1.1.0] (2026-07-04)
-
 ### Changed
+- The GitHub Pages deploy workflow now retries the deployment step once
+  (after a 30s pause) when the Pages backend rejects the first attempt with
+  its transient "Deployment failed, try again later." error.
+- Documentation refreshed to reflect the production deployment at
+  `https://visualizer.1a2n.net/`, the vendored (CDN-free) libraries, and the
+  `src/vendor/` layout.
+- Fullscreen <kbd>[</kbd> / <kbd>]</kbd> adjust the cycle interval in 1s steps
+  at/below 10s and 5s steps above, instead of a fixed 5s step.
 - Vendored `butterchurn` and `butterchurn-presets` into `src/vendor/` instead of
   loading them from unpkg, removing the runtime CDN dependency.
 - Added a Content-Security-Policy meta tag to all pages.
