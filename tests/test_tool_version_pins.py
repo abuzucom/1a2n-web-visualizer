@@ -57,7 +57,8 @@ class LodashOverridePinTest(unittest.TestCase):
 class CaddyImagePinTest(unittest.TestCase):
     """The Dockerfile pulls the Caddy base image by digest."""
 
-    def test_from_line_names_a_sha256_digest(self):
+    def test_from_line_names_sha256_digest(self):
+        """From line names a sha256 digest."""
         text = DOCKERFILE.read_text(encoding="utf-8")
         self.assertRegex(text, CADDY_FROM_RE)
 
@@ -65,7 +66,8 @@ class CaddyImagePinTest(unittest.TestCase):
 class RuffRequirementPinTest(unittest.TestCase):
     """requirements-ruff.txt pins one exact ruff version with hashes."""
 
-    def test_file_pins_only_ruff_with_hashes(self):
+    def test_file_pins_only_hashed_ruff(self):
+        """File pins only ruff with hashes."""
         text = RUFF_REQUIREMENTS.read_text(encoding="utf-8")
         requirements = read_requirement_lines(text)
         self.assertEqual(len(requirements), 1, requirements)
@@ -82,11 +84,13 @@ class LintJobRuffInstallTest(unittest.TestCase):
         self.assertEqual(len(installs), 1, runs)
         self.assertIn("--require-hashes", installs[0])
 
-    def test_does_not_use_the_unversioned_ruff_action(self):
+    def test_avoids_unversioned_ruff_action(self):
+        """Does not use the unversioned ruff action."""
         uses = [step.get("uses", "") for step in lint_steps()]
         self.assertFalse(any(use.startswith(RUFF_ACTION) for use in uses), uses)
 
-    def test_baseline_survey_never_fails_the_job(self):
+    def test_baseline_survey_never_fails_job(self):
+        """Baseline survey never fails the job."""
         surveys = [step for step in lint_steps() if "ruff-baseline" in step.get("run", "")]
         self.assertEqual(len(surveys), 1, surveys)
         self.assertIs(surveys[0].get("continue-on-error"), True)
@@ -104,7 +108,8 @@ class RuffBaselineConfigTest(unittest.TestCase):
     def test_baseline_directory_holds_no_python(self):
         self.assertEqual(sorted(BASELINE_DIR.rglob("*.py")), [])
 
-    def test_no_ruff_config_sits_above_tools_besides_pyproject(self):
+    def test_only_pyproject_configures_ruff_above(self):
+        """No ruff config sits above tools besides pyproject."""
         found = sorted(
             path.name for path in REPO_ROOT.iterdir() if path.name in RUFF_CONFIG_NAMES and path.is_file()
         )

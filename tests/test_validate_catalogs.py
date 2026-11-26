@@ -68,7 +68,8 @@ class ValidateCatalogsTest(unittest.TestCase):
 
         self.assertEqual(VALIDATOR.main([]), 1)
 
-    def test_an_identifier_that_names_no_preset_fails(self):
+    def test_unknown_identifier_fails(self):
+        """An identifier that names no preset fails."""
         self.write_catalogs(
             {"version": 1, "presets": {"presets-extra:Missing": "low"}},
             {"version": 1, "presets": []},
@@ -76,7 +77,8 @@ class ValidateCatalogsTest(unittest.TestCase):
 
         self.assertEqual(VALIDATOR.main([]), 1)
 
-    def test_a_preset_with_two_categories_fails(self):
+    def test_two_category_preset_fails(self):
+        """A preset with two categories fails."""
         self.write_catalogs(
             {
                 "version": 1,
@@ -95,7 +97,8 @@ class ValidateCatalogsTest(unittest.TestCase):
 
         self.assertEqual(VALIDATOR.main([]), 1)
 
-    def test_a_bundle_that_drifted_from_its_catalog_fails(self):
+    def test_drifted_bundle_fails(self):
+        """A bundle that drifted from its catalog fails."""
         self.write_catalogs(
             {"version": 1, "presets": {"presets-extra:Alpha": "low"}},
             {"version": 1, "presets": []},

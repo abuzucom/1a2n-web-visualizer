@@ -14,7 +14,8 @@ SPEC.loader.exec_module(TOOL)
 
 
 class ExperimentalLedgerNewlineTests(unittest.TestCase):
-    def test_preserves_existing_ledger_bytes_when_appending(self):
+    def test_append_preserves_ledger_bytes(self):
+        """Preserves existing ledger bytes when appending."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output_dir = root / "src" / "presets-extra"

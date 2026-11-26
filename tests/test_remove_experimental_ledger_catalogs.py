@@ -70,7 +70,8 @@ class RemoveExperimentalLedgerCatalogTests(unittest.TestCase):
         """Return one parsed catalog file."""
         return json.loads(self.catalogs[key].read_text(encoding="utf-8"))
 
-    def test_ledger_reason_with_a_comma_stays_one_field(self):
+    def test_comma_reason_stays_one_field(self):
+        """Ledger reason with a comma stays one field."""
         reason = "approved, duplicate of mainline"
 
         self.assertEqual(self.run_tool("--reason", reason), 0)
@@ -81,7 +82,8 @@ class RemoveExperimentalLedgerCatalogTests(unittest.TestCase):
             self.assertEqual(len(row), LEDGER_FIELDS, row)
             self.assertEqual(row[-1], reason)
 
-    def test_removal_clears_catalog_entries_and_bundles(self):
+    def test_removal_clears_catalogs_and_bundles(self):
+        """Removal clears catalog entries and bundles."""
         self.assertEqual(self.run_tool("--reason", "curation approved"), 0)
 
         self.assertEqual(self.read_json("ENERGY_CATALOG_PATH")["presets"], {KEPT_ID: "medium"})
@@ -93,7 +95,8 @@ class RemoveExperimentalLedgerCatalogTests(unittest.TestCase):
         self.assertIn("window.BCPerformanceCatalog", performance_bundle)
         self.assertNotIn("[EXP", performance_bundle)
 
-    def test_dry_run_leaves_the_catalogs_unchanged(self):
+    def test_dry_run_keeps_catalogs(self):
+        """Dry run leaves the catalogs unchanged."""
         self.assertEqual(self.run_tool("--dry-run"), 0)
 
         self.assertEqual(self.read_json("ENERGY_CATALOG_PATH"), ENERGY_DATA)

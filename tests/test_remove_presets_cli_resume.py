@@ -68,23 +68,26 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertIn("Dry run", result.stdout)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
-    def test_name_without_value_exits_with_error(self):
+    def test_name_without_value_errors(self):
+        """Name without value exits with error."""
         result = self.run_tool("--name")
 
         self.assertEqual(result.returncode, EXIT_FAILURE)
         self.assertIn("--name requires a value", result.stderr)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
-    def test_names_file_without_value_exits_with_error(self):
+    def test_names_file_without_value_errors(self):
+        """Names file without value exits with error."""
         result = self.run_tool("--names-file")
 
         self.assertEqual(result.returncode, EXIT_FAILURE)
         self.assertIn("--names-file requires a value", result.stderr)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
-    def test_rerun_completes_after_chunk_was_written(self):
-        # A failed run recorded the ledger row and rewrote the chunk file,
-        # then stopped before index.js and the inventory.
+    def test_rerun_completes_after_chunk_write(self):
+        """Rerun completes after chunk was written."""
+        # A failed run recorded the ledger row and rewrote the chunk file.
+        # The run stopped before index.js and the inventory.
         self.write("src/presets-extra/chunk-000.js", chunk_text(0, {"Beta": {"b": 2}}))
         self.write("removed-presets.csv", LEDGER_HEADER + "Alpha,presets-extra,0,,2026-11-13,\n")
 
@@ -95,7 +98,8 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertNotIn("Alpha,", self.read("preset-inventory.csv"))
         self.assertEqual(self.read("removed-presets.csv").count("Alpha,"), 1)
 
-    def test_missing_chunk_key_names_the_physical_file(self):
+    def test_missing_chunk_key_names_file(self):
+        """Missing chunk key names the physical file."""
         self.write("src/presets-extra/chunk-9000.js", chunk_text(1, {}))
         self.write("names.txt", "Gamma\n")
 
@@ -105,7 +109,8 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertIn("chunk-9000.js", result.stderr)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
-    def test_names_file_outside_the_repository_warns_and_continues(self):
+    def test_outside_names_file_warns_continues(self):
+        """Names file outside the repository warns and continues."""
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)
         names_path = Path(outside.name) / "names.txt"
@@ -118,7 +123,8 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertIn("Dry run", result.stdout)
         self.assertEqual(self.read_index(), INDEX_DATA)
 
-    def test_symlinked_names_file_outside_the_repository_warns(self):
+    def test_symlinked_outside_names_file_warns(self):
+        """Symlinked names file outside the repository warns."""
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)
         target = Path(outside.name) / "names.txt"
@@ -131,13 +137,15 @@ class RemovePresetsCliResumeTest(unittest.TestCase):
         self.assertIn("outside the repository", result.stderr)
         self.assertIn("Dry run", result.stdout)
 
-    def test_names_file_inside_the_repository_does_not_warn(self):
+    def test_inside_names_file_stays_silent(self):
+        """Names file inside the repository does not warn."""
         result = self.run_tool("--names-file", "names.txt", "--dry-run")
 
         self.assertEqual(result.returncode, EXIT_SUCCESS, result.stderr)
         self.assertNotIn("outside the repository", result.stderr)
 
-    def test_unindexed_unrecorded_name_aborts_before_the_ledger(self):
+    def test_unknown_name_aborts_before_ledger(self):
+        """Unindexed unrecorded name aborts before the ledger."""
         # A presets-extra row with no chunk that neither the index nor the
         # ledger records must stop the run. No ledger row with an empty
         # chunk may reach removed-presets.csv.

@@ -82,7 +82,7 @@ def missing_fields(preset):
 
 
 class ExperimentalEquationFieldTests(unittest.TestCase):
-    def test_enabled_shapes_and_waves_define_equation_fields(self):
+    def test_enabled_shapes_waves_define_equations(self):
         """Every reachable equation field is a string, including an empty one."""
         data, files = read_index()
         offenders = []
@@ -101,7 +101,7 @@ class ExperimentalEquationFieldTests(unittest.TestCase):
             f"are skipped at load time (showing at most 10)",
         )
 
-    def test_batch_prefixes_stay_within_the_documented_scheme(self):
+    def test_batch_prefixes_follow_documented_scheme(self):
         """Experimental display names use the [EXP], [EXP2], [EXP3], ... scheme."""
         data, files = read_index()
         pattern = re.compile(r"^\[EXP\d*\] ")

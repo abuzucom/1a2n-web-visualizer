@@ -17,7 +17,7 @@ class ProtectedFileTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(is_protected(path))
 
-    def test_protects_tests_and_the_enforcement_that_guards_them(self) -> None:
+    def test_protects_tests_and_enforcement(self) -> None:
         """A gate anyone can quietly edit or delete is not a gate."""
         for path in (
             "tests/test_bcviz_api.js", "tests/test_protected_files.py",
@@ -27,15 +27,18 @@ class ProtectedFileTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(is_protected(path))
 
-    def test_leaves_content_and_style_files_unprotected(self) -> None:
+    def test_content_and_style_stay_unprotected(self) -> None:
+        """Leaves content and style files unprotected."""
         self.assertFalse(is_protected("README.md"))
         self.assertFalse(is_protected("src/css/fullscreen.css"))
 
-    def test_owner_authored_change_does_not_require_self_approval(self) -> None:
+    def test_owner_change_skips_self_approval(self) -> None:
+        """Owner authored change does not require self approval."""
         event = {"pull_request": {"user": {"login": "itsjustatank"}}}
         self.assertFalse(requires_owner_approval(event))
 
-    def test_agent_authored_change_requires_owner_approval(self) -> None:
+    def test_agent_change_requires_owner_approval(self) -> None:
+        """Agent authored change requires owner approval."""
         event = {"pull_request": {"user": {"login": "automation-bot"}}}
         self.assertTrue(requires_owner_approval(event))
 

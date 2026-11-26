@@ -101,7 +101,8 @@ class CreamFetchReportCountTests(unittest.TestCase):
                 counts[match.group("label")] = int(match.group("count"))
         return counts
 
-    def test_bucket_counts_add_up_to_the_converted_count(self):
+    def test_bucket_counts_sum_to_converted(self):
+        """Bucket counts add up to the converted count."""
         counts = self.run_dry_run()
 
         converted = counts.pop("converted")
@@ -112,7 +113,8 @@ class CreamFetchReportCountTests(unittest.TestCase):
 
         self.assertEqual(counts["already in preset-inventory.csv"], 4, counts)
 
-    def test_name_in_both_ledgers_counts_once_as_present(self):
+    def test_dual_ledger_name_counts_once(self):
+        """Name in both ledgers counts once as present."""
         counts = self.run_dry_run()
 
         self.assertEqual(counts["already in removed-presets.csv ledger"], 1, counts)
