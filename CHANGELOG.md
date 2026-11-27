@@ -4,7 +4,7 @@ This file records all notable changes to this project. The format loosely
 follows [Keep a Changelog](https://keepachangelog.com/). This project aims to
 use [Semantic Versioning](https://semver.org/).
 
-## [1.25.0] (2026-11-27)
+## [1.25.1] (2026-11-27)
 
 ### Added
 - Adopt the `abuzucom/agents` template at `e05985f` (v2.50.0). The upgrade
@@ -16,6 +16,10 @@ use [Semantic Versioning](https://semver.org/).
   scripts and trust `abuzucom` in `hooks/trusted-owners.txt`.
 
 ### Changed
+- Correct the branch protection notes in `docs/repo-guide.md`. A classic
+  branch protection rule also covers `develop` and blocks force pushes. The
+  `develop` reset in the promotion process needs force pushes allowed for
+  the reset only.
 - Reword `README.md`, `SECURITY.md`, `docs/repo-guide.md`, and
   `CHANGELOG.md` to satisfy the template prose checkers. The agent prose gate
   scans each file whole on every pull request with agent trailers. Facts
