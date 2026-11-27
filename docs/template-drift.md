@@ -122,6 +122,26 @@ sign-off. The other methods in each file still run.
   method expects `scripts/release.py` entries in
   `hooks/workflow-scripts.local.txt`.
 
+### Code scanning alerts in template files
+
+Expected to differ. CodeQL reports nine alerts in template files copied
+unchanged. Maintainers dismissed each alert in this repository's code
+scanning:
+
+- Six `py/clear-text-logging-sensitive-data` alerts in
+  `hooks/enforce_branch_name.py`, `hooks/_gate_core.py`, and
+  `scripts/check_compliance_tree.py` are false positives. The hook protocol
+  returns each decision as JSON on stdout. Each reason passes through the
+  gate sanitizer first.
+- Two `py/clear-text-storage-sensitive-data` alerts in
+  `tests/test_trusted_test_runners.py` and
+  `tests/test_trusted_gh_api_read_gate.py` are false positives. The tests
+  write fixture files without secrets to temporary directories.
+- The `actions/untrusted-checkout/medium` alert on
+  `immutable-conflict-check.yml` stays as template design. The job runs the
+  checker from the base branch. It reads the pull request head as data only
+  and keeps no credentials.
+
 ### Checkers and tests this repository holds alone
 
 `scripts/check_protected_files.py` has no template counterpart.

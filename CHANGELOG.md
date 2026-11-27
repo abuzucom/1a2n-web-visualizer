@@ -40,6 +40,8 @@ use [Semantic Versioning](https://semver.org/).
 - The Windows job in `checks.yml` runs the Python suite before `npm ci`. A
   template test copies the whole working tree, and `node_modules` pushed
   that copy past the 30-second shard timeout.
+- Record the dismissed CodeQL alerts in template files in
+  `docs/template-drift.md`.
 - Rename 91 local tests to at most five words after `test_`. Each renamed
   test keeps its description in a docstring.
 
