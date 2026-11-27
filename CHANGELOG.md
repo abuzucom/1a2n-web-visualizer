@@ -37,6 +37,9 @@ use [Semantic Versioning](https://semver.org/).
   accepts both reviewed releases.
 - `checks.yml` installs checker dependencies as hashed wheels on Python
   3.14.
+- The Windows job in `checks.yml` runs the Python suite before `npm ci`. A
+  template test copies the whole working tree, and `node_modules` pushed
+  that copy past the 30-second shard timeout.
 - Rename 91 local tests to at most five words after `test_`. Each renamed
   test keeps its description in a docstring.
 
