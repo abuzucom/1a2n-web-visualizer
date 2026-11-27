@@ -1,20 +1,20 @@
 # Repository guide
 
 Project orientation for agents and contributors. `docs/project-orientation.md`
-sends every agent here. The assembled policy has a 64 KiB limit, so this
-guide stays outside the injected policy. Read it before any change.
+sends every agent here. The assembled policy has a 64 KiB limit. This
+guide therefore stays outside the injected policy. Read it before any change.
 
 ## Commands
 
-- `npm ci --ignore-scripts` then `npm start`: dev server via the pinned
-  `serve` package without building the native converter. `--ignore-scripts`
-  also skips the `patch-package` postinstall that applies
-  `patches/milkdrop-shader-converter+0.0.8.patch`; that patch matters only
-  when building the native converter for the `.milk` conversion pipeline
-  (see the header of `tools/convert-milk-presets.js`).
+- `npm ci --ignore-scripts` followed by `npm start` starts the dev server
+  through the pinned `serve` package without building the native converter.
+  `--ignore-scripts` also skips the `patch-package` postinstall that applies
+  `patches/milkdrop-shader-converter+0.0.8.patch`. That patch matters only
+  when building the native converter for the `.milk` conversion pipeline.
+  The header of `tools/convert-milk-presets.js` describes that build.
 - `npm run dev`: alternative dev server via `python3 -m http.server --directory src 8000`.
 - `npm run lint`: ESLint (`src/js/`, `tools/*.js`) plus ruff (`tools/*.py`). Run
-  before presenting work as finished; fix everything it flags. Install the CI
+  before presenting work as finished. Fix every finding. Install the CI
   ruff version first with
   `python3 -m pip install --require-hashes --requirement requirements-ruff.txt`.
 - Tests: `npm test` runs both Node (`npm run test:js`) and Python (`npm run test:py`) unit test suites.
@@ -22,8 +22,8 @@ guide stays outside the injected policy. Read it before any change.
 - Equation allowlist: `npm run validate:equations` (`tools/check_preset_equations.py`).
   Run it after every preset fetch or import.
 - `python3 scripts/sync.py`: assemble AGENTS.md, `docs/agent-policy/*.md`, and
-  `docs/project-orientation.md` into the tool-specific copies; `--check` (run
-  in CI) verifies without writing, and `--check-shared` verifies the gate files
+  `docs/project-orientation.md` into the tool-specific copies. `--check` (run
+  in CI) verifies without writing. `--check-shared` verifies the gate files
   against `shared-files.json`.
 - `docker compose up -d --build`: self-hosted deployment (see
   `docs/local-hosting.md`).
@@ -34,7 +34,7 @@ guide stays outside the injected policy. Read it before any change.
 - EXP validation: `node tools/validate-experimental-presets.js`.
 - Texture parts: `python3 tools/split-extra-images.py [--dry-run]` re-splits
   and losslessly optimizes the experimental texture part files.
-- Node and Python tests live in `tests/`; run both suites (see the test
+- Node and Python tests live in `tests/`. Run both suites (see the test
   commands above) during the "Test-first" workflow. Browser behavior still
   requires loading the pages manually.
 
@@ -42,11 +42,11 @@ guide stays outside the injected policy. Read it before any change.
 
 - `src/vendor/butterchurnExtraImagesExp-part-N.js`: generated experimental
   texture parts. Regenerate only via `tools/split-extra-images.py` or the
-  NestDrop importer; never hand-edit. The part callback format
+  NestDrop importer. Never hand-edit a part. The part callback format
   `window.__bcExtraImagesExpPart(N, TOTAL, {...})` must stay in sync between
   those tools and `visualizer-core.js`.
 - `src/vendor/*.min.js`: vendored npm builds (butterchurn plus preset packs).
-  Hand-editing breaks provenance; change preset content only via
+  Hand-editing breaks provenance. Change preset content only through
   `tools/remove_presets.js`.
 - `src/presets-extra/` (`index.js` plus `chunk-NNN.js`): generated, committed
   output. Edit only via `tools/remove_presets.js`, or regenerate wholesale
@@ -56,24 +56,25 @@ guide stays outside the injected policy. Read it before any change.
   use the reserved `chunk-9000.js` and higher namespace through the
   `index.js` `files` mapping. **Never use 9000+ as a logical chunk ID.** Each
   generated file's `window.__bcPresetChunk(logicalId, ...)` callback must match
-  its logical position in `index.js`; changing the mainline index requires
+  its logical position in `index.js`. A mainline index change requires
   regenerating or reindexing all experimental output.
-- `preset-inventory.csv`: generated inventory kept in sync by
-  `tools/remove_presets.js`; do not hand-edit rows.
-- `removed-presets.csv`: durable ledger of every preset ever curated out,
-  appended to by `tools/remove_presets.js` at removal time; do not hand-edit
-  rows. Fetch scripts consult it to avoid resurrecting removed presets.
+- `preset-inventory.csv` is a generated inventory. `tools/remove_presets.js`
+  keeps it in sync. Do not hand-edit rows.
+- `removed-presets.csv` is the durable ledger of every preset ever curated
+  out. `tools/remove_presets.js` appends to it at removal time. Do not
+  hand-edit rows. Fetch scripts consult it to avoid resurrecting removed
+  presets.
 - `src/catalogs/*.js`: generated runtime bundles for `energy-catalog.json` and
   `performance-catalog.json`. Edit the JSON catalogs through
   `tools/curate_catalogs.py`; never hand-edit a bundle.
 - Presets already curated out are an intentional editorial choice (see
-  README "Curation" section); never restore one as a "fix."
+  README "Curation" section). Never restore one as a "fix."
 - Vendored provenance: `CHANGELOG.md` records `butterchurnPresetsExtra`,
   `butterchurnPresetsExtra2`, and `butterchurnPresetsMD1` from
   `butterchurn-presets@2.4.7`. It records `butterchurnExtraImages.min.js`
   from `butterchurn@2.6.7`. No record states the upstream version or SHA-256
-  of `butterchurn.min.js` or `butterchurnPresets.min.js`. Record them before
-  the next vendored update. No check enforces this record.
+  of `butterchurn.min.js` or `butterchurnPresets.min.js`. Record both values
+  before the next vendored update. No check enforces this record.
 
 ## Architecture
 
@@ -83,9 +84,9 @@ landing page linking to the visualizer entry points, `src/obs.html`,
 `src/performance.html`. Every entry point shares one controller module,
 `src/js/visualizer-core.js` (the `BCViz` object). `obs-ui.js`,
 `fullscreen-ui.js`, `mobile-ui.js`, and `performance-ui.js` wire up each
-page's UI on top of it; `mobile-state.js` holds the mobile page's
-history/state helpers, `energy-curation.js` holds the session energy
-assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
+page's UI on top of it. `mobile-state.js` holds the mobile page's
+history/state helpers. `energy-curation.js` holds the session energy
+assignments. `hyperspeed.js` implements the rapid preset-shuffle mode.
 
 - `src/vendor/`: vendored butterchurn plus preset packs, self-hosted (no
   CDN), and the generated `butterchurnExtraImagesExp-part-N.js` experimental
@@ -94,7 +95,7 @@ assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
 - `src/presets-extra/`: tens of thousands of lazy-loaded presets from the
   mainline and experimental collections, packed into `chunk-NNN.js` files
   injected as `<script>` tags on demand. Chunk and preset counts change
-  with every curation PR; `src/presets-extra/index.js` is the source of
+  with every curation PR. `src/presets-extra/index.js` is the source of
   truth for what exists.
 - `src/catalogs/`: generated script bundles for the energy catalog and the
   performance catalog. A catalog entry names its preset as `pack:name`. The
@@ -119,14 +120,13 @@ assignments, and `hyperspeed.js` implements the rapid preset-shuffle mode.
   and validation pipeline consumes each file.
 - `scripts/`: repo automation run by CI, not the app. The `abuzucom/agents`
   template supplies `scripts/` and `hooks/` whole (see
-  `docs/template-drift.md`); `sync.py` assembles the policy copies,
-  `check_action_pins.py` enforces
-  commit-pinned GitHub Actions, `check_protected_files.py` backs the
-  protected-file review gate.
-- Deployed to Vercel through its Git integration: `main` publishes the
-  production environment and `develop` publishes the staging environment.
-  `vercel.json` and `.vercelignore` define the deployment payload, which is
-  `src/`. Alternatively self-hosted via the included Docker/Caddy config.
+  `docs/template-drift.md`). `sync.py` assembles the policy copies.
+  `check_action_pins.py` enforces commit-pinned GitHub Actions.
+  `check_protected_files.py` backs the protected-file review gate.
+- Vercel deploys the site through its Git integration. `main` publishes the
+  production environment. `develop` publishes the staging environment.
+  `vercel.json` and `.vercelignore` define the deployment payload as
+  `src/`. The included Docker/Caddy config supports self-hosting.
   Other workflows: `checks.yml` (AGENTS.md sync, action pins, ESLint, ruff,
   HTML/CSS validation via the Nu Html Checker), `protected-files.yml`
   (code-owner approval gate, see `docs/protected-file-review.md`),
@@ -159,7 +159,7 @@ Promote `develop` to `main` through a pull request:
 5. Reset `develop` to the new `main` commit:
    `git push --force-with-lease=develop:<old-develop-sha> origin
    origin/main:develop`. The reset discards the old `develop` commits. Rule 2
-   in `AGENTS.md` requires active-human authorization for each reset.
+   in `AGENTS.md` requires active human authorization for each reset.
 6. Rebase every open branch onto the new `develop`.
 
 An administrator can fast-forward `main` instead:
@@ -170,71 +170,73 @@ an ancestor of `develop`. Every reset in step 5 restores that condition.
 
 ## Gotchas
 
-- `file://` usage blocks `fetch()` of local JSON; that is why preset chunks
-  are injected as `<script>` tags rather than fetched directly.
-- A strict CSP is enforced; anything added must work under it.
-- Experimental textures are not resident at startup. They load lazily
+- `file://` usage blocks `fetch()` of local JSON. The pages therefore inject
+  preset chunks as `<script>` tags instead of fetching the chunk files.
+- The pages enforce a strict CSP. Every addition must work under it.
+- Experimental textures stay out of memory at startup. Each part loads lazily
   (idle prefetch, and `ensureExperimentalImages()` gates every `[EXP]`
-  preset load); a missing part resolves without blocking preset loads.
-  All page `<script>` tags use `defer`; execution order is load-bearing.
-- The `tests/` suites (see Commands) cover the tooling and page logic, but
-  rendering behavior still requires loading the page(s) in a browser (see
-  README "Quick Start"). `npm run lint` exists and must pass.
+  preset load). A missing part resolves without blocking preset loads.
+  All page `<script>` tags use `defer`. Execution order matters.
+- The `tests/` suites (see Commands) cover the tooling and page logic.
+  Rendering behavior still requires loading the page(s) in a browser (see
+  README "Quick Start"). `npm run lint` must pass.
 - AGENTS.md is the single source for agent instructions. CLAUDE.md,
   GEMINI.md, CONVENTIONS.md, `.cursorrules`, `.clinerules`, `.windsurfrules`,
   `.copilot-instructions`, and `.github/copilot-instructions.md` are copies of
   AGENTS.md plus `docs/agent-policy/*.md` and `docs/project-orientation.md`,
   produced by `python3 scripts/sync.py`. Edit those sources only, then run the
-  sync script; CI (`scripts/sync.py --check`) fails if any copy drifts. The
-  assembled copy must stay under 64 KiB, which is why this guide lives
+  sync script. CI (`scripts/sync.py --check`) fails if any copy drifts. The
+  assembled copy must stay under 64 KiB. This guide therefore lives
   outside it.
 - `preset-inventory.csv` and `removed-presets.csv` must always change in
-  lockstep with `index.js`, the affected chunk files, and any vendored pack;
-  never one without the others (this is exactly what
-  `tools/remove_presets.js` does for you). **Both CSVs are bookkeeping/audit
-  records, not the source of truth the app reads from.** The running app
-  only ever loads `src/vendor/*.min.js` and `src/presets-extra/index.js` plus
-  `chunk-NNN.js`. Hand-editing either CSV changes nothing about what users
-  see; it just leaves the ledger lying about what is actually in the app.
-  `tools/remove_presets.js` is the only sanctioned way to change presets,
-  precisely because it updates the real data files and both CSVs together,
-  atomically.
+  lockstep with `index.js`, the affected chunk files, and any vendored pack.
+  Never change one without the others. `tools/remove_presets.js` changes the
+  whole set together. **Both CSVs are bookkeeping and audit records. The app
+  reads its presets from other files.** The running app only ever loads
+  `src/vendor/*.min.js` and `src/presets-extra/index.js` plus
+  `chunk-NNN.js`. Hand-editing either CSV changes nothing that users see.
+  The edit only leaves the ledger out of step with the app.
+  `tools/remove_presets.js` is the only sanctioned way to change presets.
+  The tool updates the real data files and both CSVs together in one
+  atomic batch.
 - `energy-catalog.json` and `performance-catalog.json` must change in
   lockstep with the presets the catalogs name. `tools/remove_presets.js`
   clears both catalogs and rewrites the runtime bundle for each catalog in
   the same atomic batch. A removed preset leaves no catalog entry behind.
-  A catalog entry names its preset as `pack:name`, because the same preset
-  name exists in more than one pack.
+  A catalog entry names its preset as `pack:name`. The same preset name
+  exists in more than one pack.
 - Experimental names use `[EXP] `. Analysis strips it; runtime and curation
   names retain it. EXP-only presets are never duplicate-removal targets.
 - Each distinct import batch gets its own sequential prefix passed via
-  `tools/import-nestdrop-presets.py --exp-prefix`: the original NestDrop
-  import is `[EXP] `, the next batch is `[EXP2] `, and so on (`[EXP3] `,
-  `[EXP4] `, ...). Never reuse an earlier batch's prefix for a new source.
-  This keeps batches visually distinguishable during curation and keeps the
-  importer's own name-collision check (which only compares within a single
-  prefix) scoped to genuine re-imports of the same batch rather than
-  masking a new batch's presets as false-positive duplicates of an earlier
-  one.
+  `tools/import-nestdrop-presets.py --exp-prefix`. The original NestDrop
+  import is `[EXP] `. The next batch is `[EXP2] `, followed by `[EXP3] `,
+  `[EXP4] `, and so on. Never reuse an earlier batch's prefix for a new
+  source. Distinct prefixes keep batches visually distinguishable during
+  curation. The importer's name-collision check compares names within a
+  single prefix only. Distinct prefixes keep that check scoped to re-imports
+  of the same batch. A shared prefix would mark a new batch's presets as
+  false-positive duplicates of an earlier batch.
 - Generated equation fields must be present as strings, including empty
   strings. Validate generated equations with
   `tools/validate-experimental-presets.js`; never execute preset text during
   validation.
-- Every equation field butterchurn reaches must exist as a string. It
-  compiles them as `new Function("a", "".concat(field, " return a;"))`, so a
-  field absent from the JSON stringifies to the literal `undefined` and
-  raises `SyntaxError: Unexpected token 'return'` at load time.
-  visualizer-core.js does not catch this: `normalizeEquation` only rewrites
-  values that are already strings, and `validateEquation` returns early on a
-  falsy value. Top-level `init_eqs_str`/`frame_eqs_str` are compiled
-  unconditionally; `pixel_eqs_str` and a wave's `point_eqs_str` are guarded
-  by a non-empty check; a shape's or wave's equations are compiled only when
-  that item's merged `baseVals.enabled` is non-zero (butterchurn's shape and
-  wave defaults both carry `enabled: 0`). `tests/test_experimental_equation_fields.py`
-  enforces this over the generated experimental chunks.
+- Every equation field butterchurn reaches must exist as a string.
+  Butterchurn compiles each field as
+  `new Function("a", "".concat(field, " return a;"))`. A field absent from
+  the JSON stringifies to the literal `undefined`. The compile then raises
+  `SyntaxError: Unexpected token 'return'` at load time.
+  visualizer-core.js does not catch that error. `normalizeEquation` only
+  rewrites values that are already strings. `validateEquation` returns early
+  on a falsy value. Butterchurn always compiles the top-level
+  `init_eqs_str`/`frame_eqs_str`. A non-empty check guards `pixel_eqs_str`
+  and a wave's `point_eqs_str`. Butterchurn compiles a shape's or wave's
+  equations only when that item's merged `baseVals.enabled` is non-zero.
+  Butterchurn's shape and wave defaults both carry `enabled: 0`.
+  `tests/test_experimental_equation_fields.py` enforces the rule over the
+  generated experimental chunks.
 - Preset equations are executable code. `tools/check_preset_equations.py`
-  tokenizes every compiled equation field and rejects anything outside the
-  converter vocabulary. The vocabulary covers `a['name']` access, the
+  splits every compiled equation field into tokens. It rejects anything
+  outside the converter vocabulary. The vocabulary covers `a['name']` access, the
   butterchurn helpers, `Math` members, and the loop forms
   `milkdrop-eel-parser` emits. The checker also requires each chunk and
   `index.js` to hold exactly one JSON payload inside its wrapper call.
@@ -242,49 +244,51 @@ an ancestor of `develop`. Every reset in step 5 restores that condition.
   Never widen the allowlist to admit an imported preset. Exclude the preset
   instead.
 - `validate-experimental-presets.js` and `validate-preset-chunks.js` parse
-  every converted equation with acorn, so they catch a JS `SyntaxError`.
+  every converted equation with acorn. Both catch a JS `SyntaxError`.
   Neither one catches a WebGL shader link failure or an error that only
   appears when an equation runs. Both surface only when butterchurn
   compiles and runs the preset. A batch can pass both validators, lint,
-  and `npm test` while a large fraction of it is broken at runtime. Before treating an import batch as done, load
-  `src/demo.html` in a real browser (`data-demo="1"` gives synthetic
-  audio, so no microphone is needed) or force `BCViz.create()`'s
-  `opts.demo = true` when driving `obs.html`/`fullscreen.html` instead,
-  then walk the batch's presets through the returned instance's
-  `keys()` / `goto(index, announce)` / `currentName()` /
-  `isChunkLoading()`. Pass `cycleOn: false`, or the auto-cycle timer
-  navigates mid-walk and misattributes failures. Watch the console for
-  `Preset load failed; skipping: {...}` warnings: that is
+  and `npm test` with a large fraction of it broken at runtime.
+  Before treating an import batch as done, load `src/demo.html` in a real
+  browser. `data-demo="1"` supplies synthetic audio. The walk needs no
+  microphone. When driving `obs.html`/`fullscreen.html`, force
+  `BCViz.create()`'s `opts.demo = true` instead. Then walk the batch's
+  presets through the returned instance's `keys()` /
+  `goto(index, announce)` / `currentName()` / `isChunkLoading()`. Pass
+  `cycleOn: false`. Otherwise the auto-cycle timer navigates mid-walk and
+  misattributes failures. Watch the console for
+  `Preset load failed; skipping: {...}` warnings. Each warning comes from
   visualizer-core.js's graceful-degradation path (see "Graceful
-  Degradation" in the README), and it auto-advances past a broken preset
-  without throwing, so a broken import looks clean unless the console is
-  actually checked. A failure also makes the controller fall forward
-  through neighboring presets, so attribute a warning to a preset only
-  when its own name appears in the warning after that preset was
-  requested. Screenshotting a small hand-picked sample (as prior import
-  PRs did) is not enough to catch a systemic conversion bug that affects
-  most of a batch; walk the whole batch's presets, not a sample.
+  Degradation" in the README). That path auto-advances past a broken
+  preset without throwing. A broken import therefore looks clean unless
+  someone reads the console. A failure also makes the controller fall
+  forward through neighboring presets. Attribute a warning to a preset
+  only when its own name appears in the warning after the walk requested
+  that preset. Screenshots of a small hand-picked sample (the method of
+  prior import PRs) miss a systemic conversion bug that affects most of a
+  batch. Walk every preset in the batch.
 - A software WebGL renderer (headless Chromium with swiftshader, as in a
   CI or agent sandbox) fails to link most converted MilkDrop-2 warp/comp
-  shaders, reporting `shader program link failed: Fragment shader is not
-  compiled.` This is an artifact of that renderer, not evidence the
-  presets are broken. Mainline and `[EXP]` carry no custom shaders at all,
-  so their passing says nothing here; split the batch by whether a preset
-  has non-empty `warp`/`comp` and compare the shader-bearing half against
-  an already-shipped shader-heavy batch (`[EXP2]`) as the control. When
-  both fail at the same rate the result is environmental and shader
-  validity simply cannot be judged in that sandbox; say so rather than
-  reporting the batch as broken. The equation checks above stay valid
-  there, because they are pure JS and never touch the GPU.
-- Imports whitelist `.milk` and approved images; never extract or invoke
-  archive executables/scripts. Reject traversal and symlinks; record ignored
-  members and the archive digest. Convert with trusted WSL Node 22 tooling.
-- Record conversion, missing-texture, and DDS exclusions; DDS-dependent
-  presets remain excluded. Deduplicate identical basename content; suffix
+  shaders. It reports `shader program link failed: Fragment shader is not
+  compiled.` That failure comes from the renderer. It proves nothing about
+  the presets. Mainline and `[EXP]` carry no custom shaders at all. A pass
+  from those batches therefore proves nothing here. Split the batch by whether a
+  preset has non-empty `warp`/`comp`. Compare the shader-bearing half
+  against an already-shipped shader-heavy batch (`[EXP2]`) as the control.
+  When both fail at the same rate, the result is environmental. That
+  sandbox cannot judge shader validity. Report that limit instead of
+  reporting the batch as broken. The equation checks above stay valid in
+  that sandbox. The checks run pure JS and never touch the GPU.
+- Imports allow only `.milk` files and approved images. Never extract or
+  invoke archive executables or scripts. Reject traversal and symlinks.
+  Record ignored members and the archive digest. Convert with trusted WSL
+  Node 22 tooling.
+- Record conversion, missing-texture, and DDS exclusions. DDS-dependent
+  presets remain excluded. Deduplicate identical basename content. Suffix
   distinct variants `[variant N]` and record archive-relative paths.
 - Remove exact canonical matches only from approved decisions. Normalized-name
-  matches require review. If mainline output changes, regenerate EXP output;
-  never hand-merge generated chunks. Verify callback IDs against the index
+  matches require review. If mainline output changes, regenerate EXP output.
+  Never hand-merge generated chunks. Verify callback IDs against the index
   before committing generated output.
 
 ## Read before touching
@@ -294,8 +298,9 @@ an ancestor of `develop`. Every reset in step 5 restores that condition.
 - Deployment: README "Hosted Deployment" and "Local Hosting" sections,
   `docs/local-hosting.md`.
 - Audio setup: `docs/audio-routing.md`, `docs/obs-setup.md`.
-- CI and automation: `docs/protected-file-review.md` before touching
-  protected files (workflows, scripts, deployment config, runtime pages).
+- CI and automation require `docs/protected-file-review.md` before any
+  change to protected files (workflows, scripts, deployment config, runtime
+  pages).
 
 
 ## Local policy notes
@@ -313,7 +318,7 @@ The 1.15.0 security review recorded these findings without a code change.
 
 - `.github/workflows/gate-integrity.yml` falls back to the pull request
   copy of `scripts/check_gate_pr_integrity.py` when the base revision lacks
-  it. The base branch carries the checker. The fallback therefore never runs.
+  it. The base branch carries the checker. The fallback therefore stays unused.
   The job holds a read-only token. `docs/agent-policy/enforcement.md`
   documents the fallback as template behavior. Any change belongs upstream
   in `abuzucom/agents`.
