@@ -17,9 +17,9 @@ use [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Correct the branch protection notes in `docs/repo-guide.md`. A classic
-  branch protection rule also covers `develop` and blocks force pushes. The
-  `develop` reset in the promotion process needs force pushes allowed for
-  the reset only.
+  branch protection rule also covers `develop` and blocks force pushes.
+  One account on the rule's force-push list runs the `develop` reset in
+  the promotion process. Every other account stays blocked.
 - Reword `README.md`, `SECURITY.md`, `docs/repo-guide.md`, and
   `CHANGELOG.md` to satisfy the template prose checkers. The agent prose gate
   scans each file whole on every pull request with agent trailers. Facts

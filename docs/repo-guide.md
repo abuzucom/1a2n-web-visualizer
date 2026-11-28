@@ -144,9 +144,11 @@ assignments. `hyperspeed.js` implements the rapid preset-shuffle mode.
 - Rulesets protect `main`. Every change to `main` needs a pull request.
   `main` keeps a linear history and rejects force pushes.
 - A classic branch protection rule covers each of `main` and `develop`.
-  Each rule requires approving reviews and blocks force pushes for every
-  account, administrators included. The rules live under Settings,
-  Branches, separate from the rulesets.
+  Each rule requires approving reviews and blocks force pushes. The rules
+  live under Settings, Branches, separate from the rulesets.
+- The `develop` rule names one account under "Specify who can force push"
+  (GraphQL `bypassForcePushAllowances`). Only that account can reset
+  `develop`. Every other account, administrators included, stays blocked.
 - `main` requires the `immutable-compliance`, `protected-gate-changes`, and
   `security-review` checks.
 - `workflow_run` review callers run from `main`. A caller change takes effect
@@ -161,13 +163,12 @@ Promote `develop` to `main` through a pull request:
    prints nothing. A difference means `develop` gained commits after the
    pull request opened. Promote those commits first.
 5. Reset `develop` to the new `main` commit. Rule 2 in `AGENTS.md` requires
-   active human authorization for each reset. The `develop` classic rule
-   rejects the push until an administrator allows force pushes:
-   1. Turn on "Allow force pushes" in the `develop` rule. The GraphQL
-      `updateBranchProtectionRule` mutation sets `allowsForcePushes`.
-   2. Run `git push --force-with-lease=develop:<old-develop-sha> origin
-      origin/main:develop`. The reset discards the old `develop` commits.
-   3. Turn "Allow force pushes" off again, even after a failed push.
+   active human authorization for each reset. Only the account on the
+   `develop` force-push list can run the reset:
+   `git push --force-with-lease=develop:<old-develop-sha> origin
+   origin/main:develop`. The reset discards the old `develop` commits.
+   Never turn on "Allow force pushes" for everyone. That setting lets
+   every account with push access rewrite `develop`.
 6. Rebase every open branch onto the new `develop`.
 
 An administrator can fast-forward `main` instead:
